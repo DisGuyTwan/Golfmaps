@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* The Leaflet map must fill its container to render tiles correctly. */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: #aadaff;
+}
+
+/* Keep the draw toolbar clear of the floating summary card on small screens. */
+.leaflet-draw-toolbar a {
+  background-color: #ffffff;
+}
