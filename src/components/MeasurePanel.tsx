@@ -102,6 +102,14 @@ export default function MeasurePanel({
           </p>
         )}
 
+        {result?.boundaryOnly && !error && (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            Only this course&apos;s outline is mapped in OpenStreetMap — its
+            fairways, greens and tees aren&apos;t, so the turf can&apos;t be
+            broken down. Showing the total course boundary only.
+          </p>
+        )}
+
         {/* Breakdown */}
         <div className="grid grid-cols-4 gap-1.5 border-t border-slate-100 pt-3">
           {CATEGORIES.map((category) => {
@@ -128,17 +136,22 @@ export default function MeasurePanel({
 
         <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2">
           <span className="text-sm font-medium text-emerald-800">
-            Total turf
+            {result?.boundaryOnly ? "Course area" : "Total turf"}
           </span>
           <span className="text-lg font-bold tabular-nums text-emerald-900">
-            {(result?.totalTurfAcres ?? 0).toFixed(2)} ac
+            {(result?.boundaryOnly
+              ? result.courseAcres
+              : result?.totalTurfAcres ?? 0
+            ).toFixed(2)}{" "}
+            ac
           </span>
         </div>
 
         {result &&
           (result.courseAcres > 0 ||
             result.drivingRangeAcres > 0 ||
-            result.treesAcres > 0) && (
+            result.treesAcres > 0 ||
+            result.builtAcres > 0) && (
             <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-[11px] text-slate-500">
               {result.courseAcres > 0 && (
                 <span>Course boundary: {result.courseAcres.toFixed(2)} ac</span>
@@ -148,8 +161,13 @@ export default function MeasurePanel({
                   Driving range: {result.drivingRangeAcres.toFixed(2)} ac
                 </span>
               )}
-              {result.treesAcres > 0 && (
+              {result.roughEstimated && result.treesAcres > 0 && (
                 <span>Trees removed: {result.treesAcres.toFixed(2)} ac</span>
+              )}
+              {result.roughEstimated && result.builtAcres > 0 && (
+                <span>
+                  Buildings/parking removed: {result.builtAcres.toFixed(2)} ac
+                </span>
               )}
             </div>
           )}
@@ -157,8 +175,8 @@ export default function MeasurePanel({
         {result?.roughEstimated && (
           <p className="text-[11px] text-slate-400">
             *Rough is estimated: course boundary minus fairways, greens, tees,
-            driving range, water, sand and mapped trees (may still include
-            unmapped trees or paths).
+            driving range, water, sand, mapped trees and buildings/parking (may
+            still include unmapped trees or paths).
           </p>
         )}
 

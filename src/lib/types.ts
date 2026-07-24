@@ -36,8 +36,15 @@ export interface CourseMeasurement {
   drivingRangeAcres: number;
   /** Wooded area (clipped to the course boundary) subtracted from rough. */
   treesAcres: number;
+  /** Building + parking area (clipped to the course) subtracted from rough. */
+  builtAcres: number;
   /** fairway + rough + green + tee, in acres. */
   totalTurfAcres: number;
   /** True when any golf course or turf was detected. */
   found: boolean;
+  /**
+   * True when only the course outline is mapped (no fairways/greens/tees), so
+   * the turf can't be broken down and rough would be the whole boundary.
+   */
+  boundaryOnly: boolean;
 }

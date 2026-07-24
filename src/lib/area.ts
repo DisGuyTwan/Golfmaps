@@ -27,6 +27,7 @@ type Category =
   | "water"
   | "bunker"
   | "wood"
+  | "built"
   | "skip";
 
 /** Categories we draw on the map (in draw order: first = underneath). */
@@ -78,26 +79,30 @@ function categorize(feature: Feature): Category {
   ) {
     return "wood";
   }
+  if (props.building || props.amenity === "parking") return "built";
   if (props.natural === "water") return "water";
 
   return "skip";
 }
 
-/** Sum of wooded areas clipped to the course boundary, in acres. */
-function woodedAcresInsideCourse(
+/**
+ * Sum of `features` clipped to the course boundary, in acres. Used to subtract
+ * only the part of trees/buildings that actually falls inside the course.
+ */
+function clippedAcresInsideCourse(
   courseFeatures: Feature[],
-  woodFeatures: Feature[],
+  features: Feature[],
 ): number {
-  if (courseFeatures.length === 0 || woodFeatures.length === 0) return 0;
+  if (courseFeatures.length === 0 || features.length === 0) return 0;
 
   let acres = 0;
-  for (const wood of woodFeatures) {
+  for (const feature of features) {
     for (const course of courseFeatures) {
       try {
         const clipped = intersect(
           featureCollection([
             course as Feature<Polygon | MultiPolygon>,
-            wood as Feature<Polygon | MultiPolygon>,
+            feature as Feature<Polygon | MultiPolygon>,
           ]),
         );
         if (clipped) acres += area(clipped) * SQ_METERS_TO_ACRES;
@@ -126,6 +131,7 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
     water: 0,
     bunker: 0,
     wood: 0,
+    built: 0,
   };
   const counts: Record<string, number> = {
     course: 0,
@@ -138,6 +144,7 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
   const renderFeatures: Feature[] = [];
   const courseFeatures: Feature[] = [];
   const woodFeatures: Feature[] = [];
+  const builtFeatures: Feature[] = [];
 
   for (const feature of geojson.features) {
     const areaFeature = toAreaFeature(feature);
@@ -151,6 +158,7 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
 
     if (category === "course") courseFeatures.push(areaFeature);
     if (category === "wood") woodFeatures.push(areaFeature);
+    if (category === "built") builtFeatures.push(areaFeature);
 
     if (category in RENDER_ORDER) {
       renderFeatures.push({
@@ -160,9 +168,13 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
     }
   }
 
-  // Trees are subtracted only where they fall inside the course boundary.
+  // Trees and buildings are subtracted only where they fall inside the course.
   const treesAcres = Math.min(
-    woodedAcresInsideCourse(courseFeatures, woodFeatures),
+    clippedAcresInsideCourse(courseFeatures, woodFeatures),
+    acres.course,
+  );
+  const builtAcres = Math.min(
+    clippedAcresInsideCourse(courseFeatures, builtFeatures),
     acres.course,
   );
 
@@ -174,6 +186,10 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
 
   // Rough: use mapped polygons if present, otherwise estimate from the course
   // boundary minus everything that isn't rough.
+  // Only estimate rough when there is detailed turf mapped to subtract from the
+  // boundary. Otherwise "course minus nothing" would report the whole property
+  // as rough, which is misleading.
+  const hasDetail = counts.fairway > 0 || counts.green > 0 || counts.tee > 0;
   const roughMapped = acres.rough;
   const roughEstimate = Math.max(
     0,
@@ -184,10 +200,14 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
       acres.driving_range -
       acres.water -
       acres.bunker -
-      treesAcres,
+      treesAcres -
+      builtAcres,
   );
-  const roughEstimated = roughMapped <= 0 && acres.course > 0;
-  const roughAcres = roughMapped > 0 ? roughMapped : roughEstimated ? roughEstimate : 0;
+  const roughEstimated = roughMapped <= 0 && acres.course > 0 && hasDetail;
+  const roughAcres =
+    roughMapped > 0 ? roughMapped : roughEstimated ? roughEstimate : 0;
+
+  const boundaryOnly = acres.course > 0 && !hasDetail && roughMapped <= 0;
 
   const totalTurfAcres =
     acres.fairway + acres.green + acres.tee + roughAcres;
@@ -209,7 +229,9 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
     courseAcres: acres.course,
     drivingRangeAcres: acres.driving_range,
     treesAcres,
+    builtAcres,
     totalTurfAcres,
     found,
+    boundaryOnly,
   };
 }

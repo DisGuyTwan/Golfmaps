@@ -37,6 +37,10 @@ export function buildFairwayQuery({ south, west, north, east }: BBox): string {
   way["natural"="scrub"](${bbox});
   way["natural"="water"](${bbox});
   relation["natural"="water"](${bbox});
+  way["building"](${bbox});
+  relation["building"](${bbox});
+  way["amenity"="parking"](${bbox});
+  relation["amenity"="parking"](${bbox});
 );
 out body;
 >;
