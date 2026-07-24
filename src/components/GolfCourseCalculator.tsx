@@ -67,31 +67,13 @@ export default function GolfCourseCalculator() {
     setClearSignal((n) => n + 1);
   }, []);
 
-  const handleDeleted = useCallback(() => {
-    setResult(null);
-    setError(null);
-  }, []);
-
   return (
     <div className="relative h-full w-full">
       <GolfMap
         onBoundsSelected={handleBoundsSelected}
-        onDeleted={handleDeleted}
         geojson={result?.geojson ?? null}
         clearSignal={clearSignal}
       />
-
-      {/* Instruction banner */}
-      <div className="pointer-events-none absolute left-1/2 top-4 z-[1000] w-[min(92vw,640px)] -translate-x-1/2">
-        <div className="pointer-events-auto rounded-lg bg-white/95 px-4 py-3 text-center text-sm text-slate-700 shadow-lg ring-1 ring-black/5">
-          <span className="font-semibold text-slate-900">
-            Golf Course Acreage Calculator
-          </span>
-          <span className="mx-2 text-slate-300">•</span>
-          Use the rectangle tool (top-left) to draw a box over a course and
-          measure its fairway and total turf acreage.
-        </div>
-      </div>
 
       {/* Loading overlay */}
       {loading && (
