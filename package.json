@@ -12,6 +12,7 @@
   "dependencies": {
     "@turf/area": "^7.0.0",
     "@turf/helpers": "^7.0.0",
+    "@turf/intersect": "^7.3.5",
     "axios": "^1.7.0",
     "leaflet": "^1.9.4",
     "leaflet-draw": "^1.0.4",

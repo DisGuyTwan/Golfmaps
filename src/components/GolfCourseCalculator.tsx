@@ -6,7 +6,7 @@ import axios from "axios";
 import type * as L from "leaflet";
 import { fetchFairways } from "@/lib/overpass";
 import { processOverpassData } from "@/lib/area";
-import type { CourseMeasurement } from "@/lib/types";
+import type { BBox, CourseMeasurement } from "@/lib/types";
 import MeasurePanel from "./MeasurePanel";
 import SearchBox, { type PlaceResult } from "./SearchBox";
 
@@ -25,6 +25,11 @@ export default function GolfCourseCalculator() {
   const [result, setResult] = useState<CourseMeasurement | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [firstCorner, setFirstCorner] = useState<[number, number] | null>(null);
+  const [scanBox, setScanBox] = useState<
+    [number, number, number, number] | null
+  >(null);
 
   const mapRef = useRef<L.Map | null>(null);
 
@@ -32,21 +37,25 @@ export default function GolfCourseCalculator() {
     mapRef.current = map;
   }, []);
 
-  const runMeasure = useCallback(async () => {
+  const runMeasure = useCallback(async (bboxOverride?: BBox) => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map && !bboxOverride) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const bounds = map.getBounds();
-      const overpassJson = await fetchFairways({
-        south: bounds.getSouth(),
-        west: bounds.getWest(),
-        north: bounds.getNorth(),
-        east: bounds.getEast(),
-      });
+      let bbox = bboxOverride;
+      if (!bbox) {
+        const bounds = map!.getBounds();
+        bbox = {
+          south: bounds.getSouth(),
+          west: bounds.getWest(),
+          north: bounds.getNorth(),
+          east: bounds.getEast(),
+        };
+      }
+      const overpassJson = await fetchFairways(bbox);
       setResult(processOverpassData(overpassJson));
     } catch (err) {
       let message =
@@ -104,14 +113,58 @@ export default function GolfCourseCalculator() {
     [runMeasure],
   );
 
+  const handleStartSelect = useCallback(() => {
+    setSelecting(true);
+    setFirstCorner(null);
+    setScanBox(null);
+  }, []);
+
+  const handleCancelSelect = useCallback(() => {
+    setSelecting(false);
+    setFirstCorner(null);
+  }, []);
+
+  const handleMapClick = useCallback(
+    (latlng: [number, number]) => {
+      if (!selecting) return;
+      if (!firstCorner) {
+        setFirstCorner(latlng);
+        return;
+      }
+      const [aLat, aLon] = firstCorner;
+      const [bLat, bLon] = latlng;
+      const bbox: BBox = {
+        south: Math.min(aLat, bLat),
+        west: Math.min(aLon, bLon),
+        north: Math.max(aLat, bLat),
+        east: Math.max(aLon, bLon),
+      };
+      setScanBox([bbox.south, bbox.west, bbox.north, bbox.east]);
+      setFirstCorner(null);
+      setSelecting(false);
+      void runMeasure(bbox);
+    },
+    [selecting, firstCorner, runMeasure],
+  );
+
   const handleClear = useCallback(() => {
     setResult(null);
     setError(null);
+    setScanBox(null);
+    setFirstCorner(null);
+    setSelecting(false);
   }, []);
 
   return (
     <div className="relative h-full w-full">
-      <GolfMap geojson={result?.geojson ?? null} onMapReady={handleMapReady} />
+      <GolfMap
+        geojson={result?.geojson ?? null}
+        selecting={selecting}
+        firstCorner={firstCorner}
+        scanBox={scanBox}
+        onMapClick={handleMapClick}
+        onMapReady={handleMapReady}
+      />
 
       <SearchBox onSelect={handleSearchSelect} getBias={getSearchBias} />
 
@@ -119,7 +172,11 @@ export default function GolfCourseCalculator() {
         result={result}
         loading={loading}
         error={error}
-        onMeasure={runMeasure}
+        selecting={selecting}
+        awaitingSecondCorner={firstCorner !== null}
+        onMeasure={() => runMeasure()}
+        onStartSelect={handleStartSelect}
+        onCancelSelect={handleCancelSelect}
         onClear={handleClear}
       />
     </div>

@@ -34,6 +34,8 @@ export interface CourseMeasurement {
   /** Total area of the `leisure=golf_course` boundary polygon(s). */
   courseAcres: number;
   drivingRangeAcres: number;
+  /** Wooded area (clipped to the course boundary) subtracted from rough. */
+  treesAcres: number;
   /** fairway + rough + green + tee, in acres. */
   totalTurfAcres: number;
   /** True when any golf course or turf was detected. */

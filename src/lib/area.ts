@@ -1,7 +1,8 @@
 import area from "@turf/area";
-import { polygon as turfPolygon } from "@turf/helpers";
+import intersect from "@turf/intersect";
+import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import osmtogeojson from "osmtogeojson";
-import type { Feature, FeatureCollection, Position } from "geojson";
+import type { Feature, FeatureCollection, Polygon, MultiPolygon, Position } from "geojson";
 import type { CourseMeasurement } from "./types";
 
 /** Conversion factor: 1 square meter = 0.000247105 acres. */
@@ -25,6 +26,7 @@ type Category =
   | "driving_range"
   | "water"
   | "bunker"
+  | "wood"
   | "skip";
 
 /** Categories we draw on the map (in draw order: first = underneath). */
@@ -59,25 +61,52 @@ function toAreaFeature(feature: Feature): Feature | null {
 function categorize(feature: Feature): Category {
   const props = (feature.properties ?? {}) as Record<string, unknown>;
   if (props.leisure === "golf_course") return "course";
-  switch (props.golf) {
-    case "fairway":
-      return "fairway";
-    case "green":
-      return "green";
-    case "tee":
-      return "tee";
-    case "rough":
-      return "rough";
-    case "driving_range":
-      return "driving_range";
-    case "bunker":
-      return "bunker";
-    case "water_hazard":
-    case "lateral_water_hazard":
-      return "water";
-    default:
-      return "skip";
+
+  const golf = props.golf;
+  if (golf === "fairway") return "fairway";
+  if (golf === "green") return "green";
+  if (golf === "tee") return "tee";
+  if (golf === "rough") return "rough";
+  if (golf === "driving_range") return "driving_range";
+  if (golf === "bunker") return "bunker";
+  if (golf === "water_hazard" || golf === "lateral_water_hazard") return "water";
+
+  if (
+    props.natural === "wood" ||
+    props.natural === "scrub" ||
+    props.landuse === "forest"
+  ) {
+    return "wood";
   }
+  if (props.natural === "water") return "water";
+
+  return "skip";
+}
+
+/** Sum of wooded areas clipped to the course boundary, in acres. */
+function woodedAcresInsideCourse(
+  courseFeatures: Feature[],
+  woodFeatures: Feature[],
+): number {
+  if (courseFeatures.length === 0 || woodFeatures.length === 0) return 0;
+
+  let acres = 0;
+  for (const wood of woodFeatures) {
+    for (const course of courseFeatures) {
+      try {
+        const clipped = intersect(
+          featureCollection([
+            course as Feature<Polygon | MultiPolygon>,
+            wood as Feature<Polygon | MultiPolygon>,
+          ]),
+        );
+        if (clipped) acres += area(clipped) * SQ_METERS_TO_ACRES;
+      } catch {
+        // Skip invalid/self-intersecting geometry rather than failing.
+      }
+    }
+  }
+  return acres;
 }
 
 /**
@@ -96,6 +125,7 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
     driving_range: 0,
     water: 0,
     bunker: 0,
+    wood: 0,
   };
   const counts: Record<string, number> = {
     course: 0,
@@ -106,6 +136,8 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
   };
 
   const renderFeatures: Feature[] = [];
+  const courseFeatures: Feature[] = [];
+  const woodFeatures: Feature[] = [];
 
   for (const feature of geojson.features) {
     const areaFeature = toAreaFeature(feature);
@@ -117,6 +149,9 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
     acres[category] += area(areaFeature) * SQ_METERS_TO_ACRES;
     if (category in counts) counts[category] += 1;
 
+    if (category === "course") courseFeatures.push(areaFeature);
+    if (category === "wood") woodFeatures.push(areaFeature);
+
     if (category in RENDER_ORDER) {
       renderFeatures.push({
         ...feature,
@@ -124,6 +159,12 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
       });
     }
   }
+
+  // Trees are subtracted only where they fall inside the course boundary.
+  const treesAcres = Math.min(
+    woodedAcresInsideCourse(courseFeatures, woodFeatures),
+    acres.course,
+  );
 
   renderFeatures.sort(
     (a, b) =>
@@ -142,7 +183,8 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
       acres.tee -
       acres.driving_range -
       acres.water -
-      acres.bunker,
+      acres.bunker -
+      treesAcres,
   );
   const roughEstimated = roughMapped <= 0 && acres.course > 0;
   const roughAcres = roughMapped > 0 ? roughMapped : roughEstimated ? roughEstimate : 0;
@@ -166,6 +208,7 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
     roughEstimated,
     courseAcres: acres.course,
     drivingRangeAcres: acres.driving_range,
+    treesAcres,
     totalTurfAcres,
     found,
   };
