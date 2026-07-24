@@ -48,8 +48,11 @@ export default function MeasurePanel({
   const canFinish = pointCount >= 3;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1200] flex justify-center p-3">
-      <div className="pointer-events-auto w-full max-w-md space-y-3 rounded-2xl bg-white/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur">
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-[1200] flex justify-center p-3"
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+    >
+      <div className="pointer-events-auto max-h-[78dvh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-white/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-900">
@@ -178,7 +181,7 @@ export default function MeasurePanel({
           </p>
         )}
 
-        {/* Totals */}
+        {/* Totals — every category always shown, including Rough */}
         <div className="grid grid-cols-4 gap-1.5 border-t border-slate-100 pt-3">
           {TURF_TYPES.map((meta) => {
             const stat = totals.perType[meta.type];
@@ -187,7 +190,11 @@ export default function MeasurePanel({
                 <div className="text-base font-bold tabular-nums text-slate-900">
                   {stat.acres.toFixed(2)}
                 </div>
-                <div className="text-[11px] text-slate-500">
+                <div className="flex items-center justify-center gap-1 text-[11px] text-slate-500">
+                  <span
+                    className="inline-block h-2 w-2 rounded-sm"
+                    style={{ backgroundColor: meta.fill }}
+                  />
                   {meta.label}
                   {stat.count > 0 ? ` (${stat.count})` : ""}
                 </div>
@@ -204,6 +211,10 @@ export default function MeasurePanel({
             {totals.totalAcres.toFixed(2)} ac
           </span>
         </div>
+
+        <p className="text-center text-[10px] text-slate-400">
+          Imagery © Esri · Map data © OpenStreetMap contributors
+        </p>
       </div>
     </div>
   );
