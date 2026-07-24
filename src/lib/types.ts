@@ -1,6 +1,6 @@
 import type { FeatureCollection } from "geojson";
 
-/** Geographic bounding box captured from the drawn rectangle. */
+/** Geographic bounding box captured from the map view. */
 export interface BBox {
   south: number;
   west: number;
@@ -8,31 +8,34 @@ export interface BBox {
   east: number;
 }
 
-/** Acreage + feature count for a single category of golf turf. */
-export interface CategoryStat {
+/** Acreage + polygon count for a category of golf turf. */
+export interface Stat {
   acres: number;
   count: number;
 }
 
 /**
- * Result of processing an Overpass response into golf-course acreage.
+ * Result of measuring a golf course from OpenStreetMap.
  *
- * `fairway` is the headline metric, but many OSM courses only have their
- * outer boundary mapped (`course`) with few or no individual fairway polygons,
- * so we surface a full breakdown and a total course area as a fallback.
+ * Fairways/greens/tees come straight from mapped polygons. Rough is almost
+ * never mapped, so when it isn't we estimate it as the course-boundary area
+ * minus everything else (fairway/green/tee/driving range/water/sand).
  */
-export interface GolfAreaResult {
-  /** Detected polygons (course outline + turf features), styled per category. */
+export interface CourseMeasurement {
+  /** Detected polygons (course outline + fairway/green/tee/rough) for the map. */
   geojson: FeatureCollection;
-  fairway: CategoryStat;
-  green: CategoryStat;
-  tee: CategoryStat;
-  rough: CategoryStat;
-  drivingRange: CategoryStat;
+  fairway: Stat;
+  green: Stat;
+  tee: Stat;
+  /** Rough acreage; `count` is 0 when the value is estimated, not mapped. */
+  rough: Stat;
+  /** True when rough was estimated from the course boundary, not mapped. */
+  roughEstimated: boolean;
   /** Total area of the `leisure=golf_course` boundary polygon(s). */
-  course: CategoryStat;
-  /** fairway + green + tee + rough + drivingRange, in acres. */
-  mowableAcres: number;
-  /** Count of every golf/course polygon detected (0 = nothing found). */
-  totalPolygons: number;
+  courseAcres: number;
+  drivingRangeAcres: number;
+  /** fairway + rough + green + tee, in acres. */
+  totalTurfAcres: number;
+  /** True when any golf course or turf was detected. */
+  found: boolean;
 }

@@ -4,15 +4,13 @@ import { useEffect, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
-  Polygon,
-  Polyline,
-  CircleMarker,
+  GeoJSON,
   LayersControl,
   useMap,
-  useMapEvents,
 } from "react-leaflet";
 import * as L from "leaflet";
-import { TURF_META, type TurfShape, type TurfType } from "@/lib/measure";
+import type { Feature, FeatureCollection } from "geojson";
+import { TURF_COLORS } from "@/lib/area";
 
 import "leaflet/dist/leaflet.css";
 
@@ -21,26 +19,24 @@ const DEFAULT_CENTER: [number, number] = [46.3432, -72.5428];
 const DEFAULT_ZOOM = 14;
 const LOCATED_ZOOM = 16;
 
-function shapeStyle(type: TurfType, selected: boolean): L.PathOptions {
-  const meta = TURF_META[type];
-  return {
-    color: selected ? "#ffffff" : meta.color,
-    weight: selected ? 4 : 2,
-    fillColor: meta.fill,
-    fillOpacity: selected ? 0.6 : 0.4,
-  };
+/** Per-category styling for detected golf polygons. */
+const CATEGORY_STYLE: Record<string, L.PathOptions> = {
+  course: { color: TURF_COLORS.course, weight: 3, dashArray: "6 5", fill: false },
+  rough: { color: "#4d7c0f", weight: 1, fillColor: TURF_COLORS.rough, fillOpacity: 0.3 },
+  fairway: { color: "#14532d", weight: 2, fillColor: TURF_COLORS.fairway, fillOpacity: 0.5 },
+  tee: { color: "#14532d", weight: 1, fillColor: TURF_COLORS.tee, fillOpacity: 0.55 },
+  green: { color: "#065f46", weight: 1, fillColor: TURF_COLORS.green, fillOpacity: 0.65 },
+};
+
+const DEFAULT_STYLE = CATEGORY_STYLE.fairway;
+
+function styleFeature(feature?: Feature): L.PathOptions {
+  const category = feature?.properties?._category as string | undefined;
+  return (category && CATEGORY_STYLE[category]) || DEFAULT_STYLE;
 }
 
 export interface GolfMapProps {
-  shapes: TurfShape[];
-  /** Points of the in-progress polygon, or null when not drawing. */
-  draftPoints: [number, number][] | null;
-  activeType: TurfType;
-  selectedId: string | null;
-  /** Bumped by the parent to fit the map to all shapes (after auto-detect). */
-  fitSignal: number;
-  onMapClick: (latlng: [number, number]) => void;
-  onSelectShape: (id: string) => void;
+  geojson: FeatureCollection | null;
   onMapReady: (map: L.Map) => void;
 }
 
@@ -66,74 +62,14 @@ function MapInit({ onReady }: { onReady: (map: L.Map) => void }) {
   return null;
 }
 
-/** Captures taps to add polygon points, and sets the crosshair cursor. */
-function DrawingLayer({
-  drawing,
-  onMapClick,
-}: {
-  drawing: boolean;
-  onMapClick: (latlng: [number, number]) => void;
-}) {
-  const map = useMapEvents({
-    click(event) {
-      if (drawing) onMapClick([event.latlng.lat, event.latlng.lng]);
-    },
-  });
-
-  useEffect(() => {
-    const container = map.getContainer();
-    if (drawing) {
-      map.doubleClickZoom.disable();
-      container.style.cursor = "crosshair";
-    } else {
-      map.doubleClickZoom.enable();
-      container.style.cursor = "";
-    }
-    return () => {
-      container.style.cursor = "";
-    };
-  }, [drawing, map]);
-
-  return null;
-}
-
-/** Fits the viewport to every shape when the signal changes. */
-function FitToShapes({
-  shapes,
-  signal,
-}: {
-  shapes: TurfShape[];
-  signal: number;
-}) {
-  const map = useMap();
-  const lastSignal = useRef(0);
-  useEffect(() => {
-    if (signal === lastSignal.current) return;
-    lastSignal.current = signal;
-    if (shapes.length === 0) return;
-    const points = shapes.flatMap((shape) =>
-      shape.latlngs.map(([lat, lng]) => L.latLng(lat, lng)),
-    );
-    const bounds = L.latLngBounds(points);
-    if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [48, 48], maxZoom: 18 });
-    }
-  }, [signal, shapes, map]);
-  return null;
-}
-
-export default function GolfMap({
-  shapes,
-  draftPoints,
-  activeType,
-  selectedId,
-  fitSignal,
-  onMapClick,
-  onSelectShape,
-  onMapReady,
-}: GolfMapProps) {
-  const drawing = draftPoints !== null;
-  const activeMeta = TURF_META[activeType];
+export default function GolfMap({ geojson, onMapReady }: GolfMapProps) {
+  // Force the GeoJSON layer to re-render whenever the data reference changes.
+  const geojsonKeyRef = useRef(0);
+  const prevGeojsonRef = useRef<FeatureCollection | null>(null);
+  if (geojson !== prevGeojsonRef.current) {
+    prevGeojsonRef.current = geojson;
+    geojsonKeyRef.current += 1;
+  }
 
   return (
     <MapContainer
@@ -163,55 +99,14 @@ export default function GolfMap({
       </LayersControl>
 
       <MapInit onReady={onMapReady} />
-      <DrawingLayer drawing={drawing} onMapClick={onMapClick} />
-      <FitToShapes shapes={shapes} signal={fitSignal} />
 
-      {/* Finished shapes */}
-      {shapes.map((shape) => (
-        <Polygon
-          key={shape.id}
-          positions={shape.latlngs}
-          pathOptions={shapeStyle(shape.type, shape.id === selectedId)}
-          interactive={!drawing}
-          eventHandlers={{ click: () => onSelectShape(shape.id) }}
-        />
-      ))}
-
-      {/* In-progress polygon */}
-      {draftPoints && draftPoints.length >= 3 && (
-        <Polygon
-          positions={draftPoints}
-          pathOptions={{
-            color: activeMeta.color,
-            weight: 2,
-            dashArray: "5 5",
-            fillColor: activeMeta.fill,
-            fillOpacity: 0.25,
-          }}
-          interactive={false}
+      {geojson && geojson.features.length > 0 && (
+        <GeoJSON
+          key={geojsonKeyRef.current}
+          data={geojson}
+          style={styleFeature}
         />
       )}
-      {draftPoints && draftPoints.length === 2 && (
-        <Polyline
-          positions={draftPoints}
-          pathOptions={{ color: activeMeta.color, weight: 2, dashArray: "5 5" }}
-          interactive={false}
-        />
-      )}
-      {draftPoints?.map((point, index) => (
-        <CircleMarker
-          key={index}
-          center={point}
-          radius={5}
-          pathOptions={{
-            color: "#ffffff",
-            weight: 2,
-            fillColor: activeMeta.color,
-            fillOpacity: 1,
-          }}
-          interactive={false}
-        />
-      ))}
     </MapContainer>
   );
 }

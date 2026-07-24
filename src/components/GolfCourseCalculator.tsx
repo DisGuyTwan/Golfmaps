@@ -1,19 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import axios from "axios";
 import type * as L from "leaflet";
 import { fetchFairways } from "@/lib/overpass";
 import { processOverpassData } from "@/lib/area";
-import {
-  computeTotals,
-  newShapeId,
-  osmFeaturesToShapes,
-  ringAcres,
-  type TurfShape,
-  type TurfType,
-} from "@/lib/measure";
+import type { CourseMeasurement } from "@/lib/types";
 import MeasurePanel from "./MeasurePanel";
 import SearchBox, { type PlaceResult } from "./SearchBox";
 
@@ -29,116 +22,22 @@ const GolfMap = dynamic(() => import("./GolfMap"), {
 });
 
 export default function GolfCourseCalculator() {
-  const [shapes, setShapes] = useState<TurfShape[]>([]);
-  const [activeType, setActiveType] = useState<TurfType>("fairway");
-  // null = not drawing; an array (possibly empty) = drawing in progress.
-  const [draftPoints, setDraftPoints] = useState<[number, number][] | null>(
-    null,
-  );
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [fitSignal, setFitSignal] = useState(0);
-  const [osmLoading, setOsmLoading] = useState(false);
-  const [osmError, setOsmError] = useState<string | null>(null);
+  const [result, setResult] = useState<CourseMeasurement | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const mapRef = useRef<L.Map | null>(null);
-  const drawing = draftPoints !== null;
-
-  const totals = useMemo(() => computeTotals(shapes), [shapes]);
 
   const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
   }, []);
 
-  // Bias search suggestions toward whatever the map is currently showing.
-  const getSearchBias = useCallback(() => {
-    const map = mapRef.current;
-    if (!map) return null;
-    const center = map.getCenter();
-    return { lat: center.lat, lon: center.lng };
-  }, []);
-
-  const handleSearchSelect = useCallback((place: PlaceResult) => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (place.bbox) {
-      const [south, west, north, east] = place.bbox;
-      map.fitBounds(
-        [
-          [south, west],
-          [north, east],
-        ],
-        { maxZoom: 17, padding: [40, 40] },
-      );
-    } else {
-      map.setView([place.lat, place.lon], 16);
-    }
-  }, []);
-
-  const handleSelectType = useCallback((type: TurfType) => {
-    setActiveType(type);
-  }, []);
-
-  const handleStartDraw = useCallback(() => {
-    setSelectedId(null);
-    setOsmError(null);
-    setDraftPoints([]);
-  }, []);
-
-  const handleMapClick = useCallback(
-    (latlng: [number, number]) => {
-      setDraftPoints((prev) => (prev === null ? prev : [...prev, latlng]));
-    },
-    [],
-  );
-
-  const handleUndo = useCallback(() => {
-    setDraftPoints((prev) => (prev ? prev.slice(0, -1) : prev));
-  }, []);
-
-  const handleCancel = useCallback(() => {
-    setDraftPoints(null);
-  }, []);
-
-  const handleFinish = useCallback(() => {
-    setDraftPoints((prev) => {
-      if (prev && prev.length >= 3) {
-        const shape: TurfShape = {
-          id: newShapeId(),
-          type: activeType,
-          latlngs: prev,
-          acres: ringAcres(prev),
-        };
-        setShapes((current) => [...current, shape]);
-      }
-      return null;
-    });
-  }, [activeType]);
-
-  const handleSelectShape = useCallback(
-    (id: string) => {
-      if (!drawing) setSelectedId(id);
-    },
-    [drawing],
-  );
-
-  const handleDeleteSelected = useCallback(() => {
-    setShapes((current) => current.filter((shape) => shape.id !== selectedId));
-    setSelectedId(null);
-  }, [selectedId]);
-
-  const handleClearAll = useCallback(() => {
-    setShapes([]);
-    setSelectedId(null);
-    setDraftPoints(null);
-    setOsmError(null);
-  }, []);
-
-  const handleAutoDetect = useCallback(async () => {
+  const runMeasure = useCallback(async () => {
     const map = mapRef.current;
     if (!map) return;
 
-    setOsmLoading(true);
-    setOsmError(null);
+    setLoading(true);
+    setError(null);
 
     try {
       const bounds = map.getBounds();
@@ -148,67 +47,80 @@ export default function GolfCourseCalculator() {
         north: bounds.getNorth(),
         east: bounds.getEast(),
       });
-      const processed = processOverpassData(overpassJson);
-      const detected = osmFeaturesToShapes(processed.geojson);
-
-      if (detected.length === 0) {
-        setOsmError(
-          "No golf turf mapped here in OpenStreetMap. Zoom to the course and trace it manually.",
-        );
-        return;
-      }
-
-      setShapes((current) => [...current, ...detected]);
-      setFitSignal((n) => n + 1);
+      setResult(processOverpassData(overpassJson));
     } catch (err) {
       let message =
-        "Couldn't reach the OpenStreetMap data servers. Try again, or just trace the course manually.";
-      if (axios.isAxiosError(err) && err.response?.status) {
-        message = `OpenStreetMap request failed (HTTP ${err.response.status}). Try again, or trace manually.`;
+        "Couldn't reach the OpenStreetMap data servers. They may be busy — try again in a moment.";
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        if (status === 429 || status === 504) {
+          message =
+            "The OpenStreetMap data servers are busy right now. Please wait a moment and try again.";
+        } else if (status === 400) {
+          message =
+            "That area was too large for the free data API. Zoom in closer to the course and measure again.";
+        } else if (status) {
+          message = `The data request failed (HTTP ${status}). Please try again.`;
+        }
       }
-      setOsmError(message);
+      setError(message);
     } finally {
-      setOsmLoading(false);
+      setLoading(false);
     }
   }, []);
 
-  const selectedShape = shapes.find((shape) => shape.id === selectedId) ?? null;
-  const selected = selectedShape
-    ? { type: selectedShape.type, acres: selectedShape.acres }
-    : null;
+  const getSearchBias = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return null;
+    const center = map.getCenter();
+    return { lat: center.lat, lon: center.lng };
+  }, []);
+
+  const handleSearchSelect = useCallback(
+    (place: PlaceResult) => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      if (place.bbox) {
+        const [south, west, north, east] = place.bbox;
+        map.fitBounds(
+          [
+            [south, west],
+            [north, east],
+          ],
+          { maxZoom: 17, padding: [40, 40] },
+        );
+      } else {
+        map.setView([place.lat, place.lon], 16);
+      }
+
+      // Auto-measure once the map settles on a golf course.
+      if (place.isGolf) {
+        map.once("moveend", () => {
+          void runMeasure();
+        });
+      }
+    },
+    [runMeasure],
+  );
+
+  const handleClear = useCallback(() => {
+    setResult(null);
+    setError(null);
+  }, []);
 
   return (
     <div className="relative h-full w-full">
-      <GolfMap
-        shapes={shapes}
-        draftPoints={draftPoints}
-        activeType={activeType}
-        selectedId={selectedId}
-        fitSignal={fitSignal}
-        onMapClick={handleMapClick}
-        onSelectShape={handleSelectShape}
-        onMapReady={handleMapReady}
-      />
+      <GolfMap geojson={result?.geojson ?? null} onMapReady={handleMapReady} />
 
       <SearchBox onSelect={handleSearchSelect} getBias={getSearchBias} />
 
       <MeasurePanel
-        activeType={activeType}
-        onSelectType={handleSelectType}
-        drawing={drawing}
-        pointCount={draftPoints?.length ?? 0}
-        onStartDraw={handleStartDraw}
-        onUndo={handleUndo}
-        onFinish={handleFinish}
-        onCancel={handleCancel}
-        totals={totals}
-        onClearAll={handleClearAll}
-        onAutoDetect={handleAutoDetect}
-        osmLoading={osmLoading}
-        osmError={osmError}
-        selected={selected}
-        onDeleteSelected={handleDeleteSelected}
-        onDeselect={() => setSelectedId(null)}
+        result={result}
+        loading={loading}
+        error={error}
+        onMeasure={runMeasure}
+        onClear={handleClear}
       />
     </div>
   );
