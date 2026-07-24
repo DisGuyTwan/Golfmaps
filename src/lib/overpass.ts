@@ -14,15 +14,22 @@ const OVERPASS_ENDPOINTS = [
 ];
 
 /**
- * Builds an Overpass QL query that selects golf fairways (ways + relations)
- * within the given bounding box, then recurses down to their nodes so the
- * geometry can be reconstructed.
+ * Builds an Overpass QL query that selects a golf course boundary and all of
+ * its golf features (fairways, greens, tees, rough, etc.) within the bounding
+ * box, then recurses down to their nodes so the geometry can be reconstructed.
+ *
+ * We deliberately fetch more than just fairways: many courses in OpenStreetMap
+ * only have the `leisure=golf_course` outline mapped, so querying for fairways
+ * alone returns nothing even when a course is clearly present.
  */
 export function buildFairwayQuery({ south, west, north, east }: BBox): string {
+  const bbox = `${south},${west},${north},${east}`;
   return `[out:json][timeout:25];
 (
-  way["golf"="fairway"](${south},${west},${north},${east});
-  relation["golf"="fairway"](${south},${west},${north},${east});
+  way["leisure"="golf_course"](${bbox});
+  relation["leisure"="golf_course"](${bbox});
+  way["golf"](${bbox});
+  relation["golf"](${bbox});
 );
 out body;
 >;
@@ -30,7 +37,7 @@ out skel qt;`;
 }
 
 /**
- * POSTs the fairway query to the Overpass API and returns the raw OSM JSON.
+ * POSTs the golf query to the Overpass API and returns the raw OSM JSON.
  * The query is sent form-encoded as `data=...` (the endpoint's documented POST
  * format). Each mirror is tried in turn; the last error is re-thrown only if
  * every mirror fails.

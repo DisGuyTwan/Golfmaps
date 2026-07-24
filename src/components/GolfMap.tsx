@@ -10,7 +10,7 @@ import {
 } from "react-leaflet";
 import { EditControl } from "react-leaflet-draw";
 import * as L from "leaflet";
-import type { FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection } from "geojson";
 import type { BBox } from "@/lib/types";
 
 import "leaflet/dist/leaflet.css";
@@ -36,13 +36,28 @@ L.Icon.Default.mergeOptions({
 const DEFAULT_CENTER: [number, number] = [46.3432, -72.5428];
 const DEFAULT_ZOOM = 14;
 
-/** Styling for the detected fairway polygons: light green fill, dark border. */
-const FAIRWAY_STYLE: L.PathOptions = {
-  color: "#166534",
-  weight: 2,
-  fillColor: "#86efac",
-  fillOpacity: 0.5,
+/** Per-category styling for the detected golf polygons. */
+const CATEGORY_STYLE: Record<string, L.PathOptions> = {
+  // Whole-course boundary: dark green dashed outline, no fill.
+  course: { color: "#15803d", weight: 2, dashArray: "6 5", fill: false },
+  rough: { color: "#4d7c0f", weight: 1, fillColor: "#bbf7d0", fillOpacity: 0.35 },
+  driving_range: {
+    color: "#166534",
+    weight: 1,
+    fillColor: "#a7f3d0",
+    fillOpacity: 0.4,
+  },
+  fairway: { color: "#166534", weight: 2, fillColor: "#86efac", fillOpacity: 0.55 },
+  tee: { color: "#166534", weight: 1, fillColor: "#86efac", fillOpacity: 0.6 },
+  green: { color: "#065f46", weight: 1, fillColor: "#34d399", fillOpacity: 0.7 },
 };
+
+const DEFAULT_STYLE = CATEGORY_STYLE.fairway;
+
+function styleFeature(feature?: Feature): L.PathOptions {
+  const category = feature?.properties?._category as string | undefined;
+  return (category && CATEGORY_STYLE[category]) || DEFAULT_STYLE;
+}
 
 export interface GolfMapProps {
   onBoundsSelected: (bbox: BBox) => void;
@@ -153,7 +168,7 @@ export default function GolfMap({
         <GeoJSON
           key={geojsonKeyRef.current}
           data={geojson}
-          style={() => FAIRWAY_STYLE}
+          style={styleFeature}
         />
       )}
 

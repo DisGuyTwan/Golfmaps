@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import axios from "axios";
 import { fetchFairways } from "@/lib/overpass";
 import { processOverpassData } from "@/lib/area";
-import type { BBox, FairwayResult } from "@/lib/types";
+import type { BBox, GolfAreaResult } from "@/lib/types";
 import SummaryCard from "./SummaryCard";
 
 // Leaflet touches `window` at import time, so the map component must never run
@@ -20,7 +20,7 @@ const GolfMap = dynamic(() => import("./GolfMap"), {
 });
 
 export default function GolfCourseCalculator() {
-  const [result, setResult] = useState<FairwayResult | null>(null);
+  const [result, setResult] = useState<GolfAreaResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Bumping this counter signals the map to clear any drawn rectangle.
@@ -33,17 +33,10 @@ export default function GolfCourseCalculator() {
 
     try {
       const overpassJson = await fetchFairways(bbox);
-      const processed = processOverpassData(overpassJson);
-
-      if (processed.fairwayCount === 0) {
-        setError(
-          "No golf fairways found in that area. Try drawing a tighter box directly over the course, or the fairways may not be mapped in OpenStreetMap.",
-        );
-      }
-
-      setResult(processed);
+      // The SummaryCard explains empty / fairways-not-mapped cases itself.
+      setResult(processOverpassData(overpassJson));
     } catch (err) {
-      let message = "Something went wrong while fetching fairway data.";
+      let message = "Something went wrong while fetching golf course data.";
       if (axios.isAxiosError(err)) {
         const status = err.response?.status;
         if (status === 429 || status === 504) {
@@ -96,7 +89,7 @@ export default function GolfCourseCalculator() {
           </span>
           <span className="mx-2 text-slate-300">•</span>
           Use the rectangle tool (top-left) to draw a box over a course and
-          calculate total fairway acreage.
+          measure its fairway and total turf acreage.
         </div>
       </div>
 
@@ -106,7 +99,7 @@ export default function GolfCourseCalculator() {
           <div className="flex items-center gap-3 rounded-lg bg-white px-5 py-4 shadow-xl">
             <span className="h-5 w-5 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
             <span className="text-sm font-medium text-slate-700">
-              Fetching fairways from OpenStreetMap…
+              Fetching golf course data from OpenStreetMap…
             </span>
           </div>
         </div>
@@ -114,12 +107,7 @@ export default function GolfCourseCalculator() {
 
       {/* Summary card */}
       {result && !loading && (
-        <SummaryCard
-          totalAcres={result.totalAcres}
-          fairwayCount={result.fairwayCount}
-          error={error}
-          onClear={handleClear}
-        />
+        <SummaryCard result={result} onClear={handleClear} />
       )}
 
       {/* Error toast when there is no result to attach the message to */}
