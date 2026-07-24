@@ -15,6 +15,7 @@ import {
   type TurfType,
 } from "@/lib/measure";
 import MeasurePanel from "./MeasurePanel";
+import SearchBox, { type PlaceResult } from "./SearchBox";
 
 // Leaflet touches `window` at import time, so the map component must never run
 // on the server. Dynamically importing it with `ssr: false` keeps it client-only.
@@ -46,6 +47,31 @@ export default function GolfCourseCalculator() {
 
   const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
+  }, []);
+
+  // Bias search suggestions toward whatever the map is currently showing.
+  const getSearchBias = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return null;
+    const center = map.getCenter();
+    return { lat: center.lat, lon: center.lng };
+  }, []);
+
+  const handleSearchSelect = useCallback((place: PlaceResult) => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (place.bbox) {
+      const [south, west, north, east] = place.bbox;
+      map.fitBounds(
+        [
+          [south, west],
+          [north, east],
+        ],
+        { maxZoom: 17, padding: [40, 40] },
+      );
+    } else {
+      map.setView([place.lat, place.lon], 16);
+    }
   }, []);
 
   const handleSelectType = useCallback((type: TurfType) => {
@@ -163,6 +189,8 @@ export default function GolfCourseCalculator() {
         onSelectShape={handleSelectShape}
         onMapReady={handleMapReady}
       />
+
+      <SearchBox onSelect={handleSearchSelect} getBias={getSearchBias} />
 
       <MeasurePanel
         activeType={activeType}

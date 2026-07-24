@@ -16,7 +16,7 @@ body {
   background: #aadaff;
 }
 
-/* Keep the draw toolbar clear of the floating summary card on small screens. */
-.leaflet-draw-toolbar a {
-  background-color: #ffffff;
+/* Push the layer toggle below the floating top search bar. */
+.leaflet-top.leaflet-right .leaflet-control-layers {
+  margin-top: 3.75rem;
 }

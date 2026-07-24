@@ -142,6 +142,7 @@ export default function GolfMap({
       scrollWheelZoom
       maxZoom={19}
       attributionControl={false}
+      zoomControl={false}
       className="h-full w-full"
     >
       <LayersControl position="topright">
