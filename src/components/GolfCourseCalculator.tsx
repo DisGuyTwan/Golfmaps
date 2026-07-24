@@ -45,10 +45,20 @@ export default function GolfCourseCalculator() {
     } catch (err) {
       let message = "Something went wrong while fetching fairway data.";
       if (axios.isAxiosError(err)) {
-        message =
-          err.response?.status === 429 || err.response?.status === 504
-            ? "The Overpass API is busy right now. Please wait a moment and try again."
-            : `Overpass request failed: ${err.message}`;
+        const status = err.response?.status;
+        if (status === 429 || status === 504) {
+          message =
+            "The OpenStreetMap data servers are busy right now. Please wait a moment and try again.";
+        } else if (status === 400) {
+          message =
+            "That area was too large or complex for the free data API. Try drawing a smaller box over just the course.";
+        } else if (status) {
+          message = `The data request failed (HTTP ${status}). Please try again in a moment.`;
+        } else {
+          // No HTTP response = network/CORS/timeout, or a blocked request.
+          message =
+            "Couldn't reach the OpenStreetMap data servers. They may be overloaded, the area may be too large, or a browser extension may be blocking the request. Try again or draw a smaller box.";
+        }
       } else if (err instanceof Error) {
         message = err.message;
       }
