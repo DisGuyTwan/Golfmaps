@@ -1,0 +1,25 @@
+name: CI
+
+# This repository had no automation at all. Lint, typecheck, tests and build on
+# every PR — src/lib/area.ts drives the acreage a quote is built from, so a
+# silent regression there produces a confidently wrong number.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
