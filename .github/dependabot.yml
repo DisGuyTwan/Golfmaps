@@ -4,6 +4,12 @@ updates:
     directory: "/"
     schedule:
       interval: monthly
+    ignore:
+      # Majors are a deliberate, scheduled decision — not a standing queue.
+      # Without this the first run opened breaking upgrades (TypeScript 5->7,
+      # ESLint 9->10, actions v4->v7) alongside the routine patches.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
     groups:
       minor-and-patch:
@@ -13,3 +19,9 @@ updates:
     directory: "/"
     schedule:
       interval: monthly
+    ignore:
+      # Majors are a deliberate, scheduled decision — not a standing queue.
+      # Without this the first run opened breaking upgrades (TypeScript 5->7,
+      # ESLint 9->10, actions v4->v7) alongside the routine patches.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
