@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -111,12 +111,20 @@ export default function GolfMap({
   onMapClick,
   onMapReady,
 }: GolfMapProps) {
-  // Force the GeoJSON layer to re-render whenever the data reference changes.
-  const geojsonKeyRef = useRef(0);
-  const prevGeojsonRef = useRef<FeatureCollection | null>(null);
-  if (geojson !== prevGeojsonRef.current) {
-    prevGeojsonRef.current = geojson;
-    geojsonKeyRef.current += 1;
+  // Force the GeoJSON layer to remount whenever the data reference changes —
+  // react-leaflet's GeoJSON does not diff `data`, so a new key is the only way
+  // to get fresh geometry on screen.
+  //
+  // This used to mutate two refs during render, which React 19 rejects
+  // ("Cannot access refs during render"). The state form below is React's
+  // documented way to adjust state when a prop changes: the setters run during
+  // render, React discards the in-progress output and immediately re-renders
+  // with the new values, without committing the first pass or firing effects.
+  const [prevGeojson, setPrevGeojson] = useState<FeatureCollection | null>(null);
+  const [geojsonKey, setGeojsonKey] = useState(0);
+  if (geojson !== prevGeojson) {
+    setPrevGeojson(geojson);
+    setGeojsonKey((k) => k + 1);
   }
 
   return (
@@ -151,7 +159,7 @@ export default function GolfMap({
 
       {geojson && geojson.features.length > 0 && (
         <GeoJSON
-          key={geojsonKeyRef.current}
+          key={geojsonKey}
           data={geojson}
           style={styleFeature}
         />
