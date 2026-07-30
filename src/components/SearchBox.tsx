@@ -92,13 +92,19 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
   const [activeIndex, setActiveIndex] = useState(-1);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // A query under two characters has no results and is not loading, whatever
+  // a previous query left behind in state.
+  const tooShort = query.trim().length < 2;
+  const visibleSuggestions = tooShort ? [] : suggestions;
+  const isLoading = tooShort ? false : loading;
+
   useEffect(() => {
     const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setSuggestions([]);
-      setLoading(false);
-      return;
-    }
+    // Nothing to fetch. Deliberately no setState here — "too short means no
+    // results" is a render-time truth (see tooShort below), not a state
+    // transition. Setting it here both tripped React 19's cascading-render
+    // rule and raced the in-flight request this effect's cleanup aborts.
+    if (trimmed.length < 2) return;
 
     const controller = new AbortController();
     const timer = setTimeout(async () => {
@@ -123,7 +129,7 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
         setSuggestions(parsePhoton(data));
         setActiveIndex(-1);
         setOpen(true);
-      } catch (err) {
+      } catch {
         if (!controller.signal.aborted) setSuggestions([]);
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -144,16 +150,16 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!open || suggestions.length === 0) return;
+    if (!open || visibleSuggestions.length === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, suggestions.length - 1));
+      setActiveIndex((i) => Math.min(i + 1, visibleSuggestions.length - 1));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, 0));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      choose(suggestions[activeIndex >= 0 ? activeIndex : 0]);
+      choose(visibleSuggestions[activeIndex >= 0 ? activeIndex : 0]);
     } else if (event.key === "Escape") {
       setOpen(false);
     }
@@ -180,7 +186,7 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            onFocus={() => suggestions.length > 0 && setOpen(true)}
+            onFocus={() => visibleSuggestions.length > 0 && setOpen(true)}
             onBlur={() => {
               blurTimer.current = setTimeout(() => setOpen(false), 150);
             }}
@@ -189,10 +195,10 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
             aria-label="Search a golf course or address"
             autoComplete="off"
           />
-          {loading && (
+          {isLoading && (
             <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
           )}
-          {!loading && query && (
+          {!isLoading && query && (
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
@@ -208,12 +214,12 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
           )}
         </div>
 
-        {open && suggestions.length > 0 && (
+        {open && visibleSuggestions.length > 0 && (
           <ul
             className="absolute inset-x-0 top-full mt-2 max-h-[50dvh] overflow-y-auto rounded-2xl bg-white py-1 shadow-xl ring-1 ring-black/10"
             onMouseDown={(e) => e.preventDefault()}
           >
-            {suggestions.map((place, index) => (
+            {visibleSuggestions.map((place, index) => (
               <li key={place.id}>
                 <button
                   onClick={() => {

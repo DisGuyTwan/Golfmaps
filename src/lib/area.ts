@@ -2,7 +2,7 @@ import area from "@turf/area";
 import intersect from "@turf/intersect";
 import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import osmtogeojson from "osmtogeojson";
-import type { Feature, FeatureCollection, Polygon, MultiPolygon, Position } from "geojson";
+import type { Feature, Polygon, MultiPolygon, Position } from "geojson";
 import type { CourseMeasurement } from "./types";
 
 /** Conversion factor: 1 square meter = 0.000247105 acres. */
