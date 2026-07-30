@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Golf Course Acreage Calculator",
   description:
-    "Draw a bounding box over a golf course to fetch fairway polygons from OpenStreetMap and calculate total acreage for robotic mower quoting.",
+    "Measure a golf course's turf acreage from OpenStreetMap — fairways, greens, tees and rough, net of trees, buildings and parking — for robotic mower quoting.",
 };
 
 export default function RootLayout({
