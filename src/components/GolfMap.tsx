@@ -8,6 +8,7 @@ import {
   Rectangle,
   CircleMarker,
   LayersControl,
+  Popup,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -40,8 +41,43 @@ function styleFeature(feature?: Feature): L.PathOptions {
   return { ...base, interactive: false };
 }
 
+/** A Kress unit to draw on the map. */
+export interface FleetMarker {
+  uuid: string;
+  name: string;
+  subtitle: string;
+  lat: number;
+  lng: number;
+  color: string;
+  online: boolean;
+  lastSeen: string;
+}
+
+/** Styling for a Kress map (boundaries, zones, exclusions). */
+function kressStyle(feature?: Feature): L.PathOptions {
+  const kind = String(feature?.properties?.kind ?? "");
+  const enabled = feature?.properties?.enabled !== false;
+  const base: L.PathOptions = { interactive: false, dashArray: enabled ? undefined : "4 4" };
+  if (kind === "boundary") return { ...base, color: "#7c3aed", weight: 3, fillOpacity: 0.05 };
+  if (kind === "exclusion") return { ...base, color: "#dc2626", weight: 2, fillColor: "#dc2626", fillOpacity: 0.2 };
+  return { ...base, color: "#a78bfa", weight: 1, dashArray: "3 3", fillOpacity: 0.08 };
+}
+
+/** Bumps a key whenever `data` changes identity, so GeoJSON layers re-render. */
+function useDataKey(data: unknown): number {
+  const key = useRef(0);
+  const prev = useRef<unknown>(null);
+  if (data !== prev.current) {
+    prev.current = data;
+    key.current += 1;
+  }
+  return key.current;
+}
+
 export interface GolfMapProps {
   geojson: FeatureCollection | null;
+  fleetMarkers: FleetMarker[];
+  kressGeojson: FeatureCollection | null;
   selecting: boolean;
   firstCorner: [number, number] | null;
   /** Drawn scan box as [south, west, north, east], or null. */
@@ -110,14 +146,11 @@ export default function GolfMap({
   scanBox,
   onMapClick,
   onMapReady,
+  fleetMarkers,
+  kressGeojson,
 }: GolfMapProps) {
-  // Force the GeoJSON layer to re-render whenever the data reference changes.
-  const geojsonKeyRef = useRef(0);
-  const prevGeojsonRef = useRef<FeatureCollection | null>(null);
-  if (geojson !== prevGeojsonRef.current) {
-    prevGeojsonRef.current = geojson;
-    geojsonKeyRef.current += 1;
-  }
+  const geojsonKey = useDataKey(geojson);
+  const kressKey = useDataKey(kressGeojson);
 
   return (
     <MapContainer
@@ -151,9 +184,27 @@ export default function GolfMap({
 
       {geojson && geojson.features.length > 0 && (
         <GeoJSON
-          key={geojsonKeyRef.current}
+          key={geojsonKey}
           data={geojson}
           style={styleFeature}
+        />
+      )}
+
+      {kressGeojson && kressGeojson.features.length > 0 && (
+        <GeoJSON
+          key={`kress-${kressKey}`}
+          data={kressGeojson}
+          style={kressStyle}
+          pointToLayer={(_feature, latlng) =>
+            L.circleMarker(latlng, {
+              radius: 5,
+              color: "#ffffff",
+              weight: 2,
+              fillColor: "#7c3aed",
+              fillOpacity: 1,
+              interactive: false,
+            })
+          }
         />
       )}
 
@@ -186,6 +237,29 @@ export default function GolfMap({
           }}
         />
       )}
+      {fleetMarkers.map((marker) => (
+        <CircleMarker
+          key={marker.uuid}
+          center={[marker.lat, marker.lng]}
+          radius={9}
+          pathOptions={{
+            color: "#ffffff",
+            weight: 3,
+            fillColor: marker.color,
+            fillOpacity: marker.online ? 1 : 0.45,
+          }}
+        >
+          <Popup>
+            <div className="space-y-0.5 text-xs">
+              <div className="text-sm font-semibold">{marker.name}</div>
+              <div>{marker.subtitle}</div>
+              <div className="text-slate-500">
+                {marker.online ? "Online" : "Offline"} (best effort) · {marker.lastSeen}
+              </div>
+            </div>
+          </Popup>
+        </CircleMarker>
+      ))}
     </MapContainer>
   );
 }
