@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -63,15 +63,21 @@ function kressStyle(feature?: Feature): L.PathOptions {
   return { ...base, color: "#a78bfa", weight: 1, dashArray: "3 3", fillOpacity: 0.08 };
 }
 
-/** Bumps a key whenever `data` changes identity, so GeoJSON layers re-render. */
-function useDataKey(data: unknown): number {
-  const key = useRef(0);
-  const prev = useRef<unknown>(null);
-  if (data !== prev.current) {
-    prev.current = data;
-    key.current += 1;
+/**
+ * Bumps a key whenever `data` changes identity, so GeoJSON layers remount —
+ * react-leaflet's GeoJSON does not diff `data`. Uses React's documented
+ * "adjust state when a prop changes" pattern (React 19 rejects reading or
+ * writing refs during render): the setters run during render and React
+ * immediately re-renders with the new values before committing.
+ */
+function useDataKey<T>(data: T): number {
+  const [prev, setPrev] = useState(data);
+  const [key, setKey] = useState(0);
+  if (data !== prev) {
+    setPrev(data);
+    setKey((k) => k + 1);
   }
-  return key.current;
+  return key;
 }
 
 export interface GolfMapProps {

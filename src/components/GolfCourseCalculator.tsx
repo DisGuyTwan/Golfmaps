@@ -29,7 +29,18 @@ const GolfMap = dynamic(() => import("./GolfMap"), {
   ),
 });
 
-export default function GolfCourseCalculator() {
+const KRESS_RETURN_NOTICES: Record<string, string> = {
+  denied: "Kress sign-in was cancelled.",
+  not_configured: "Kress Connect isn't configured on this deployment.",
+  error: "Kress sign-in failed. Please try again.",
+};
+
+export default function GolfCourseCalculator({
+  kressReturn,
+}: {
+  /** `?kress=` status after returning from the Kress sign-in, if any. */
+  kressReturn: string | null;
+}) {
   const [result, setResult] = useState<CourseMeasurement | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,29 +50,27 @@ export default function GolfCourseCalculator() {
     [number, number, number, number] | null
   >(null);
 
-  const [fleetOpen, setFleetOpen] = useState(false);
+  const [fleetOpen, setFleetOpen] = useState(kressReturn !== null);
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
-  const [kressNotice, setKressNotice] = useState<string | null>(null);
+  const [kressNotice, setKressNotice] = useState<string | null>(
+    kressReturn && kressReturn !== "connected"
+      ? (KRESS_RETURN_NOTICES[kressReturn] ?? KRESS_RETURN_NOTICES.error)
+      : null,
+  );
 
   const mapRef = useRef<L.Map | null>(null);
   const fleet = useKressFleet(fleetOpen);
   const { loadFleet } = fleet;
 
-  // Returning from the Kress login: open the fleet (or explain what failed).
+  // Returning from the Kress sign-in: load the fleet and tidy the URL.
   useEffect(() => {
+    if (kressReturn === null) return;
     const params = new URLSearchParams(window.location.search);
-    const status = params.get("kress");
-    if (!status) return;
     params.delete("kress");
     const query = params.toString();
     window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-
-    setFleetOpen(true);
-    if (status === "connected") void loadFleet();
-    else if (status === "denied") setKressNotice("Kress sign-in was cancelled.");
-    else if (status === "not_configured") setKressNotice("Kress Connect isn't configured on this deployment.");
-    else setKressNotice("Kress sign-in failed. Please try again.");
-  }, [loadFleet]);
+    if (kressReturn === "connected") void loadFleet();
+  }, [kressReturn, loadFleet]);
 
   const openFleet = useCallback(() => {
     setFleetOpen(true);
