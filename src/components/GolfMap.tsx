@@ -8,7 +8,6 @@ import {
   Rectangle,
   CircleMarker,
   LayersControl,
-  Popup,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -41,49 +40,8 @@ function styleFeature(feature?: Feature): L.PathOptions {
   return { ...base, interactive: false };
 }
 
-/** A Kress unit to draw on the map. */
-export interface FleetMarker {
-  uuid: string;
-  name: string;
-  subtitle: string;
-  lat: number;
-  lng: number;
-  color: string;
-  online: boolean;
-  lastSeen: string;
-}
-
-/** Styling for a Kress map (boundaries, zones, exclusions). */
-function kressStyle(feature?: Feature): L.PathOptions {
-  const kind = String(feature?.properties?.kind ?? "");
-  const enabled = feature?.properties?.enabled !== false;
-  const base: L.PathOptions = { interactive: false, dashArray: enabled ? undefined : "4 4" };
-  if (kind === "boundary") return { ...base, color: "#7c3aed", weight: 3, fillOpacity: 0.05 };
-  if (kind === "exclusion") return { ...base, color: "#dc2626", weight: 2, fillColor: "#dc2626", fillOpacity: 0.2 };
-  return { ...base, color: "#a78bfa", weight: 1, dashArray: "3 3", fillOpacity: 0.08 };
-}
-
-/**
- * Bumps a key whenever `data` changes identity, so GeoJSON layers remount —
- * react-leaflet's GeoJSON does not diff `data`. Uses React's documented
- * "adjust state when a prop changes" pattern (React 19 rejects reading or
- * writing refs during render): the setters run during render and React
- * immediately re-renders with the new values before committing.
- */
-function useDataKey<T>(data: T): number {
-  const [prev, setPrev] = useState(data);
-  const [key, setKey] = useState(0);
-  if (data !== prev) {
-    setPrev(data);
-    setKey((k) => k + 1);
-  }
-  return key;
-}
-
 export interface GolfMapProps {
   geojson: FeatureCollection | null;
-  fleetMarkers: FleetMarker[];
-  kressGeojson: FeatureCollection | null;
   selecting: boolean;
   firstCorner: [number, number] | null;
   /** Drawn scan box as [south, west, north, east], or null. */
@@ -152,11 +110,22 @@ export default function GolfMap({
   scanBox,
   onMapClick,
   onMapReady,
-  fleetMarkers,
-  kressGeojson,
 }: GolfMapProps) {
-  const geojsonKey = useDataKey(geojson);
-  const kressKey = useDataKey(kressGeojson);
+  // Force the GeoJSON layer to remount whenever the data reference changes —
+  // react-leaflet's GeoJSON does not diff `data`, so a new key is the only way
+  // to get fresh geometry on screen.
+  //
+  // This used to mutate two refs during render, which React 19 rejects
+  // ("Cannot access refs during render"). The state form below is React's
+  // documented way to adjust state when a prop changes: the setters run during
+  // render, React discards the in-progress output and immediately re-renders
+  // with the new values, without committing the first pass or firing effects.
+  const [prevGeojson, setPrevGeojson] = useState<FeatureCollection | null>(null);
+  const [geojsonKey, setGeojsonKey] = useState(0);
+  if (geojson !== prevGeojson) {
+    setPrevGeojson(geojson);
+    setGeojsonKey((k) => k + 1);
+  }
 
   return (
     <MapContainer
@@ -196,24 +165,6 @@ export default function GolfMap({
         />
       )}
 
-      {kressGeojson && kressGeojson.features.length > 0 && (
-        <GeoJSON
-          key={`kress-${kressKey}`}
-          data={kressGeojson}
-          style={kressStyle}
-          pointToLayer={(_feature, latlng) =>
-            L.circleMarker(latlng, {
-              radius: 5,
-              color: "#ffffff",
-              weight: 2,
-              fillColor: "#7c3aed",
-              fillOpacity: 1,
-              interactive: false,
-            })
-          }
-        />
-      )}
-
       {scanBox && (
         <Rectangle
           bounds={[
@@ -243,29 +194,6 @@ export default function GolfMap({
           }}
         />
       )}
-      {fleetMarkers.map((marker) => (
-        <CircleMarker
-          key={marker.uuid}
-          center={[marker.lat, marker.lng]}
-          radius={9}
-          pathOptions={{
-            color: "#ffffff",
-            weight: 3,
-            fillColor: marker.color,
-            fillOpacity: marker.online ? 1 : 0.45,
-          }}
-        >
-          <Popup>
-            <div className="space-y-0.5 text-xs">
-              <div className="text-sm font-semibold">{marker.name}</div>
-              <div>{marker.subtitle}</div>
-              <div className="text-slate-500">
-                {marker.online ? "Online" : "Offline"} (best effort) · {marker.lastSeen}
-              </div>
-            </div>
-          </Popup>
-        </CircleMarker>
-      ))}
     </MapContainer>
   );
 }

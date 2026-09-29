@@ -1,22 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import axios from "axios";
 import type * as L from "leaflet";
 import { fetchFairways } from "@/lib/overpass";
 import { processOverpassData } from "@/lib/area";
 import type { BBox, CourseMeasurement } from "@/lib/types";
-import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
-import type { Feature, MultiPolygon, Polygon } from "geojson";
-import { modelForCode } from "@/lib/kress-catalog";
-import { TONE_COLORS, stateLabel, statusTone } from "@/lib/kress/status";
-import type { FleetDevice, FleetLocation } from "@/lib/kress/types";
-import FleetPanel from "./FleetPanel";
-import type { FleetMarker } from "./GolfMap";
 import MeasurePanel from "./MeasurePanel";
 import SearchBox, { type PlaceResult } from "./SearchBox";
-import { useKressFleet } from "./useKressFleet";
 
 // Leaflet touches `window` at import time, so the map component must never run
 // on the server. Dynamically importing it with `ssr: false` keeps it client-only.
@@ -29,18 +21,7 @@ const GolfMap = dynamic(() => import("./GolfMap"), {
   ),
 });
 
-const KRESS_RETURN_NOTICES: Record<string, string> = {
-  denied: "Kress sign-in was cancelled.",
-  not_configured: "Kress Connect isn't configured on this deployment.",
-  error: "Kress sign-in failed. Please try again.",
-};
-
-export default function GolfCourseCalculator({
-  kressReturn,
-}: {
-  /** `?kress=` status after returning from the Kress sign-in, if any. */
-  kressReturn: string | null;
-}) {
+export default function GolfCourseCalculator() {
   const [result, setResult] = useState<CourseMeasurement | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,88 +31,7 @@ export default function GolfCourseCalculator({
     [number, number, number, number] | null
   >(null);
 
-  const [fleetOpen, setFleetOpen] = useState(kressReturn !== null);
-  const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
-  const [kressNotice, setKressNotice] = useState<string | null>(
-    kressReturn && kressReturn !== "connected"
-      ? (KRESS_RETURN_NOTICES[kressReturn] ?? KRESS_RETURN_NOTICES.error)
-      : null,
-  );
-
   const mapRef = useRef<L.Map | null>(null);
-  const fleet = useKressFleet(fleetOpen);
-  const { loadFleet } = fleet;
-
-  // Returning from the Kress sign-in: load the fleet and tidy the URL.
-  useEffect(() => {
-    if (kressReturn === null) return;
-    const params = new URLSearchParams(window.location.search);
-    params.delete("kress");
-    const query = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
-    if (kressReturn === "connected") void loadFleet();
-  }, [kressReturn, loadFleet]);
-
-  const openFleet = useCallback(() => {
-    setFleetOpen(true);
-    setKressNotice(null);
-    if (fleet.session?.connected && !fleet.locations && !fleet.loading) void loadFleet();
-  }, [fleet.session, fleet.locations, fleet.loading, loadFleet]);
-
-  const fleetDevices = useMemo(
-    () => (fleet.locations ?? []).flatMap((loc) => loc.devices),
-    [fleet.locations],
-  );
-
-  const fleetMarkers = useMemo<FleetMarker[]>(
-    () =>
-      fleetDevices.flatMap((device) => {
-        const live = fleet.live[device.uuid];
-        if (!live?.position) return [];
-        const model = modelForCode(device.productCode)?.name ?? device.productCode ?? "Kress unit";
-        const battery = live.battery != null ? ` · ${live.battery}%` : "";
-        return [
-          {
-            uuid: device.uuid,
-            name: device.name,
-            subtitle: `${model} · ${stateLabel(live.state)}${battery}`,
-            lat: live.position.lat,
-            lng: live.position.lng,
-            color: TONE_COLORS[statusTone(live)],
-            online: live.online,
-            lastSeen: live.timestamp ? new Date(live.timestamp).toLocaleString() : "no report",
-          },
-        ];
-      }),
-    [fleetDevices, fleet.live],
-  );
-
-  // Kress units whose last GPS position is inside the measured course boundary.
-  const installed = useMemo(() => {
-    if (!result || !fleet.locations) return null;
-    const courses = result.geojson.features.filter(
-      (f): f is Feature<Polygon | MultiPolygon> =>
-        f.properties?._category === "course" &&
-        (f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"),
-    );
-    if (courses.length === 0) return null;
-    return fleetDevices
-      .filter((device) => {
-        const pos = fleet.live[device.uuid]?.position;
-        return pos && courses.some((course) => booleanPointInPolygon([pos.lng, pos.lat], course));
-      })
-      .map((device) => ({ uuid: device.uuid, name: device.name }));
-  }, [result, fleet.locations, fleet.live, fleetDevices]);
-
-  const handleSelectDevice = useCallback(
-    (device: FleetDevice, location: FleetLocation) => {
-      setSelectedUnit(device.uuid);
-      const pos = fleet.live[device.uuid]?.position;
-      if (pos) mapRef.current?.setView([pos.lat, pos.lng], 18);
-      if (fleet.mapsLocationId !== location.id) void fleet.loadLocationMaps(location);
-    },
-    [fleet],
-  );
 
   const handleMapReady = useCallback((map: L.Map) => {
     mapRef.current = map;
@@ -264,42 +164,9 @@ export default function GolfCourseCalculator({
         scanBox={scanBox}
         onMapClick={handleMapClick}
         onMapReady={handleMapReady}
-        fleetMarkers={fleetMarkers}
-        kressGeojson={fleet.kressGeojson}
       />
 
       <SearchBox onSelect={handleSearchSelect} getBias={getSearchBias} />
-
-      {fleetOpen ? (
-        <FleetPanel
-          session={fleet.session}
-          locations={fleet.locations}
-          live={fleet.live}
-          warnings={fleet.warnings}
-          loading={fleet.loading}
-          error={kressNotice ?? fleet.error}
-          updatedAt={fleet.updatedAt}
-          mapsLocationId={fleet.mapsLocationId}
-          selectedUuid={selectedUnit}
-          onConnect={fleet.connect}
-          onRefresh={() => void loadFleet()}
-          onDisconnect={() => void fleet.disconnect()}
-          onClose={() => setFleetOpen(false)}
-          onSelectDevice={handleSelectDevice}
-          onShowLocationMap={(location) => void fleet.loadLocationMaps(location)}
-          onHideLocationMap={fleet.clearKressMap}
-        />
-      ) : (
-        <button
-          onClick={openFleet}
-          className="absolute left-2 z-[1250] flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-lg ring-1 ring-black/10 hover:bg-slate-50"
-          style={{ top: "calc(max(0.5rem, env(safe-area-inset-top)) + 3.5rem)" }}
-        >
-          <span className="h-2 w-2 rounded-full bg-violet-600" />
-          Kress fleet
-          {fleetMarkers.length > 0 && <span className="text-slate-400">· {fleetMarkers.length}</span>}
-        </button>
-      )}
 
       <MeasurePanel
         result={result}
@@ -311,7 +178,6 @@ export default function GolfCourseCalculator({
         onStartSelect={handleStartSelect}
         onCancelSelect={handleCancelSelect}
         onClear={handleClear}
-        installed={installed}
       />
     </div>
   );

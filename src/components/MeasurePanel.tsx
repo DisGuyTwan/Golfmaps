@@ -2,7 +2,6 @@
 
 import { TURF_COLORS } from "@/lib/area";
 import type { CourseMeasurement } from "@/lib/types";
-import KressRecommendation from "./KressRecommendation";
 
 interface MeasurePanelProps {
   result: CourseMeasurement | null;
@@ -14,8 +13,6 @@ interface MeasurePanelProps {
   onStartSelect: () => void;
   onCancelSelect: () => void;
   onClear: () => void;
-  /** Kress units inside the measured course (null = fleet not loaded). */
-  installed: { uuid: string; name: string }[] | null;
 }
 
 const CATEGORIES = [
@@ -35,7 +32,6 @@ export default function MeasurePanel({
   onStartSelect,
   onCancelSelect,
   onClear,
-  installed,
 }: MeasurePanelProps) {
   return (
     <div
@@ -182,10 +178,6 @@ export default function MeasurePanel({
             driving range, water, sand, mapped trees and buildings/parking (may
             still include unmapped trees or paths).
           </p>
-        )}
-
-        {result?.found && (
-          <KressRecommendation result={result} installed={installed} />
         )}
 
         <p className="text-center text-[10px] text-slate-400">
