@@ -6,9 +6,9 @@
 import type { RoiLang } from "./roi";
 
 export interface RoiCopy {
+  eyebrow: string;
   title: string;
   lede: string;
-  print: string;
   model: string;
   model7: string;
   model19: string;
@@ -66,9 +66,9 @@ export interface RoiCopy {
 }
 
 const fr: RoiCopy = {
+  eyebrow: "Kress Voyager · Québec · données au 14 octobre 2026",
   title: "Calculateur ROI — Tonte Autonome Voyager",
-  lede: "Ajustez les chiffres en direct pendant la rencontre. Tout se recalcule automatiquement.",
-  print: "Imprimer / PDF",
+  lede: "Ce qu'une Kress Voyager fait économiser par rapport à un employé sur une zero-turn de 60 po : coût total, coût par heure de tonte, délai de récupération et rendement. Tout se recalcule en direct.",
   model: "Modèle",
   model7: "7 acres/jour — 85 000 $ (batterie 10 kWh)",
   model19: "19 acres/jour (60 po) — 115 000 $ (batterie 38 kWh)",
@@ -129,9 +129,9 @@ const fr: RoiCopy = {
 };
 
 const en: RoiCopy = {
+  eyebrow: "Kress Voyager · Quebec · data as of October 14, 2026",
   title: "ROI Calculator: Voyager Autonomous Mowing",
-  lede: "Adjust the numbers live during the meeting. Everything recalculates automatically.",
-  print: "Print / PDF",
+  lede: "What one Kress Voyager saves compared with an employee on a 60 in. zero-turn: total cost, cost per mowing hour, payback and return. Everything recalculates live.",
   model: "Model",
   model7: "7 acres/day: $85,000 (10 kWh battery)",
   model19: "19 acres/day (60 in.): $115,000 (38 kWh battery)",

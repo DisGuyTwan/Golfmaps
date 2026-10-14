@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { UI } from "@/lib/i18n";
 import { useLang } from "@/lib/preferences";
 import { ROI_COPY } from "@/lib/roi-copy";
+import { TabHeader, ui } from "./ui";
 import {
   ROI_DEFAULTS,
   VOYAGER_PRESETS,
@@ -42,17 +44,14 @@ const num = (v: string) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-/** Filled boxes stay the brand red in both themes (white text on top). */
-const RED = "#7a1010";
-
-const inputCls =
-  "w-full rounded-md border border-roi-border bg-roi-surface px-2.5 py-2 text-base text-roi-ink focus:border-roi-accent focus:outline-none focus:ring-1 focus:ring-roi-accent print:py-0 print:text-[11px]";
+// The print versions shrink everything so the summary fits one Letter page.
+const inputCls = `${ui.input} print:py-0 print:text-[11px]`;
 const readonlyCls =
-  "w-full rounded-md border border-roi-border bg-roi-readonly px-2.5 py-2 text-base font-bold text-roi-accent print:py-0 print:text-[11px]";
+  "w-full rounded-lg border border-line bg-surface-2 px-3 py-2 text-base font-bold text-accent tabular-nums print:py-0 print:text-[11px]";
 
 function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNode }) {
   return (
-    <label htmlFor={htmlFor} className="mb-1 mt-3 block text-[13px] font-semibold text-roi-label print:mb-0 print:mt-0.5 print:text-[9px]">
+    <label htmlFor={htmlFor} className={`${ui.label} mb-1 mt-3 block print:mb-0 print:mt-0.5 print:text-[9px]`}>
       {children}
     </label>
   );
@@ -60,14 +59,14 @@ function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNo
 
 function H2({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mb-2 mt-6 border-b-2 border-roi-accent pb-1.5 text-lg font-semibold text-roi-accent first:mt-0 print:mb-1 print:mt-2 print:pb-0.5 print:text-sm">
+    <h2 className={`${ui.h2} mb-2 mt-6 border-b border-line pb-1.5 first:mt-0 print:mb-1 print:mt-2 print:pb-0.5 print:text-sm`}>
       {children}
     </h2>
   );
 }
 
 function Note({ children }: { children: React.ReactNode }) {
-  return <p className="mt-4 text-[11px] leading-relaxed text-roi-note print:mt-2 print:text-[8px]">{children}</p>;
+  return <p className={`${ui.note} mt-4 print:mt-2 print:text-[8px]`}>{children}</p>;
 }
 
 function Row({ children }: { children: React.ReactNode }) {
@@ -114,26 +113,19 @@ export default function RoiTab() {
   const cphSaving = r.ztCph > 0 ? r.ztCph - r.voyCph : 0;
 
   return (
-    <div className="roi-print h-full overflow-y-auto bg-roi-canvas text-roi-ink print:h-auto print:overflow-visible print:bg-white">
-      <header className="px-4 py-5 text-white sm:px-8 print:px-0 print:py-2" style={{ background: RED }}>
-        <div className="mx-auto flex max-w-[1300px] flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold print:text-lg">{t.title}</h1>
-            <p className="mt-1 text-sm opacity-85 print:hidden">{t.lede}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="min-h-11 rounded-md border border-white/70 px-4 text-sm font-semibold text-white hover:bg-white/10 print:hidden"
-          >
-            {t.print}
-          </button>
-        </div>
-      </header>
+    // Printed at 90% so the client summary fits one Letter page.
+    <div className="h-full overflow-y-auto bg-canvas text-ink print:h-auto print:overflow-visible print:bg-white print:[zoom:0.9]">
+      <TabHeader
+        eyebrow={t.eyebrow}
+        title={t.title}
+        lede={t.lede}
+        printLabel={UI[lang].printPdf}
+        printTitle={`Kress - ${t.title}`}
+      />
 
-      <div className="mx-auto grid max-w-[1300px] gap-6 p-4 sm:p-6 min-[800px]:grid-cols-[1fr_1.3fr] print:grid-cols-[1fr_1.3fr] print:gap-3 print:p-0 print:pt-2">
+      <div className={`${ui.container} grid gap-6 py-6 min-[800px]:grid-cols-[1fr_1.3fr] print:max-w-none print:grid-cols-[1fr_1.3fr] print:gap-3 print:px-0 print:py-2`}>
         {/* Inputs */}
-        <section className="min-w-0 rounded-[10px] bg-roi-surface px-5 py-5 shadow-sm print:px-2 print:py-1 print:shadow-none">
+        <section className={`${ui.card} min-w-0 print:border-0 print:px-2 print:py-1`}>
           <H2>Voyager</H2>
 
           <Label htmlFor="model">{t.model}</Label>
@@ -155,7 +147,7 @@ export default function RoiTab() {
             <div>
               <Label htmlFor="voyEnergy">{t.voyEnergy}</Label>
               <input id="voyEnergy" readOnly value={r.voyEnergy.toFixed(0)} className={readonlyCls} />
-              <div className="mt-0.5 text-[11px] text-roi-hint print:text-[8px]">
+              <div className="mt-0.5 text-xs text-muted print:hidden">
                 {t.energyHint(r.workDays.toFixed(0), batteryKwh, r.kwhPerSeason.toFixed(0))}
               </div>
             </div>
@@ -188,7 +180,7 @@ export default function RoiTab() {
               {field("hoursPerWeek", { min: 1 })}
             </div>
           </Row>
-          <div className="mt-1 text-xs font-semibold text-roi-accent print:text-[9px]">
+          <div className="mt-1 text-xs font-semibold text-accent print:text-[9px]">
             {t.hoursPerSeason(r.totalHours.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA"))}
           </div>
 
@@ -196,14 +188,14 @@ export default function RoiTab() {
             <div>
               <Label htmlFor="ztMowHrs">{t.ztMowHrs}</Label>
               {field("ztMowHrs", { step: 0.5, min: 0 })}
-              <div className="mt-0.5 text-[11px] text-roi-hint print:text-[8px]">{t.ztMowHint}</div>
+              <div className="mt-0.5 text-xs text-muted print:hidden">{t.ztMowHint}</div>
             </div>
             <div>
               <Label htmlFor="voyMowHrs">{t.voyMowHrs}</Label>
               {field("voyMowHrs", { step: 0.5, min: 0 })}
             </div>
           </Row>
-          <div className="mt-1 text-xs font-semibold text-roi-accent print:text-[9px]">
+          <div className="mt-1 text-xs font-semibold text-accent print:text-[9px]">
             {t.mowTotals(count(r.ztMowTotal), count(r.voyMowTotal))}
           </div>
 
@@ -225,7 +217,7 @@ export default function RoiTab() {
             <div>
               <Label htmlFor="ztFuel">{t.ztFuel}</Label>
               <input id="ztFuel" readOnly value={r.ztFuel.toFixed(0)} className={readonlyCls} />
-              <div className="mt-0.5 text-[11px] text-roi-hint print:text-[8px]">
+              <div className="mt-0.5 text-xs text-muted print:hidden">
                 {t.fuelHint(String(Math.round(r.ztMowTotal)), String(num(fields.ztLph)), count(r.ztLitres))}
               </div>
             </div>
@@ -244,11 +236,11 @@ export default function RoiTab() {
         </section>
 
         {/* Outputs */}
-        <section className="min-w-0 rounded-[10px] bg-roi-surface px-5 py-5 shadow-sm print:px-2 print:py-1 print:shadow-none">
+        <section className={`${ui.card} min-w-0 print:border-0 print:px-2 print:py-1`}>
           <H2>{t.comparison}</H2>
           <table className="w-full border-collapse text-sm print:text-[10px]">
             <thead>
-              <tr className="bg-roi-head text-roi-accent">
+              <tr className="bg-accent-soft text-accent-ink">
                 <th className="px-2.5 py-2 text-left" />
                 <th className="px-2.5 py-2 text-right">Zero-turn</th>
                 <th className="px-2.5 py-2 text-right">Voyager</th>
@@ -263,13 +255,13 @@ export default function RoiTab() {
                   [t.labor, r.zt.labor, 0],
                 ] as const
               ).map(([label, zt, voy]) => (
-                <tr key={label} className="border-b border-roi-line">
+                <tr key={label} className="border-b border-line">
                   <td className="px-2.5 py-2 print:py-0.5">{label}</td>
                   <td className="px-2.5 py-2 text-right tabular-nums print:py-0.5">{money(zt)}</td>
                   <td className="px-2.5 py-2 text-right tabular-nums print:py-0.5">{money(voy)}</td>
                 </tr>
               ))}
-              <tr className="bg-roi-soft font-bold">
+              <tr className="bg-surface-2 font-bold">
                 <td className="px-2.5 py-2 print:py-0.5">{t.total}</td>
                 <td className="px-2.5 py-2 text-right tabular-nums print:py-0.5">{money(r.zt.total)}</td>
                 <td className="px-2.5 py-2 text-right tabular-nums print:py-0.5">{money(r.voy.total)}</td>
@@ -278,12 +270,12 @@ export default function RoiTab() {
           </table>
 
           <H2>{t.doMore}</H2>
-          <div className="mt-3 rounded-md border-l-4 border-[#4a0808] px-4 py-3.5 text-white print:py-1.5" style={{ background: RED }}>
-            <div className="text-[15px] font-bold">{t.profitTitle}</div>
-            <div className="my-0.5 text-[22px] font-extrabold tabular-nums print:text-base">
+          <div className="mt-3 rounded-xl bg-brand px-5 py-4 text-white print:py-1.5">
+            <div className="text-sm font-semibold text-white/85">{t.profitTitle}</div>
+            <div className={`${ui.kpi} my-1 print:text-base`}>
               {money(r.annualProfit)} {t.perYear}
             </div>
-            <div className="text-xs text-[#f0d9d9]">
+            <div className="text-xs text-white/75">
               <span className="tabular-nums">{money(r.savings)}</span>
               {t.overHorizon}
             </div>
@@ -321,28 +313,28 @@ export default function RoiTab() {
             ).map((col) => (
               <table key={col.title} className="w-full border-collapse text-sm print:text-[10px]">
                 <thead>
-                  <tr className="bg-roi-head text-roi-accent">
+                  <tr className="bg-accent-soft text-accent-ink">
                     <th className="px-2.5 py-2 text-left print:py-1" colSpan={2}>
                       {col.title}
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-roi-line">
+                  <tr className="border-b border-line">
                     <td className="px-2.5 py-2 print:py-0.5">{t.mowHoursSeason}</td>
                     <td className="whitespace-nowrap px-2.5 py-2 text-right tabular-nums print:py-0.5">{count(col.hours)} h</td>
                   </tr>
-                  <tr className="border-b border-roi-line">
+                  <tr className="border-b border-line">
                     <td className="px-2.5 py-2 print:py-0.5">{t.opCostYear}</td>
                     <td className="whitespace-nowrap px-2.5 py-2 text-right tabular-nums print:py-0.5">{money(col.annual)}</td>
                   </tr>
                   {col.rows.map(([label, value]) => (
-                    <tr key={label} className="border-b border-roi-line text-xs text-roi-sub print:text-[9px]">
+                    <tr key={label} className="border-b border-line text-xs text-muted print:text-[9px]">
                       <td className="py-1 pl-6 pr-2.5 print:py-0">{label}</td>
                       <td className="whitespace-nowrap px-2.5 py-1 text-right tabular-nums print:py-0">{value}</td>
                     </tr>
                   ))}
-                  <tr className="text-[15px] font-extrabold text-white print:text-[11px]" style={{ background: RED }}>
+                  <tr className="bg-brand text-sm font-bold text-white print:text-[11px]">
                     <td className="px-2.5 py-2 print:py-1">{t.cphRow}</td>
                     <td className="whitespace-nowrap px-2.5 py-2 text-right tabular-nums print:py-1">{fmtMoney2(col.cph, lang)}</td>
                   </tr>
@@ -351,7 +343,7 @@ export default function RoiTab() {
             ))}
           </div>
           {r.ztCph > 0 && (
-            <div className="mt-3 text-center text-[15px] font-bold text-roi-accent print:text-xs">
+            <div className="mt-3 text-center text-sm font-bold text-accent print:text-xs">
               {t.cphSaving(fmtMoney2(cphSaving, lang), Math.round((1 - r.voyCph / r.ztCph) * 100))}
             </div>
           )}
@@ -365,9 +357,9 @@ export default function RoiTab() {
                 [t.roiHorizon, formatRoi(r.roiPct, lang)],
               ] as const
             ).map(([label, value]) => (
-              <div key={label} className="rounded-lg p-4 text-center text-white print:p-2" style={{ background: RED }}>
-                <div className="text-xs uppercase tracking-wide opacity-85">{label}</div>
-                <div className="mt-1 text-[28px] font-extrabold tabular-nums print:text-lg">{value}</div>
+              <div key={label} className="rounded-xl bg-brand p-4 text-center text-white print:p-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-white/80">{label}</div>
+                <div className={`${ui.kpi} mt-1 print:text-lg`}>{value}</div>
               </div>
             ))}
           </div>

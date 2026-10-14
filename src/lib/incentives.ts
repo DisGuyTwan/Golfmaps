@@ -127,7 +127,7 @@ const LINKS = {
 const fr = {
   eyebrow: "Québec · Ontario · Fédéral · à jour au 14 octobre 2026",
   h1: "Combien pouvez-vous récupérer sur vos tondeuses robots et outils à batterie?",
-  lede: "Choisissez votre profil et votre achat. L’outil estime vos économies de la première année et liste les programmes, avec les liens officiels.",
+  lede: "Subventions, crédits d’impôt et radiations offerts la première année sur les tondeuses robots et les outils à batterie, avec le lien officiel de chaque programme.",
   s1: "Où êtes-vous?",
   s2: "Vous êtes",
   s2farm: "Type de ferme",
@@ -268,7 +268,7 @@ export type IncentiveStrings = typeof fr;
 const en: IncentiveStrings = {
   eyebrow: "Quebec · Ontario · Federal · updated October 14, 2026",
   h1: "How much can you recover on robotic mowers and battery tools?",
-  lede: "Pick your profile and your purchase. The tool estimates your first-year savings and lists the programs, with official links.",
+  lede: "First-year grants, tax credits and write-offs on robotic mowers and battery tools, with the official link for each program.",
   s1: "Where are you?",
   s2: "You are",
   s2farm: "Type of farm",
@@ -559,8 +559,8 @@ export function isZeroItem(i: IncentiveItem): boolean {
   return i.tag === "off" || (i.high === 0 && i.low === 0);
 }
 
-/** Plain-text summary for pasting into a proposal or a text message. */
-export function summaryText(s: IncentiveInputs, r: IncentiveResult, lang: Lang): string {
+/** "Golf course, Quebec, Corporation (inc.)" and "$27,000 (robots $24,000, tools $3,000)". */
+export function describeInputs(s: IncentiveInputs, r: IncentiveResult, lang: Lang): { profile: string; purchase: string } {
   const L = STRINGS[lang];
   const bits = [L[`who_${s.who}`], L[`prov_${s.prov}`]];
   if (s.who === "farm") bits.push(L[`farm_${s.farm}`]);
@@ -570,12 +570,19 @@ export function summaryText(s: IncentiveInputs, r: IncentiveResult, lang: Lang):
   const buy: string[] = [];
   if (r.R > 0) buy.push(`${L.sumRobots} ${formatMoney(r.R, lang)}`);
   if (r.Tl > 0) buy.push(`${L.sumTools} ${formatMoney(r.Tl, lang)}`);
+  return { profile: bits.join(", "), purchase: `${formatMoney(r.P, lang)} (${buy.join(", ")})` };
+}
+
+/** Plain-text summary for pasting into a proposal or a text message. */
+export function summaryText(s: IncentiveInputs, r: IncentiveResult, lang: Lang): string {
+  const L = STRINGS[lang];
+  const { profile, purchase } = describeInputs(s, r, lang);
   const sep = lang === "fr" ? " : " : ": ";
 
   const lines = [
     L.sumTitle,
-    `${L.sumProfile}${sep}${bits.join(", ")}`,
-    `${L.sumBuy}${sep}${formatMoney(r.P, lang)} (${buy.join(", ")})`,
+    `${L.sumProfile}${sep}${profile}`,
+    `${L.sumBuy}${sep}${purchase}`,
     `${L.sumSave}${sep}${r.high > 0 ? rangeText(r.low, r.high, lang) : formatMoney(0, lang)}`,
     "",
     `${L.sumDetail}${sep.trimEnd()}`,

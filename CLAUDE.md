@@ -14,6 +14,7 @@ straight from the browser to public APIs (built-in `fetch`, no HTTP library).
 src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
                   globals.css (theme color variables)
 src/components/
+  ui.tsx                     shared TabHeader + style classes for every tab
   AppTabs.tsx                tab bar (Acreage | Incentives | ROI Voyager) + FR/EN and
                              light/dark buttons; tab in the URL hash
   GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure
@@ -70,10 +71,18 @@ src/types/      ambient module declarations for untyped deps
   is the default; the server always renders English/light and the boot script in
   `preferences-boot.ts` applies a saved dark theme before paint. Any new
   user-facing text needs both languages (incentives.ts, roi-copy.ts or i18n.ts).
-- **Use the theme color tokens, not raw colors.** `bg-surface`, `text-ink`,
-  `text-muted`, `border-line`, `bg-accent-soft`, … (and `roi-*` for the ROI tab)
-  are CSS variables in `globals.css` that swap in dark mode, so one class covers
-  both themes. Dark values sit under `@media screen`, so printing stays light.
+- **One look for every tab.** Reuse `src/components/ui.tsx`: `TabHeader` (the
+  dark-green header with eyebrow, title, pitch line and Print / PDF button) and
+  the `ui.*` class strings (buttons, h2, label, input, card, note, kpi,
+  container). Don't introduce new font sizes or button styles per tab.
+- **Use the theme color tokens, not raw colors.** `bg-brand` (dark green fills:
+  headers, buttons, highlight boxes), `text-accent`, `bg-surface`, `text-ink`,
+  `text-muted`, `border-line`, `bg-accent-soft`, … are CSS variables in
+  `globals.css` that swap in dark mode, so one class covers both themes. Dark
+  values sit under `@media screen`, so printing stays light.
+- **Print / PDF is a client deliverable.** Incentives prints the profile and
+  results (the form is hidden); ROI fits one Letter page. Check both with
+  print emulation after layout changes.
 - **React 19 rules apply**: no reading/writing refs during render and no
   synchronous setState in effect bodies (the lint config enforces both).
 

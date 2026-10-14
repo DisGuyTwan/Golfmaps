@@ -5,75 +5,54 @@
 /*
  * Theme colors as "R G B" (see tailwind.config.ts). Light is the default; dark
  * applies when <html> has the `dark` class. Dark values live under
- * `@media screen`, so printing (the ROI "Imprimer / PDF") always comes out
+ * `@media screen`, so printing (the "Print / PDF" buttons) always comes out
  * light and ink-friendly, whatever theme is on screen.
  */
 :root {
-  --canvas: 248 250 252;
+  --canvas: 246 248 246;
   --surface: 255 255 255;
-  --surface-2: 241 245 249;
-  --ink: 15 23 42;
-  --ink-2: 51 65 85;
-  --muted: 100 116 139;
-  --faint: 148 163 184;
-  --line: 226 232 240;
-  --accent: 4 120 87;
-  --accent-soft: 236 253 245;
-  --accent-ink: 6 95 70;
+  --surface-2: 239 243 240;
+  --ink: 17 28 22;
+  --ink-2: 52 66 58;
+  --muted: 96 112 103;
+  --faint: 145 158 150;
+  --line: 222 229 224;
 
-  /* Incentives header stripes and savings meter hatch */
+  /* One dark-green brand across every tab. `brand` fills headers, buttons and
+     highlight boxes (white text on top); `accent` is green text and links. */
+  --brand: 46 107 63;
+  --brand-strong: 34 82 48;
+  --accent: 46 107 63;
+  --accent-soft: 234 243 236;
+  --accent-ink: 28 72 42;
+
+  /* Header stripes and the savings meter hatch */
   --band-a: #2e6b3f;
   --band-b: #367749;
   --hatch: #9cc5a5;
-
-  /* ROI Voyager: the handoff's original cream and dark-red palette */
-  --roi-canvas: 244 241 238;
-  --roi-surface: 255 255 255;
-  --roi-ink: 34 34 34;
-  --roi-label: 68 68 68;
-  --roi-sub: 102 102 102;
-  --roi-hint: 136 136 136;
-  --roi-note: 153 153 153;
-  --roi-border: 204 204 204;
-  --roi-line: 229 224 218;
-  --roi-head: 240 233 228;
-  --roi-soft: 251 243 238;
-  --roi-readonly: 245 240 236;
-  --roi-accent: 122 16 16;
 }
 
 @media screen {
   html.dark {
     color-scheme: dark;
-    --canvas: 15 20 18;
-    --surface: 24 31 28;
-    --surface-2: 33 42 38;
+    --canvas: 15 20 17;
+    --surface: 24 31 27;
+    --surface-2: 33 42 37;
     --ink: 236 241 238;
     --ink-2: 203 213 207;
     --muted: 148 163 155;
     --faint: 107 122 114;
-    --line: 47 58 53;
-    --accent: 52 211 153;
-    --accent-soft: 18 46 35;
-    --accent-ink: 167 243 208;
+    --line: 47 58 52;
+
+    --brand: 38 92 54;
+    --brand-strong: 46 107 63;
+    --accent: 134 207 152;
+    --accent-soft: 24 43 31;
+    --accent-ink: 190 230 200;
 
     --band-a: #1b3323;
     --band-b: #213d2a;
     --hatch: #3e6b48;
-
-    --roi-canvas: 23 17 16;
-    --roi-surface: 34 25 23;
-    --roi-ink: 238 232 230;
-    --roi-label: 214 201 198;
-    --roi-sub: 184 168 164;
-    --roi-hint: 168 148 143;
-    --roi-note: 143 127 123;
-    --roi-border: 74 58 55;
-    --roi-line: 61 45 42;
-    --roi-head: 58 36 33;
-    --roi-soft: 43 29 26;
-    --roi-readonly: 43 29 26;
-    --roi-accent: 242 163 163;
   }
 }
 
@@ -116,7 +95,7 @@ html.dark .leaflet-bar a {
   border-color: rgb(var(--line));
 }
 
-/* Printing (the ROI tab's "Imprimer / PDF"): Letter pages, keep colored boxes. */
+/* Printing (the "Print / PDF" header buttons): Letter pages, keep colored boxes. */
 @media print {
   @page {
     size: letter;

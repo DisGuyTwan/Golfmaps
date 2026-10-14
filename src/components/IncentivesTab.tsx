@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { UI } from "@/lib/i18n";
 import { useLang } from "@/lib/preferences";
+import { TabHeader, ui } from "./ui";
 import {
   BUSINESS_PROFILES,
   CITIES,
@@ -11,6 +13,7 @@ import {
   STRINGS,
   STRUCTURES,
   computeIncentives,
+  describeInputs,
   formatMoney,
   formatPct,
   isZeroItem,
@@ -28,7 +31,7 @@ import {
 } from "@/lib/incentives";
 
 const TAG_STYLES: Record<Tag, string> = {
-  ok: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200",
+  ok: "bg-accent-soft text-accent-ink",
   warn: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200",
   apply: "bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200",
   off: "bg-surface-2 text-muted",
@@ -115,7 +118,7 @@ function Chips<V extends string>({
             onChange={() => onChange(option.value)}
             className="peer sr-only"
           />
-          <span className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium leading-tight text-ink-2 transition peer-checked:border-emerald-700 peer-checked:bg-emerald-700 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-canvas">
+          <span className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium leading-tight text-ink-2 transition peer-checked:border-brand peer-checked:bg-brand peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-canvas">
             {option.label}
           </span>
         </label>
@@ -128,7 +131,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   return (
     <fieldset className="space-y-3 border-t border-line py-5 first:border-t-0 first:pt-0">
       <legend className="contents">
-        <span className="flex items-baseline gap-2 text-lg font-bold text-ink">
+        <span className={`flex items-baseline gap-2 ${ui.h2}`}>
           <span className="text-accent">{n}</span>
           {title}
         </span>
@@ -209,6 +212,7 @@ export default function IncentivesTab() {
             formatMoney(result.P, lang),
             L.pctRange(formatPct(result.low / result.P, lang), formatPct(result.high / result.P, lang)),
           );
+  const { profile, purchase } = describeInputs(inputs, result, lang);
   const lowPct = result.P > 0 ? Math.min(100, (result.low / result.P) * 100) : 0;
   const highPct = result.P > 0 ? Math.min(100, (result.high / result.P) * 100) : 0;
 
@@ -225,20 +229,19 @@ export default function IncentivesTab() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-canvas text-ink">
-      <header
-        className="text-white"
-        style={{ background: "repeating-linear-gradient(100deg,var(--band-a) 0 70px,var(--band-b) 70px 140px)" }}
-      >
-        <div className="mx-auto grid max-w-5xl gap-3 px-4 py-6 sm:px-6">
-          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-100">{L.eyebrow}</span>
-          <h1 className="max-w-[22ch] text-3xl font-bold leading-tight sm:text-4xl">{L.h1}</h1>
-          <p className="max-w-[60ch] text-emerald-50">{L.lede}</p>
-        </div>
-      </header>
+    // Printed at 85%: the client PDF is the profile plus results, about two pages.
+    <div className="h-full overflow-y-auto bg-canvas text-ink print:h-auto print:overflow-visible print:bg-white print:[zoom:0.85]">
+      <TabHeader
+        eyebrow={L.eyebrow}
+        title={L.h1}
+        lede={L.lede}
+        printLabel={UI[lang].printPdf}
+        printTitle={`Kress - ${UI[lang].tabs.incentives}`}
+      />
 
-      <div className="mx-auto grid max-w-5xl gap-8 px-4 pb-28 pt-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start lg:pb-12">
-        <form onSubmit={(e) => e.preventDefault()} noValidate className="min-w-0">
+      <div className={`${ui.container} grid gap-8 pb-28 pt-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start lg:pb-12 print:max-w-none print:gap-4 print:px-4 print:pb-0 print:pt-3`}>
+        {/* The form is for the meeting; the PDF shows the choices as text instead. */}
+        <form onSubmit={(e) => e.preventDefault()} noValidate className="min-w-0 print:hidden">
           <Step n={1} title={L.s1}>
             <Chips
               name="prov"
@@ -279,7 +282,7 @@ export default function IncentivesTab() {
                         type="checkbox"
                         checked={form.bonus}
                         onChange={(e) => set("bonus", e.target.checked)}
-                        className="mt-0.5 h-5 w-5 accent-emerald-700"
+                        className="mt-0.5 h-5 w-5 accent-brand"
                       />
                       {L.bonus}
                     </label>
@@ -300,10 +303,11 @@ export default function IncentivesTab() {
                 </Sub>
                 {showTax && (
                   <div className="space-y-1">
-                    <label htmlFor="taxRate" className="text-sm font-semibold">
+                    <label htmlFor="taxRate" className={ui.label}>
                       {L.taxLabel}
                     </label>
                     <div className="flex items-center gap-2">
+                      <div className="w-28">
                       <input
                         id="taxRate"
                         type="number"
@@ -316,8 +320,9 @@ export default function IncentivesTab() {
                           setTaxTouched(true);
                           set("taxRate", e.target.value);
                         }}
-                        className="w-28 rounded-lg border border-line bg-surface px-3 py-2 text-lg tabular-nums"
+                        className={ui.input}
                       />
+                      </div>
                       <span className="font-semibold text-muted">%</span>
                     </div>
                     <p className="text-sm text-muted">{L.taxHelp}</p>
@@ -348,21 +353,22 @@ export default function IncentivesTab() {
               ] as const
             ).map(([buyKey, amtKey, label, help, step]) => (
               <div key={buyKey} className="space-y-3 rounded-xl border border-line bg-surface p-4">
-                <label className="flex cursor-pointer items-center gap-2 text-lg font-bold">
+                <label className="flex cursor-pointer items-center gap-2 text-base font-bold text-ink">
                   <input
                     type="checkbox"
                     checked={form[buyKey]}
                     onChange={(e) => set(buyKey, e.target.checked)}
-                    className="h-5 w-5 accent-emerald-700"
+                    className="h-5 w-5 accent-brand"
                   />
                   {label}
                 </label>
                 {form[buyKey] && (
                   <div className="space-y-1">
-                    <label htmlFor={amtKey} className="text-sm font-semibold">
+                    <label htmlFor={amtKey} className={ui.label}>
                       {help}
                     </label>
                     <div className="flex items-center gap-2">
+                      <div className="w-40">
                       <input
                         id={amtKey}
                         type="number"
@@ -371,8 +377,9 @@ export default function IncentivesTab() {
                         step={step}
                         value={form[amtKey]}
                         onChange={(e) => set(amtKey, e.target.value)}
-                        className="w-40 rounded-lg border border-line bg-surface px-3 py-2 text-lg tabular-nums"
+                        className={ui.input}
                       />
+                      </div>
                       <span className="font-semibold text-muted">$ CAD</span>
                     </div>
                     {buyKey === "buyTools" && (
@@ -381,7 +388,7 @@ export default function IncentivesTab() {
                           type="checkbox"
                           checked={form.under500}
                           onChange={(e) => set("under500", e.target.checked)}
-                          className="mt-0.5 h-5 w-5 accent-emerald-700"
+                          className="mt-0.5 h-5 w-5 accent-brand"
                         />
                         {L.under500}
                       </label>
@@ -394,21 +401,27 @@ export default function IncentivesTab() {
           </Step>
         </form>
 
-        <section ref={resultsRef} aria-live="polite" className="grid min-w-0 scroll-mt-4 gap-5 lg:sticky lg:top-4">
-          <div className="grid gap-2 rounded-xl border border-line bg-surface p-5">
+        <section ref={resultsRef} aria-live="polite" className="grid min-w-0 scroll-mt-4 gap-5 lg:sticky lg:top-4 print:gap-3">
+          <dl className={`${ui.card} hidden gap-x-4 gap-y-1 text-sm print:grid print:grid-cols-[auto_1fr] print:py-3`}>
+            <dt className="font-semibold text-ink-2">{L.sumProfile}</dt>
+            <dd>{profile}</dd>
+            <dt className="font-semibold text-ink-2">{L.sumBuy}</dt>
+            <dd>{purchase}</dd>
+          </dl>
+          <div className={`${ui.card} grid gap-2 print:break-inside-avoid`}>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted">{L.kicker}</p>
-            <p className="text-4xl font-bold leading-none tabular-nums text-accent">{headline}</p>
+            <p className={`${ui.kpi} text-accent`}>{headline}</p>
             <p className="text-sm text-ink-2">{subline}</p>
             <div className="relative h-3.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
               <div
                 className="absolute inset-y-0 left-0 transition-[width] duration-300"
                 style={{ width: `${highPct}%`, background: "repeating-linear-gradient(135deg,var(--hatch) 0 6px,transparent 6px 10px)" }}
               />
-              <div className="absolute inset-y-0 left-0 bg-emerald-700 transition-[width] dark:bg-emerald-500 duration-300" style={{ width: `${lowPct}%` }} />
+              <div className="absolute inset-y-0 left-0 bg-brand transition-[width] duration-300 dark:bg-accent" style={{ width: `${lowPct}%` }} />
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
               <span className="flex items-center gap-1.5">
-                <i className="inline-block h-3 w-3 rounded-sm bg-emerald-700 dark:bg-emerald-500" />
+                <i className="inline-block h-3 w-3 rounded-sm bg-brand dark:bg-accent" />
                 {L.legendLow}
               </span>
               <span className="flex items-center gap-1.5">
@@ -424,12 +437,12 @@ export default function IncentivesTab() {
 
           {result.items.length > 0 && (
             <div className="grid gap-2">
-              <h2 className="text-lg font-bold">{L.breakdown}</h2>
+              <h2 className={ui.h2}>{L.breakdown}</h2>
               <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
                 {result.items.map((item) => (
-                  <div key={item.t} className="grid gap-1.5 px-4 py-3.5">
+                  <div key={item.t} className="grid gap-1.5 px-4 py-3.5 print:break-inside-avoid">
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-sm font-semibold leading-snug">{item.t}</h3>
+                      <h3 className="text-sm font-semibold leading-snug text-ink">{item.t}</h3>
                       <span className="whitespace-nowrap text-sm font-semibold tabular-nums">
                         {isZeroItem(item) ? "–" : rangeText(item.low, item.high, lang)}
                       </span>
@@ -447,29 +460,25 @@ export default function IncentivesTab() {
 
           {result.cards.length > 0 && (
             <div className="grid gap-2">
-              <h2 className="text-lg font-bold">{L.programs}</h2>
+              <h2 className={ui.h2}>{L.programs}</h2>
               {result.cards.map((card) => (
                 <article
                   key={card.t}
-                  className={`grid gap-1.5 rounded-xl px-4 py-3.5 ${card.info ? "bg-accent-soft" : "border border-line bg-surface"}`}
+                  className={`grid gap-1.5 rounded-xl px-4 py-3.5 print:break-inside-avoid ${card.info ? "bg-accent-soft" : "border border-line bg-surface"}`}
                 >
-                  <h3 className="text-sm font-semibold leading-snug">{card.t}</h3>
+                  <h3 className="text-sm font-semibold leading-snug text-ink">{card.t}</h3>
                   <div>
                     <TagPill tag={card.tag} label={L.tag[card.tag]} />
                   </div>
-                  <p className="text-sm">{card.p}</p>
+                  <p className="text-sm text-ink-2">{card.p}</p>
                   <Links links={card.links} />
                 </article>
               ))}
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={copySummary}
-              className="min-h-11 rounded-lg bg-emerald-700 px-5 font-semibold text-white hover:bg-emerald-800"
-            >
+          <div className="flex flex-wrap items-center gap-3 print:hidden">
+            <button type="button" onClick={copySummary} className={ui.btnPrimary}>
               {L.copy}
             </button>
             {copyStatus && (
@@ -485,11 +494,11 @@ export default function IncentivesTab() {
               aria-label={lang === "fr" ? "Résumé" : "Summary"}
               onFocus={(e) => e.currentTarget.select()}
               autoFocus
-              className="min-h-36 w-full rounded-lg border border-line bg-surface p-3 text-sm"
+              className="min-h-36 w-full rounded-lg border border-line bg-surface p-3 text-sm print:hidden"
             />
           )}
 
-          <div className="grid gap-2 text-xs text-muted">
+          <div className={`grid gap-2 ${ui.note} print:break-inside-avoid`}>
             <p>{L.timing}</p>
             <p>{L.watch}</p>
             <p>{L.disclaimer}</p>
@@ -499,11 +508,11 @@ export default function IncentivesTab() {
 
       {/* Sticky savings bar on phones */}
       <div
-        className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-line bg-surface px-4 pt-2.5 shadow-[0_-6px_20px_rgba(23,35,27,0.1)] lg:hidden"
+        className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-line bg-surface px-4 pt-2.5 shadow-[0_-6px_20px_rgba(23,35,27,0.1)] lg:hidden print:hidden"
         style={{ paddingBottom: "calc(0.625rem + env(safe-area-inset-bottom, 0px))" }}
       >
         <div>
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">{L.bar_label}</span>
+          <span className="block text-xs font-semibold uppercase tracking-wider text-muted">{L.bar_label}</span>
           <span className="text-xl font-bold tabular-nums text-accent">{headline}</span>
         </div>
         <button

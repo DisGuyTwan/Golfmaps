@@ -17,6 +17,7 @@ const en = {
   toDark: "Switch to dark mode",
   toLight: "Switch to light mode",
   loading: "Loading…",
+  printPdf: "Print / PDF",
   loadingMap: "Loading map…",
   layers: { satellite: "Satellite", streets: "Streets" },
 
@@ -72,6 +73,7 @@ const fr: UiStrings = {
   toDark: "Passer au mode sombre",
   toLight: "Passer au mode clair",
   loading: "Chargement…",
+  printPdf: "Imprimer / PDF",
   loadingMap: "Chargement de la carte…",
   layers: { satellite: "Satellite", streets: "Plan" },
 

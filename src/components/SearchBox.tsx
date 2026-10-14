@@ -199,7 +199,7 @@ export default function SearchBox({ lang, onSelect, getBias }: SearchBoxProps) {
             autoComplete="off"
           />
           {isLoading && (
-            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+            <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent" />
           )}
           {!isLoading && query && (
             <button

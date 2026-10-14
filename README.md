@@ -14,6 +14,10 @@ right switches the whole app, including printouts and the 404 page. A sun/moon b
 mode** (it follows the device setting until you pick one). Both choices are
 remembered on the device. Printing always comes out light.
 
+Incentives and ROI Voyager share the same dark-green header with a short
+description and a **Print / PDF** button, so either tab can be saved as a PDF
+and sent to a client.
+
 ## How it works
 
 1. **Find the course** — type a course name or address in the search bar

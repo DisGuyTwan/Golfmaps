@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { UI } from "@/lib/i18n";
 import { useLang } from "@/lib/preferences";
+import { ui } from "@/components/ui";
 
 /**
  * Route-level error boundary. The measurement path talks to three third-party
@@ -29,7 +30,7 @@ export default function Error({
       <button
         type="button"
         onClick={reset}
-        className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 active:scale-95"
+        className={ui.btnPrimary}
       >
         {t.tryAgain}
       </button>
