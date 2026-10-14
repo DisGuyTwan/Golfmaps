@@ -1,9 +1,10 @@
 # Kress
 
 Next.js 16 App Router + React 19 + TypeScript + Tailwind. Measures golf course
-turf acreage from OpenStreetMap for robotic mower quoting, plus a second
+turf acreage from OpenStreetMap for robotic mower quoting, plus an
 "Incentives" tab that estimates grant/tax savings on robotic mowers and battery
-tools (Quebec, Ontario, federal). No API keys, no backend — every request goes
+tools (Quebec, Ontario, federal) and a "ROI Voyager" tab comparing a Kress
+Voyager with a zero-turn crew. No API keys, no backend — every request goes
 straight from the browser to public APIs.
 
 ## Layout
@@ -11,17 +12,19 @@ straight from the browser to public APIs.
 ```
 src/app/          layout.tsx (metadata), page.tsx, globals.css
 src/components/
-  AppTabs.tsx                tab bar (Acreage | Incentives); tab lives in the URL hash
+  AppTabs.tsx                tab bar (Acreage | Incentives | ROI Voyager); tab in the URL hash
   GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)
   MeasurePanel.tsx           results panel + legend
   SearchBox.tsx              Photon geocoder autocomplete
   IncentivesTab.tsx          bilingual FR/EN incentive checker UI (client-only)
+  RoiTab.tsx                 Voyager ROI calculator UI, Quebec French, printable
 src/lib/
   overpass.ts   builds the Overpass QL query, fails over across 3 mirrors
   area.ts       OSM → GeoJSON → categorize → clip → acres  (the core logic)
   types.ts      BBox, CourseMeasurement
   incentives.ts program rules, FR/EN copy and savings math (pure, tested)
+  roi.ts        Voyager ROI formulas and formatting (pure, tested)
 src/types/      ambient module declarations for untyped deps
 ```
 
@@ -43,6 +46,12 @@ src/types/      ambient module declarations for untyped deps
   Customer-facing copy uses Quebec French and no em dashes. Keep the
   "not tax advice" disclaimer; only "ok" (in force) items count toward the low
   end of the range.
+- **The ROI calculator is a finished, checked port.** Keep its formulas,
+  defaults, the Hydro-Québec Tarif G rate (`HQ_RATE`, update each April 1) and
+  its French labels/footnotes exactly as they are; `roi.test.ts` holds the
+  handoff's acceptance values. Equipment is counted once in payback/ROI, and
+  there is deliberately no "Levier 2" / redeployment profit (it double-counted
+  the same worker).
 - **React 19 rules apply**: no reading/writing refs during render and no
   synchronous setState in effect bodies (the lint config enforces both).
 
@@ -53,5 +62,5 @@ npm install
 npm run dev      # http://localhost:3000
 npm run build    # type check + production build
 npm run lint
-npm test         # vitest: acreage pipeline + incentive math
+npm test         # vitest: acreage pipeline, incentive math, ROI acceptance values
 ```

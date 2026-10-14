@@ -2,8 +2,8 @@
 
 Live at <https://kress.prodig-e.com>.
 
-A completely free web app for quoting robotic mower jobs. It has two tabs:
-**Acreage** and **Incentives**. Search for a course (or pan to it), and it measures the turf acreage from OpenStreetMap — broken down by
+A completely free web app for quoting robotic mower jobs. It has three tabs:
+**Acreage**, **Incentives** and **ROI Voyager**. Search for a course (or pan to it), and it measures the turf acreage from OpenStreetMap — broken down by
 fairway, green, tee and rough, net of trees, buildings and parking.
 
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite
@@ -57,6 +57,16 @@ The low end counts only rules in force; the high end adds items that need
 confirmation or approval (Class 56, the Clean Tech ITC, Prime-Vert, GMF).
 Research as of October 9, 2026, in `src/lib/incentives.ts`. Estimate only, not
 tax advice.
+
+## ROI Voyager tab
+
+A live ROI calculator (Quebec French) for client meetings: one employee on a 60"
+zero-turn versus one Kress Voyager, over a 1 to 10 year horizon. It shows the
+total cost of each option, the profit recovered per year, cost per mowing hour,
+and payback/ROI, and recalculates on every keystroke. "Imprimer / PDF" prints a
+one-page Letter summary to leave with the client. Link straight to it with
+`/#roi`. Formulas and sources are in `src/lib/roi.ts`; the Hydro-Québec rate
+needs updating each April 1.
 
 ## Tech stack
 

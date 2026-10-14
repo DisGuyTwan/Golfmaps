@@ -20,3 +20,17 @@ body {
 .leaflet-top.leaflet-right .leaflet-control-layers {
   margin-top: 3.75rem;
 }
+
+/* Printing (the ROI tab's "Imprimer / PDF"): Letter pages, keep colored boxes. */
+@media print {
+  @page {
+    size: letter;
+    margin: 10mm;
+  }
+  html,
+  body {
+    height: auto;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
