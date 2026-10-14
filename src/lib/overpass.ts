@@ -1,4 +1,3 @@
-import axios from "axios";
 import type { BBox } from "./types";
 
 /**
@@ -47,11 +46,21 @@ out body;
 out skel qt;`;
 }
 
+/** Thrown when a mirror answers with an HTTP error (status kept for messages). */
+export class OverpassHttpError extends Error {
+  constructor(public status: number) {
+    super(`Overpass request failed (HTTP ${status})`);
+    this.name = "OverpassHttpError";
+  }
+}
+
+const REQUEST_TIMEOUT_MS = 30000;
+
 /**
  * POSTs the golf query to the Overpass API and returns the raw OSM JSON.
  * The query is sent form-encoded as `data=...` (the endpoint's documented POST
  * format). Each mirror is tried in turn; the last error is re-thrown only if
- * every mirror fails.
+ * every mirror fails. Uses the built-in fetch (no HTTP library in the bundle).
  */
 export async function fetchFairways(bbox: BBox): Promise<unknown> {
   const body = `data=${encodeURIComponent(buildFairwayQuery(bbox))}`;
@@ -59,11 +68,14 @@ export async function fetchFairways(bbox: BBox): Promise<unknown> {
 
   for (const url of OVERPASS_ENDPOINTS) {
     try {
-      const response = await axios.post(url, body, {
+      const response = await fetch(url, {
+        method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        timeout: 30000,
+        body,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
-      return response.data;
+      if (!response.ok) throw new OverpassHttpError(response.status);
+      return await response.json();
     } catch (err) {
       lastError = err;
       // Fall through and try the next mirror.

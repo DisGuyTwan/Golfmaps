@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { UI, type Lang } from "@/lib/i18n";
 
 export interface PlaceResult {
   id: string;
@@ -14,6 +15,7 @@ export interface PlaceResult {
 }
 
 interface SearchBoxProps {
+  lang: Lang;
   onSelect: (place: PlaceResult) => void;
   /** Proximity bias for suggestions (usually the current map center). */
   getBias: () => { lat: number; lon: number } | null;
@@ -84,7 +86,8 @@ function parsePhoton(data: unknown): PlaceResult[] {
   return results;
 }
 
-export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
+export default function SearchBox({ lang, onSelect, getBias }: SearchBoxProps) {
+  const t = UI[lang];
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<PlaceResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -113,7 +116,7 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
         const url = new URL(PHOTON_URL);
         url.searchParams.set("q", trimmed);
         url.searchParams.set("limit", "8");
-        url.searchParams.set("lang", "en");
+        url.searchParams.set("lang", lang);
         const bias = getBias();
         if (bias) {
           url.searchParams.set("lat", String(bias.lat));
@@ -140,7 +143,7 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [query, getBias]);
+  }, [query, getBias, lang]);
 
   const choose = (place: PlaceResult) => {
     setQuery(place.primary);
@@ -171,9 +174,9 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
       style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
     >
       <div className="pointer-events-auto relative w-full max-w-md">
-        <div className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 shadow-lg ring-1 ring-black/10">
+        <div className="flex items-center gap-2 rounded-full bg-surface px-4 py-2.5 shadow-lg ring-1 ring-black/10 dark:ring-white/10">
           <svg
-            className="h-4 w-4 shrink-0 text-slate-400"
+            className="h-4 w-4 shrink-0 text-faint"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -190,9 +193,9 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
             onBlur={() => {
               blurTimer.current = setTimeout(() => setOpen(false), 150);
             }}
-            placeholder="Search a golf course or address"
-            className="w-full bg-transparent text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
-            aria-label="Search a golf course or address"
+            placeholder={t.searchPlaceholder}
+            className="w-full bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none"
+            aria-label={t.searchPlaceholder}
             autoComplete="off"
           />
           {isLoading && (
@@ -206,8 +209,8 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
                 setSuggestions([]);
                 setOpen(false);
               }}
-              className="shrink-0 text-slate-400 transition hover:text-slate-600"
-              aria-label="Clear search"
+              className="shrink-0 text-faint transition hover:text-ink-2"
+              aria-label={t.clearSearch}
             >
               ✕
             </button>
@@ -216,7 +219,7 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
 
         {open && visibleSuggestions.length > 0 && (
           <ul
-            className="absolute inset-x-0 top-full mt-2 max-h-[50dvh] overflow-y-auto rounded-2xl bg-white py-1 shadow-xl ring-1 ring-black/10"
+            className="absolute inset-x-0 top-full mt-2 max-h-[50dvh] overflow-y-auto rounded-2xl bg-surface py-1 shadow-xl ring-1 ring-black/10 dark:ring-white/10"
             onMouseDown={(e) => e.preventDefault()}
           >
             {visibleSuggestions.map((place, index) => (
@@ -228,18 +231,18 @@ export default function SearchBox({ onSelect, getBias }: SearchBoxProps) {
                   }}
                   onMouseEnter={() => setActiveIndex(index)}
                   className={`flex w-full items-start gap-2 px-4 py-2.5 text-left transition ${
-                    index === activeIndex ? "bg-slate-100" : "hover:bg-slate-50"
+                    index === activeIndex ? "bg-surface-2" : "hover:bg-surface-2/60"
                   }`}
                 >
                   <span className="mt-0.5 text-base leading-none">
                     {place.isGolf ? "⛳" : "📍"}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-slate-800">
+                    <span className="block truncate text-sm font-medium text-ink">
                       {place.primary}
                     </span>
                     {place.secondary && (
-                      <span className="block truncate text-xs text-slate-500">
+                      <span className="block truncate text-xs text-muted">
                         {place.secondary}
                       </span>
                     )}

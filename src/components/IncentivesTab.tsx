@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useLang } from "@/lib/preferences";
 import {
   BUSINESS_PROFILES,
   CITIES,
@@ -18,7 +19,6 @@ import {
   type City,
   type FarmType,
   type IncentiveInputs,
-  type Lang,
   type Link,
   type Mapaq,
   type Profile,
@@ -27,14 +27,12 @@ import {
   type Tag,
 } from "@/lib/incentives";
 
-const LANG_KEY = "incentive-lang";
-
 const TAG_STYLES: Record<Tag, string> = {
-  ok: "bg-emerald-100 text-emerald-800",
-  warn: "bg-amber-100 text-amber-800",
-  apply: "bg-sky-100 text-sky-800",
-  off: "bg-slate-200 text-slate-600",
-  info: "bg-slate-200 text-slate-600",
+  ok: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200",
+  warn: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200",
+  apply: "bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200",
+  off: "bg-surface-2 text-muted",
+  info: "bg-surface-2 text-muted",
 };
 
 interface FormState {
@@ -94,17 +92,6 @@ function toInputs(f: FormState): IncentiveInputs {
   };
 }
 
-/** Saved choice first, else the device language (French for fr-*). */
-function initialLang(): Lang {
-  try {
-    const saved = localStorage.getItem(LANG_KEY);
-    if (saved === "fr" || saved === "en") return saved;
-  } catch {
-    /* storage blocked: fall back to the device language */
-  }
-  return (navigator.language || "").toLowerCase().startsWith("fr") ? "fr" : "en";
-}
-
 function Chips<V extends string>({
   name,
   value,
@@ -128,7 +115,7 @@ function Chips<V extends string>({
             onChange={() => onChange(option.value)}
             className="peer sr-only"
           />
-          <span className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium leading-tight text-slate-700 transition peer-checked:border-emerald-700 peer-checked:bg-emerald-700 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2">
+          <span className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium leading-tight text-ink-2 transition peer-checked:border-emerald-700 peer-checked:bg-emerald-700 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-canvas">
             {option.label}
           </span>
         </label>
@@ -139,10 +126,10 @@ function Chips<V extends string>({
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <fieldset className="space-y-3 border-t border-slate-200 py-5 first:border-t-0 first:pt-0">
+    <fieldset className="space-y-3 border-t border-line py-5 first:border-t-0 first:pt-0">
       <legend className="contents">
-        <span className="flex items-baseline gap-2 text-lg font-bold text-slate-900">
-          <span className="text-emerald-700">{n}</span>
+        <span className="flex items-baseline gap-2 text-lg font-bold text-ink">
+          <span className="text-accent">{n}</span>
           {title}
         </span>
       </legend>
@@ -154,7 +141,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 function Sub({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <fieldset className="space-y-2">
-      <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</legend>
+      <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{title}</legend>
       {children}
     </fieldset>
   );
@@ -165,7 +152,7 @@ function Links({ links }: { links?: Link[] }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
       {links.map(([label, url]) => (
-        <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-emerald-700 underline underline-offset-2">
+        <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-accent underline underline-offset-2">
           {label}
         </a>
       ))}
@@ -182,10 +169,11 @@ function TagPill({ tag, label }: { tag: Tag; label: string }) {
 }
 
 export default function IncentivesTab() {
-  const [lang, setLangState] = useState<Lang>(initialLang);
+  const lang = useLang();
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [taxTouched, setTaxTouched] = useState(false);
-  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  // A key rather than text, so the message follows a language switch.
+  const [copyStatus, setCopyStatus] = useState<"copied" | "copyFail" | null>(null);
   const [fallbackText, setFallbackText] = useState<string | null>(null);
   const resultsRef = useRef<HTMLElement>(null);
 
@@ -195,17 +183,6 @@ export default function IncentivesTab() {
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
-
-  const setLang = (next: Lang) => {
-    setLangState(next);
-    setCopyStatus(null);
-    setFallbackText(null);
-    try {
-      localStorage.setItem(LANG_KEY, next);
-    } catch {
-      /* not persisted; fine */
-    }
-  };
 
   const setStruct = (struct: Structure) => {
     setForm((prev) => ({
@@ -240,36 +217,21 @@ export default function IncentivesTab() {
     try {
       await navigator.clipboard.writeText(text);
       setFallbackText(null);
-      setCopyStatus(L.copied);
+      setCopyStatus("copied");
     } catch {
       setFallbackText(text);
-      setCopyStatus(L.copyFail);
+      setCopyStatus("copyFail");
     }
   };
 
   return (
-    <div lang={lang === "fr" ? "fr-CA" : "en-CA"} className="h-full overflow-y-auto bg-slate-50 text-slate-900">
+    <div className="h-full overflow-y-auto bg-canvas text-ink">
       <header
         className="text-white"
-        style={{ background: "repeating-linear-gradient(100deg,#2E6B3F 0 70px,#367749 70px 140px)" }}
+        style={{ background: "repeating-linear-gradient(100deg,var(--band-a) 0 70px,var(--band-b) 70px 140px)" }}
       >
         <div className="mx-auto grid max-w-5xl gap-3 px-4 py-6 sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-100">{L.eyebrow}</span>
-            <div role="group" aria-label="Language / Langue" className="inline-flex overflow-hidden rounded-full border border-emerald-200">
-              {(["fr", "en"] as Lang[]).map((code) => (
-                <button
-                  key={code}
-                  type="button"
-                  aria-pressed={lang === code}
-                  onClick={() => setLang(code)}
-                  className={`min-h-9 px-4 text-sm font-semibold ${lang === code ? "bg-white text-emerald-800" : "text-white"}`}
-                >
-                  {code.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
+          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-100">{L.eyebrow}</span>
           <h1 className="max-w-[22ch] text-3xl font-bold leading-tight sm:text-4xl">{L.h1}</h1>
           <p className="max-w-[60ch] text-emerald-50">{L.lede}</p>
         </div>
@@ -295,7 +257,7 @@ export default function IncentivesTab() {
             />
 
             {form.who === "farm" && (
-              <div className="space-y-4 rounded-xl bg-emerald-50 p-4">
+              <div className="space-y-4 rounded-xl bg-accent-soft p-4">
                 <Sub title={L.s2farm}>
                   <Chips
                     name="farm"
@@ -327,7 +289,7 @@ export default function IncentivesTab() {
             )}
 
             {isBusiness && (
-              <div className="space-y-4 rounded-xl bg-emerald-50 p-4">
+              <div className="space-y-4 rounded-xl bg-accent-soft p-4">
                 <Sub title={L.s2struct}>
                   <Chips
                     name="struct"
@@ -354,18 +316,18 @@ export default function IncentivesTab() {
                           setTaxTouched(true);
                           set("taxRate", e.target.value);
                         }}
-                        className="w-28 rounded-lg border border-slate-300 bg-white px-3 py-2 text-lg tabular-nums"
+                        className="w-28 rounded-lg border border-line bg-surface px-3 py-2 text-lg tabular-nums"
                       />
-                      <span className="font-semibold text-slate-500">%</span>
+                      <span className="font-semibold text-muted">%</span>
                     </div>
-                    <p className="text-sm text-slate-500">{L.taxHelp}</p>
+                    <p className="text-sm text-muted">{L.taxHelp}</p>
                   </div>
                 )}
               </div>
             )}
 
             {showCity && (
-              <div className="rounded-xl bg-emerald-50 p-4">
+              <div className="rounded-xl bg-accent-soft p-4">
                 <Sub title={L.s2city}>
                   <Chips
                     name="city"
@@ -385,7 +347,7 @@ export default function IncentivesTab() {
                 ["buyTools", "toolAmt", L.toolLabel, L.toolHelp, 50],
               ] as const
             ).map(([buyKey, amtKey, label, help, step]) => (
-              <div key={buyKey} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+              <div key={buyKey} className="space-y-3 rounded-xl border border-line bg-surface p-4">
                 <label className="flex cursor-pointer items-center gap-2 text-lg font-bold">
                   <input
                     type="checkbox"
@@ -409,9 +371,9 @@ export default function IncentivesTab() {
                         step={step}
                         value={form[amtKey]}
                         onChange={(e) => set(amtKey, e.target.value)}
-                        className="w-40 rounded-lg border border-slate-300 bg-white px-3 py-2 text-lg tabular-nums"
+                        className="w-40 rounded-lg border border-line bg-surface px-3 py-2 text-lg tabular-nums"
                       />
-                      <span className="font-semibold text-slate-500">$ CAD</span>
+                      <span className="font-semibold text-muted">$ CAD</span>
                     </div>
                     {buyKey === "buyTools" && (
                       <label className="flex cursor-pointer items-start gap-2 pt-1 text-sm">
@@ -428,42 +390,42 @@ export default function IncentivesTab() {
                 )}
               </div>
             ))}
-            <p className="text-sm text-slate-500">{L.exampleNote}</p>
+            <p className="text-sm text-muted">{L.exampleNote}</p>
           </Step>
         </form>
 
         <section ref={resultsRef} aria-live="polite" className="grid min-w-0 scroll-mt-4 gap-5 lg:sticky lg:top-4">
-          <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{L.kicker}</p>
-            <p className="text-4xl font-bold leading-none tabular-nums text-emerald-700">{headline}</p>
-            <p className="text-sm text-slate-700">{subline}</p>
-            <div className="relative h-3.5 overflow-hidden rounded-full bg-slate-200" aria-hidden="true">
+          <div className="grid gap-2 rounded-xl border border-line bg-surface p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">{L.kicker}</p>
+            <p className="text-4xl font-bold leading-none tabular-nums text-accent">{headline}</p>
+            <p className="text-sm text-ink-2">{subline}</p>
+            <div className="relative h-3.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
               <div
                 className="absolute inset-y-0 left-0 transition-[width] duration-300"
-                style={{ width: `${highPct}%`, background: "repeating-linear-gradient(135deg,#9CC5A5 0 6px,transparent 6px 10px)" }}
+                style={{ width: `${highPct}%`, background: "repeating-linear-gradient(135deg,var(--hatch) 0 6px,transparent 6px 10px)" }}
               />
-              <div className="absolute inset-y-0 left-0 bg-emerald-700 transition-[width] duration-300" style={{ width: `${lowPct}%` }} />
+              <div className="absolute inset-y-0 left-0 bg-emerald-700 transition-[width] dark:bg-emerald-500 duration-300" style={{ width: `${lowPct}%` }} />
             </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
               <span className="flex items-center gap-1.5">
-                <i className="inline-block h-3 w-3 rounded-sm bg-emerald-700" />
+                <i className="inline-block h-3 w-3 rounded-sm bg-emerald-700 dark:bg-emerald-500" />
                 {L.legendLow}
               </span>
               <span className="flex items-center gap-1.5">
                 <i
-                  className="inline-block h-3 w-3 rounded-sm border border-[#9CC5A5]"
-                  style={{ background: "repeating-linear-gradient(135deg,#9CC5A5 0 3px,transparent 3px 5px)" }}
+                  className="inline-block h-3 w-3 rounded-sm border border-[var(--hatch)]"
+                  style={{ background: "repeating-linear-gradient(135deg,var(--hatch) 0 3px,transparent 3px 5px)" }}
                 />
                 {L.legendHigh}
               </span>
             </div>
-            <p className="text-sm text-slate-500">{L.rangeNote}</p>
+            <p className="text-sm text-muted">{L.rangeNote}</p>
           </div>
 
           {result.items.length > 0 && (
             <div className="grid gap-2">
               <h2 className="text-lg font-bold">{L.breakdown}</h2>
-              <div className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
                 {result.items.map((item) => (
                   <div key={item.t} className="grid gap-1.5 px-4 py-3.5">
                     <div className="flex items-start justify-between gap-3">
@@ -475,7 +437,7 @@ export default function IncentivesTab() {
                     <div>
                       <TagPill tag={item.tag} label={L.tag[item.tag]} />
                     </div>
-                    <p className="text-sm text-slate-500">{item.d}</p>
+                    <p className="text-sm text-muted">{item.d}</p>
                     <Links links={item.links} />
                   </div>
                 ))}
@@ -489,7 +451,7 @@ export default function IncentivesTab() {
               {result.cards.map((card) => (
                 <article
                   key={card.t}
-                  className={`grid gap-1.5 rounded-xl px-4 py-3.5 ${card.info ? "bg-emerald-50" : "border border-slate-200 bg-white"}`}
+                  className={`grid gap-1.5 rounded-xl px-4 py-3.5 ${card.info ? "bg-accent-soft" : "border border-line bg-surface"}`}
                 >
                   <h3 className="text-sm font-semibold leading-snug">{card.t}</h3>
                   <div>
@@ -511,8 +473,8 @@ export default function IncentivesTab() {
               {L.copy}
             </button>
             {copyStatus && (
-              <span role="status" className="text-sm text-slate-500">
-                {copyStatus}
+              <span role="status" className="text-sm text-muted">
+                {L[copyStatus]}
               </span>
             )}
           </div>
@@ -520,14 +482,14 @@ export default function IncentivesTab() {
             <textarea
               readOnly
               value={fallbackText}
-              aria-label="Summary"
+              aria-label={lang === "fr" ? "Résumé" : "Summary"}
               onFocus={(e) => e.currentTarget.select()}
               autoFocus
-              className="min-h-36 w-full rounded-lg border border-slate-300 bg-white p-3 text-sm"
+              className="min-h-36 w-full rounded-lg border border-line bg-surface p-3 text-sm"
             />
           )}
 
-          <div className="grid gap-2 text-xs text-slate-500">
+          <div className="grid gap-2 text-xs text-muted">
             <p>{L.timing}</p>
             <p>{L.watch}</p>
             <p>{L.disclaimer}</p>
@@ -537,17 +499,17 @@ export default function IncentivesTab() {
 
       {/* Sticky savings bar on phones */}
       <div
-        className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 pt-2.5 shadow-[0_-6px_20px_rgba(23,35,27,0.1)] lg:hidden"
+        className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-line bg-surface px-4 pt-2.5 shadow-[0_-6px_20px_rgba(23,35,27,0.1)] lg:hidden"
         style={{ paddingBottom: "calc(0.625rem + env(safe-area-inset-bottom, 0px))" }}
       >
         <div>
-          <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500">{L.bar_label}</span>
-          <span className="text-xl font-bold tabular-nums text-emerald-700">{headline}</span>
+          <span className="block text-[11px] font-semibold uppercase tracking-wider text-muted">{L.bar_label}</span>
+          <span className="text-xl font-bold tabular-nums text-accent">{headline}</span>
         </div>
         <button
           type="button"
           onClick={() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-          className="whitespace-nowrap text-sm font-semibold text-emerald-700 underline underline-offset-2"
+          className="whitespace-nowrap text-sm font-semibold text-accent underline underline-offset-2"
         >
           {L.bar_btn}
         </button>

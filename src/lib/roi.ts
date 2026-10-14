@@ -175,31 +175,54 @@ export function computeRoi(input: RoiInputs): RoiResult {
   };
 }
 
-/** "34 394 $": fr-CA grouping with the $ after the number, no decimals. */
-export function fmtMoney(n: number): string {
-  return `${n.toLocaleString("fr-CA", { maximumFractionDigits: 0 })} $`;
+export type RoiLang = "fr" | "en";
+
+const LOCALE: Record<RoiLang, string> = { fr: "fr-CA", en: "en-CA" };
+
+/** "34 394 $" in French, "$34,394" in English. No decimals. French is the default. */
+export function fmtMoney(n: number, lang: RoiLang = "fr"): string {
+  return money(n, lang, 0);
 }
 
-/** "61,06 $": two decimals, used for cost per mowing hour. */
-export function fmtMoney2(n: number): string {
-  return `${n.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`;
+/** "61,06 $" / "$61.06": two decimals, used for cost per mowing hour. */
+export function fmtMoney2(n: number, lang: RoiLang = "fr"): string {
+  return money(n, lang, 2);
 }
 
-export function fmtNumber(n: number): string {
-  return Math.round(n).toLocaleString("fr-CA");
+function money(n: number, lang: RoiLang, digits: number): string {
+  if (lang === "en") {
+    return n.toLocaleString("en-CA", {
+      style: "currency",
+      currency: "CAD",
+      currencyDisplay: "narrowSymbol",
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+  }
+  return `${n.toLocaleString("fr-CA", { minimumFractionDigits: digits, maximumFractionDigits: digits })} $`;
 }
 
-/** "1 an 4 mois", "2 ans", "7 mois", or "n/d" when it never pays back. */
-export function formatPayback(months: number): string {
-  if (!Number.isFinite(months)) return "n/d";
+export function fmtNumber(n: number, lang: RoiLang = "fr"): string {
+  return Math.round(n).toLocaleString(LOCALE[lang]);
+}
+
+/**
+ * "1 an 4 mois", "2 ans", "7 mois", or "n/d" when it never pays back.
+ * English: "1 year 4 months", "2 years", "7 months", "n/a".
+ */
+export function formatPayback(months: number, lang: RoiLang = "fr"): string {
+  if (!Number.isFinite(months)) return lang === "en" ? "n/a" : "n/d";
   const totalMonths = Math.round(months);
   const y = Math.floor(totalMonths / 12);
   const m = totalMonths % 12;
-  if (y === 0) return `${m} mois`;
-  const yearsText = `${y} an${y > 1 ? "s" : ""}`;
-  return m === 0 ? yearsText : `${yearsText} ${m} mois`;
+  const monthsText = lang === "en" ? `${m} month${m === 1 ? "" : "s"}` : `${m} mois`;
+  if (y === 0) return monthsText;
+  const yearsText = lang === "en" ? `${y} year${y > 1 ? "s" : ""}` : `${y} an${y > 1 ? "s" : ""}`;
+  return m === 0 ? yearsText : `${yearsText} ${monthsText}`;
 }
 
-export function formatRoi(roiPct: number | null): string {
-  return roiPct === null ? "n/d" : `${roiPct.toFixed(0)} %`;
+/** "268 %" in French, "268%" in English. */
+export function formatRoi(roiPct: number | null, lang: RoiLang = "fr"): string {
+  if (roiPct === null) return lang === "en" ? "n/a" : "n/d";
+  return lang === "en" ? `${roiPct.toFixed(0)}%` : `${roiPct.toFixed(0)} %`;
 }

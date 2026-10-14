@@ -4,27 +4,34 @@ Next.js 16 App Router + React 19 + TypeScript + Tailwind. Measures golf course
 turf acreage from OpenStreetMap for robotic mower quoting, plus an
 "Incentives" tab that estimates grant/tax savings on robotic mowers and battery
 tools (Quebec, Ontario, federal) and a "ROI Voyager" tab comparing a Kress
-Voyager with a zero-turn crew. No API keys, no backend — every request goes
-straight from the browser to public APIs.
+Voyager with a zero-turn crew. Every tab is in English (default) and Quebec
+French, with light and dark themes. No API keys, no backend — every request goes
+straight from the browser to public APIs (built-in `fetch`, no HTTP library).
 
 ## Layout
 
 ```
-src/app/          layout.tsx (metadata), page.tsx, globals.css
+src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
+                  globals.css (theme color variables)
 src/components/
-  AppTabs.tsx                tab bar (Acreage | Incentives | ROI Voyager); tab in the URL hash
+  AppTabs.tsx                tab bar (Acreage | Incentives | ROI Voyager) + FR/EN and
+                             light/dark buttons; tab in the URL hash
   GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)
   MeasurePanel.tsx           results panel + legend
   SearchBox.tsx              Photon geocoder autocomplete
-  IncentivesTab.tsx          bilingual FR/EN incentive checker UI (client-only)
-  RoiTab.tsx                 Voyager ROI calculator UI, Quebec French, printable
+  IncentivesTab.tsx          incentive checker UI (client-only)
+  RoiTab.tsx                 Voyager ROI calculator UI, printable
 src/lib/
   overpass.ts   builds the Overpass QL query, fails over across 3 mirrors
   area.ts       OSM → GeoJSON → categorize → clip → acres  (the core logic)
   types.ts      BBox, CourseMeasurement
   incentives.ts program rules, FR/EN copy and savings math (pure, tested)
   roi.ts        Voyager ROI formulas and formatting (pure, tested)
+  roi-copy.ts   ROI tab copy, FR (handoff original) and EN
+  i18n.ts       EN/FR copy for the tab bar, Acreage tab, search, error page
+  preferences.ts       useLang / useTheme / setLang / setTheme (client)
+  preferences-boot.ts  storage keys + inline script that applies them pre-paint
 src/types/      ambient module declarations for untyped deps
 ```
 
@@ -48,10 +55,20 @@ src/types/      ambient module declarations for untyped deps
   end of the range.
 - **The ROI calculator is a finished, checked port.** Keep its formulas,
   defaults, the Hydro-Québec Tarif G rate (`HQ_RATE`, update each April 1) and
-  its French labels/footnotes exactly as they are; `roi.test.ts` holds the
+  its French labels/footnotes exactly as they are (`roi-copy.ts`; the English is
+  a translation of them, and the formatters default to French); `roi.test.ts` holds the
   handoff's acceptance values. Equipment is counted once in payback/ROI, and
   there is deliberately no "Levier 2" / redeployment profit (it double-counted
   the same worker).
+- **Language and theme are app-wide.** Read them with `useLang()` /
+  `useTheme()` from `src/lib/preferences.ts`; never keep per-tab copies. English
+  is the default; the server always renders English/light and the boot script in
+  `preferences-boot.ts` applies a saved dark theme before paint. Any new
+  user-facing text needs both languages (incentives.ts, roi-copy.ts or i18n.ts).
+- **Use the theme color tokens, not raw colors.** `bg-surface`, `text-ink`,
+  `text-muted`, `border-line`, `bg-accent-soft`, … (and `roi-*` for the ROI tab)
+  are CSS variables in `globals.css` that swap in dark mode, so one class covers
+  both themes. Dark values sit under `@media screen`, so printing stays light.
 - **React 19 rules apply**: no reading/writing refs during render and no
   synchronous setState in effect bodies (the lint config enforces both).
 

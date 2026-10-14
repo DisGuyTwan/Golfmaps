@@ -2,9 +2,10 @@
 
 import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import axios from "axios";
 import type * as L from "leaflet";
-import { fetchFairways } from "@/lib/overpass";
+import { UI, type MeasureErrorKind } from "@/lib/i18n";
+import { OverpassHttpError, fetchFairways } from "@/lib/overpass";
+import { useLang } from "@/lib/preferences";
 import { processOverpassData } from "@/lib/area";
 import type { BBox, CourseMeasurement } from "@/lib/types";
 import MeasurePanel from "./MeasurePanel";
@@ -12,19 +13,37 @@ import SearchBox, { type PlaceResult } from "./SearchBox";
 
 // Leaflet touches `window` at import time, so the map component must never run
 // on the server. Dynamically importing it with `ssr: false` keeps it client-only.
-const GolfMap = dynamic(() => import("./GolfMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-full w-full items-center justify-center bg-sky-100 text-slate-500">
-      Loading map…
+function MapLoading() {
+  const lang = useLang();
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-canvas text-muted">
+      {UI[lang].loadingMap}
     </div>
-  ),
-});
+  );
+}
+
+const GolfMap = dynamic(() => import("./GolfMap"), { ssr: false, loading: () => <MapLoading /> });
+
+export interface MeasureError {
+  kind: MeasureErrorKind;
+  status?: number;
+}
+
+/** Maps a failed Overpass request to a message type (translated at render). */
+function toMeasureError(err: unknown): MeasureError {
+  if (err instanceof OverpassHttpError) {
+    if (err.status === 429 || err.status === 504) return { kind: "busy" };
+    if (err.status === 400) return { kind: "tooLarge" };
+    return { kind: "http", status: err.status };
+  }
+  return { kind: "unreachable" };
+}
 
 export default function GolfCourseCalculator() {
+  const lang = useLang();
   const [result, setResult] = useState<CourseMeasurement | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<MeasureError | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [firstCorner, setFirstCorner] = useState<[number, number] | null>(null);
   const [scanBox, setScanBox] = useState<
@@ -58,21 +77,7 @@ export default function GolfCourseCalculator() {
       const overpassJson = await fetchFairways(bbox);
       setResult(processOverpassData(overpassJson));
     } catch (err) {
-      let message =
-        "Couldn't reach the OpenStreetMap data servers. They may be busy — try again in a moment.";
-      if (axios.isAxiosError(err)) {
-        const status = err.response?.status;
-        if (status === 429 || status === 504) {
-          message =
-            "The OpenStreetMap data servers are busy right now. Please wait a moment and try again.";
-        } else if (status === 400) {
-          message =
-            "That area was too large for the free data API. Zoom in closer to the course and measure again.";
-        } else if (status) {
-          message = `The data request failed (HTTP ${status}). Please try again.`;
-        }
-      }
-      setError(message);
+      setError(toMeasureError(err));
     } finally {
       setLoading(false);
     }
@@ -158,6 +163,7 @@ export default function GolfCourseCalculator() {
   return (
     <div className="relative h-full w-full">
       <GolfMap
+        lang={lang}
         geojson={result?.geojson ?? null}
         selecting={selecting}
         firstCorner={firstCorner}
@@ -166,9 +172,10 @@ export default function GolfCourseCalculator() {
         onMapReady={handleMapReady}
       />
 
-      <SearchBox onSelect={handleSearchSelect} getBias={getSearchBias} />
+      <SearchBox onSelect={handleSearchSelect} getBias={getSearchBias} lang={lang} />
 
       <MeasurePanel
+        lang={lang}
         result={result}
         loading={loading}
         error={error}

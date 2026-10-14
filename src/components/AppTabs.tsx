@@ -2,23 +2,27 @@
 
 import { useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
+import { UI } from "@/lib/i18n";
+import { setLang, setTheme, useLang, useTheme } from "@/lib/preferences";
 import GolfCourseCalculator from "./GolfCourseCalculator";
 
-const loading = () => (
-  <div className="flex h-full items-center justify-center bg-slate-50 text-slate-500">Loading…</div>
-);
+function TabLoading() {
+  const lang = useLang();
+  return <div className="flex h-full items-center justify-center bg-canvas text-muted">{UI[lang].loading}</div>;
+}
+const loading = () => <TabLoading />;
 
-// Reads navigator/localStorage for its default language, so client-only.
+// Loaded on first open; client-only (they read the saved language on mount).
 const IncentivesTab = dynamic(() => import("./IncentivesTab"), { ssr: false, loading });
 const RoiTab = dynamic(() => import("./RoiTab"), { ssr: false, loading });
 
 type Tab = "acreage" | "incentives" | "roi";
 type OverlayTab = Exclude<Tab, "acreage">;
 
-const TABS: { id: Tab; label: string; hash: string }[] = [
-  { id: "acreage", label: "Acreage", hash: "" },
-  { id: "incentives", label: "Incentives", hash: "#incentives" },
-  { id: "roi", label: "ROI Voyager", hash: "#roi" },
+const TABS: { id: Tab; hash: string }[] = [
+  { id: "acreage", hash: "" },
+  { id: "incentives", hash: "#incentives" },
+  { id: "roi", hash: "#roi" },
 ];
 
 // The active tab lives in the URL hash so a direct link can be shared
@@ -34,9 +38,29 @@ function subscribe(onChange: () => void) {
 const getHash = () => window.location.hash;
 const getServerHash = () => "";
 
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
+}
+
 export default function AppTabs() {
+  const lang = useLang();
+  const theme = useTheme();
+  const t = UI[lang];
   const hash = useSyncExternalStore(subscribe, getHash, getServerHash);
-  const tab: Tab = TABS.find((t) => t.hash && t.hash === hash)?.id ?? "acreage";
+  const tab: Tab = TABS.find((x) => x.hash && x.hash === hash)?.id ?? "acreage";
 
   // Keep each overlay tab mounted once opened so its inputs survive tab switches.
   const [opened, setOpened] = useState<Record<OverlayTab, boolean>>({ incentives: false, roi: false });
@@ -44,7 +68,7 @@ export default function AppTabs() {
 
   const select = (next: Tab) => {
     if (next === tab) return;
-    const target = TABS.find((t) => t.id === next)!;
+    const target = TABS.find((x) => x.id === next)!;
     window.history.pushState(null, "", target.hash || `${window.location.pathname}${window.location.search}`);
     window.dispatchEvent(new HashChangeEvent("hashchange"));
   };
@@ -62,28 +86,46 @@ export default function AppTabs() {
   return (
     <main className="flex h-[100dvh] w-full flex-col overflow-hidden print:block print:h-auto print:overflow-visible">
       <nav
-        className="z-[3100] flex shrink-0 items-center border-b border-slate-200 bg-white px-1 print:hidden"
+        className="z-[3100] flex shrink-0 items-center border-b border-line bg-surface px-1 print:hidden"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <span className="shrink-0 px-2 text-sm font-bold tracking-wide text-emerald-800">Kress</span>
-        <div role="tablist" aria-label="Sections" className="flex min-w-0 items-center overflow-x-auto">
-          {TABS.map(({ id, label }) => (
+        <span className="hidden shrink-0 px-2 text-sm font-bold tracking-wide text-accent min-[360px]:inline">
+          {t.brand}
+        </span>
+        <div role="tablist" aria-label="Sections" className="flex min-w-0 flex-1 items-center overflow-x-auto">
+          {TABS.map(({ id }) => (
             <button
               key={id}
               type="button"
               role="tab"
               aria-selected={tab === id}
               onClick={() => select(id)}
-              className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-semibold transition ${
-                tab === id
-                  ? "border-emerald-700 text-emerald-800"
-                  : "border-transparent text-slate-500 hover:text-slate-700"
+              className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-2.5 py-2.5 text-sm font-semibold transition sm:px-3 ${
+                tab === id ? "border-accent text-accent" : "border-transparent text-muted hover:text-ink-2"
               }`}
             >
-              {label}
+              {t.tabs[id]}
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={() => setLang(lang === "en" ? "fr" : "en")}
+          aria-label={t.switchLang.aria}
+          title={t.switchLang.aria}
+          className="shrink-0 rounded-md px-2 py-1.5 text-xs font-bold tracking-wide text-muted transition hover:bg-surface-2 hover:text-ink"
+        >
+          {t.switchLang.label}
+        </button>
+        <button
+          type="button"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          aria-label={theme === "dark" ? t.toLight : t.toDark}
+          title={theme === "dark" ? t.toLight : t.toDark}
+          className="shrink-0 rounded-md p-2 text-muted transition hover:bg-surface-2 hover:text-ink"
+        >
+          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+        </button>
       </nav>
 
       <div className="relative min-h-0 flex-1 print:static">

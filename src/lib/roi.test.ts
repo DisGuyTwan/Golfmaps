@@ -86,3 +86,21 @@ describe("equipment is counted once in payback and ROI", () => {
     expect(run().netInvestment).toBe(60000);
   });
 });
+
+describe("English formatting", () => {
+  const r = run();
+
+  it("money uses a leading $ and comma grouping", () => {
+    expect(fmtMoney(r.annualProfit, "en")).toBe("$32,185");
+    expect(fmtMoney2(r.ztCph, "en")).toBe("$61.06");
+    expect(fmtMoney(-1234, "en")).toBe("-$1,234");
+  });
+  it("payback and ROI read naturally", () => {
+    expect(formatPayback(r.paybackMonths, "en")).toBe("1 year 4 months");
+    expect(formatPayback(25, "en")).toBe("2 years 1 month");
+    expect(formatPayback(24, "en")).toBe("2 years");
+    expect(formatPayback(Infinity, "en")).toBe("n/a");
+    expect(formatRoi(r.roiPct, "en")).toBe("268%");
+    expect(formatRoi(null, "en")).toBe("n/a");
+  });
+});

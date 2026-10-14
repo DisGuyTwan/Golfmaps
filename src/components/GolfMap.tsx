@@ -14,6 +14,7 @@ import {
 import * as L from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
 import { TURF_COLORS } from "@/lib/area";
+import { UI, type Lang } from "@/lib/i18n";
 
 import "leaflet/dist/leaflet.css";
 
@@ -41,6 +42,7 @@ function styleFeature(feature?: Feature): L.PathOptions {
 }
 
 export interface GolfMapProps {
+  lang: Lang;
   geojson: FeatureCollection | null;
   selecting: boolean;
   firstCorner: [number, number] | null;
@@ -104,6 +106,7 @@ function SelectCapture({
 }
 
 export default function GolfMap({
+  lang,
   geojson,
   selecting,
   firstCorner,
@@ -137,15 +140,16 @@ export default function GolfMap({
       zoomControl={false}
       className="h-full w-full"
     >
-      <LayersControl position="topright">
-        <LayersControl.BaseLayer checked name="Satellite">
+      {/* Leaflet reads layer names once, so a language change remounts the control. */}
+      <LayersControl key={lang} position="topright">
+        <LayersControl.BaseLayer checked name={UI[lang].layers.satellite}>
           <TileLayer
             attribution="Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             maxZoom={19}
           />
         </LayersControl.BaseLayer>
-        <LayersControl.BaseLayer name="Streets">
+        <LayersControl.BaseLayer name={UI[lang].layers.streets}>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

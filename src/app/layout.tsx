@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { PREFERENCES_BOOT_SCRIPT } from "@/lib/preferences-boot";
 import "./globals.css";
 
 const APP_NAME = "Kress";
 const description =
-  "Robotic mower quoting tools: measure a golf course's turf acreage (fairways, greens, tees and rough) and estimate grant and tax savings in Quebec and Ontario.";
+  "Robotic mower quoting tools: measure a golf course's turf acreage, estimate grant and tax savings in Quebec and Ontario, and compare a Kress Voyager with a zero-turn crew.";
 
 export const metadata: Metadata = {
   title: APP_NAME,
@@ -23,13 +24,25 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#181f1c" },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // The boot script may add `dark` / change `lang` before React hydrates.
+    <html lang="en-CA" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: PREFERENCES_BOOT_SCRIPT }} />
+      </head>
       <body className="h-full">{children}</body>
     </html>
   );

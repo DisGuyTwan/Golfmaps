@@ -9,6 +9,11 @@ fairway, green, tee and rough, net of trees, buildings and parking.
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite
 tiles, the public Overpass API, and Photon for search.
 
+Every tab is in **English (default) and French**: the FR/EN button in the tab
+bar switches the whole app. A sun/moon button switches between **light and dark
+mode** (it follows the device setting until you pick one). Both choices are
+remembered on the device. Printing always comes out light.
+
 ## How it works
 
 1. **Find the course** — type a course name or address in the search bar
@@ -50,8 +55,8 @@ A second tab estimates first-year savings on robotic mowers and battery tools
 for a customer proposal: pick the province, profile (landscaper, golf course,
 farm, municipality, institution, developer, homeowner), structure and purchase,
 and it shows a savings range, a line-by-line breakdown with status and official
-links, other useful programs, and a "Copy my summary" button. French or English,
-defaulting to the device language. Link straight to it with `/#incentives`.
+links, other useful programs, and a "Copy my summary" button. Link straight to it
+with `/#incentives`.
 
 The low end counts only rules in force; the high end adds items that need
 confirmation or approval (Class 56, the Clean Tech ITC, Prime-Vert, GMF).
@@ -60,20 +65,20 @@ tax advice.
 
 ## ROI Voyager tab
 
-A live ROI calculator (Quebec French) for client meetings: one employee on a 60"
+A live ROI calculator for client meetings: one employee on a 60"
 zero-turn versus one Kress Voyager, over a 1 to 10 year horizon. It shows the
 total cost of each option, the profit recovered per year, cost per mowing hour,
-and payback/ROI, and recalculates on every keystroke. "Imprimer / PDF" prints a
-one-page Letter summary to leave with the client. Link straight to it with
-`/#roi`. Formulas and sources are in `src/lib/roi.ts`; the Hydro-Québec rate
-needs updating each April 1.
+and payback/ROI, and recalculates on every keystroke. "Print / PDF" prints a
+one-page Letter summary, in the language on screen, to leave with the client. Link straight to it with
+`/#roi`. Formulas and sources are in `src/lib/roi.ts` (copy in
+`src/lib/roi-copy.ts`); the Hydro-Québec rate needs updating each April 1.
 
 ## Tech stack
 
-- **Next.js 14 (App Router)** + **TypeScript** + **Tailwind CSS**
+- **Next.js 16 (App Router)** + **React 19** + **TypeScript** + **Tailwind CSS**
 - **Leaflet** / **react-leaflet**, with Esri World Imagery (default) and
   OpenStreetMap street tiles selectable from the layer control
-- **axios** for the Overpass request
+- The browser's built-in `fetch` for Overpass and Photon (no HTTP library)
 - **osmtogeojson** + **@turf/area** / **@turf/intersect** / **@turf/helpers**
 
 ## Getting started
@@ -82,6 +87,9 @@ needs updating each April 1.
 npm install
 npm run dev
 ```
+
+Checks (the same ones CI runs): `npm run lint`, `npm test`, `npm run build`,
+`npm run typecheck`.
 
 Open [http://localhost:3000](http://localhost:3000).
 
