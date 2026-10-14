@@ -17,7 +17,8 @@ export type VoyagerModel = "7" | "19" | "custom";
 /** Presets applied when the model changes; "custom" keeps the current values. */
 export const VOYAGER_PRESETS: Record<"7" | "19", { voyPrice: number; voyMaint: number; batteryKwh: number }> = {
   "7": { voyPrice: 85000, voyMaint: 1000, batteryKwh: 10 },
-  "19": { voyPrice: 115000, voyMaint: 1600, batteryKwh: 30 },
+  // KR804 (60 in.): 38 kWh per Kress's spec sheet (Sept. 2026 launch).
+  "19": { voyPrice: 115000, voyMaint: 1600, batteryKwh: 38 },
 };
 
 export interface RoiInputs {
@@ -55,7 +56,8 @@ export const ROI_DEFAULTS: RoiInputs = {
   voyMowHrs: 6.5,
   ztPrice: 25000,
   ztLph: 5.3,
-  gasPrice: 1.8,
+  /** Régie de l'énergie, regular gas, early October 2026 (≈ 199 to 202 ¢/L). */
+  gasPrice: 2.0,
   ztMaint: 3000,
   years: 5,
 };

@@ -9,8 +9,8 @@ fairway, green, tee and rough, net of trees, buildings and parking.
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite
 tiles, the public Overpass API, and Photon for search.
 
-Every tab is in **English (default) and French**: the FR/EN button in the tab
-bar switches the whole app. A sun/moon button switches between **light and dark
+Every tab is in **English (default) and French**: the EN | FR switch at the top
+right switches the whole app, including printouts and the 404 page. A sun/moon button switches between **light and dark
 mode** (it follows the device setting until you pick one). Both choices are
 remembered on the device. Printing always comes out light.
 
@@ -60,7 +60,9 @@ with `/#incentives`.
 
 The low end counts only rules in force; the high end adds items that need
 confirmation or approval (Class 56, the Clean Tech ITC, Prime-Vert, GMF).
-Research as of October 9, 2026, in `src/lib/incentives.ts`. Estimate only, not
+Research as of October 9, 2026 (federal write-offs re-checked October 14,
+2026, including the proposed Productivity Mega Deduction), in
+`src/lib/incentives.ts`. Estimate only, not
 tax advice.
 
 ## ROI Voyager tab
@@ -71,7 +73,9 @@ total cost of each option, the profit recovered per year, cost per mowing hour,
 and payback/ROI, and recalculates on every keystroke. "Print / PDF" prints a
 one-page Letter summary, in the language on screen, to leave with the client. Link straight to it with
 `/#roi`. Formulas and sources are in `src/lib/roi.ts` (copy in
-`src/lib/roi-copy.ts`); the Hydro-Québec rate needs updating each April 1.
+`src/lib/roi-copy.ts`). Defaults are dated market data (gas ≈ $2.00/L, early
+October 2026; Hydro-Québec Rate G, April 1, 2026; KR800 10 kWh, KR804 38 kWh)
+and need refreshing over time.
 
 ## Tech stack
 

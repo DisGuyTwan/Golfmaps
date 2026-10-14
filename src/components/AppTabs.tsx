@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
-import { UI } from "@/lib/i18n";
+import { UI, type Lang } from "@/lib/i18n";
 import { setLang, setTheme, useLang, useTheme } from "@/lib/preferences";
 import GolfCourseCalculator from "./GolfCourseCalculator";
 
@@ -18,6 +18,12 @@ const RoiTab = dynamic(() => import("./RoiTab"), { ssr: false, loading });
 
 type Tab = "acreage" | "incentives" | "roi";
 type OverlayTab = Exclude<Tab, "acreage">;
+
+// Each language's name in itself, as screen readers and tooltips announce it.
+const LANGS: { code: Lang; name: string }[] = [
+  { code: "en", name: "English" },
+  { code: "fr", name: "Français" },
+];
 
 const TABS: { id: Tab; hash: string }[] = [
   { id: "acreage", hash: "" },
@@ -66,6 +72,14 @@ export default function AppTabs() {
   const [opened, setOpened] = useState<Record<OverlayTab, boolean>>({ incentives: false, roi: false });
   if (tab !== "acreage" && !opened[tab]) setOpened({ ...opened, [tab]: true });
 
+  // On narrow phones the tab row scrolls; keep the active tab in view.
+  const tablistRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    tablistRef.current
+      ?.querySelector<HTMLElement>('[aria-selected="true"]')
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [tab, lang]);
+
   const select = (next: Tab) => {
     if (next === tab) return;
     const target = TABS.find((x) => x.id === next)!;
@@ -89,10 +103,10 @@ export default function AppTabs() {
         className="z-[3100] flex shrink-0 items-center border-b border-line bg-surface px-1 print:hidden"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <span className="hidden shrink-0 px-2 text-sm font-bold tracking-wide text-accent min-[360px]:inline">
+        <span className="hidden shrink-0 px-2 text-sm font-bold tracking-wide text-accent min-[420px]:inline">
           {t.brand}
         </span>
-        <div role="tablist" aria-label="Sections" className="flex min-w-0 flex-1 items-center overflow-x-auto">
+        <div ref={tablistRef} role="tablist" aria-label={t.sections} className="flex min-w-0 flex-1 items-center overflow-x-auto">
           {TABS.map(({ id }) => (
             <button
               key={id}
@@ -108,15 +122,29 @@ export default function AppTabs() {
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          onClick={() => setLang(lang === "en" ? "fr" : "en")}
-          aria-label={t.switchLang.aria}
-          title={t.switchLang.aria}
-          className="shrink-0 rounded-md px-2 py-1.5 text-xs font-bold tracking-wide text-muted transition hover:bg-surface-2 hover:text-ink"
+        {/* Both languages always visible, so it reads as a switch, not a link. */}
+        <div
+          role="group"
+          aria-label={t.langGroup}
+          className="mx-1 flex shrink-0 rounded-full border border-line bg-surface-2 p-0.5"
         >
-          {t.switchLang.label}
-        </button>
+          {LANGS.map(({ code, name }) => (
+            <button
+              key={code}
+              type="button"
+              lang={code === "fr" ? "fr-CA" : "en-CA"}
+              aria-pressed={lang === code}
+              aria-label={name}
+              title={name}
+              onClick={() => setLang(code)}
+              className={`min-h-8 rounded-full px-2.5 text-xs font-bold tracking-wide transition ${
+                lang === code ? "bg-accent text-surface shadow-sm" : "text-muted hover:text-ink"
+              }`}
+            >
+              {code.toUpperCase()}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}

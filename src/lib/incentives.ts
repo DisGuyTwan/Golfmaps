@@ -4,7 +4,8 @@
  * Ported from the dealer handoff checker. Pure: inputs + language in, savings
  * range and program list out, so it can be tested without a browser.
  *
- * Research as of Oct 9, 2026. Program terms change often: items tagged "warn"
+ * Research as of Oct 9, 2026; federal write-off rules re-checked Oct 14, 2026
+ * (Bill C-15 in force; Productivity Mega Deduction proposed Sept 15, 2026). Program terms change often: items tagged "warn"
  * or "apply" need confirmation, and only "ok" items count toward the low end.
  */
 
@@ -102,6 +103,7 @@ export interface IncentiveResult {
 
 const LINKS = {
   itc: "https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/corporations/business-tax-credits/clean-economy-itc/clean-technology-itc.html",
+  pmd: "https://www.canada.ca/en/department-finance/news/2026/09/government-of-canada-introduces-new-productivity-mega-deduction-to-boost-canadas-advantage-as-the-most-competitive-g7-country-for-new-business-inve.html",
   class56: "https://www.canada.ca/en/department-finance/news/2020/12/expanding-tax-support-for-business-investment-in-zero-emission-vehicles.html",
   cca: "https://www.cra-arc.gc.ca/tx/bsnss/tpcs/slprtnr/rprtng/cptl/clsss-eng.html",
   primevert: "https://www.quebec.ca/agriculture-environnement-et-ressources-naturelles/agriculture/aide-financiere/prime-vert/volet1",
@@ -123,7 +125,7 @@ const LINKS = {
 };
 
 const fr = {
-  eyebrow: "Québec · Ontario · Fédéral · à jour au 9 octobre 2026",
+  eyebrow: "Québec · Ontario · Fédéral · à jour au 14 octobre 2026",
   h1: "Combien pouvez-vous récupérer sur vos tondeuses robots et outils à batterie?",
   lede: "Choisissez votre profil et votre achat. L’outil estime vos économies de la première année et liste les programmes, avec les liens officiels.",
   s1: "Où êtes-vous?",
@@ -186,7 +188,7 @@ const fr = {
   bar_label: "Économies 1re année",
   bar_btn: "Voir le détail",
   timing: "L’amortissement accéléré réduit l’impôt dès la 1re année. Sur la durée de vie de l’équipement, la déduction totale reste la même. Le crédit d’impôt et les subventions sont des gains nets.",
-  watch: "À surveiller : budget fédéral 2026 cet automne, nouvelle version de Prime-Vert en vigueur depuis le 13 octobre 2026 (taux à revalider), nouveau gouvernement du Québec élu le 5 octobre 2026, réouverture des remises municipales au début de 2027.",
+  watch: "À surveiller : adoption de la Mégadéduction à la productivité (proposée le 15 septembre 2026, pas encore adoptée) et décision de Québec de l’appliquer ou non, nouvelle version de Prime-Vert en vigueur depuis le 13 octobre 2026 (taux à revalider), nouveau gouvernement du Québec élu le 5 octobre 2026, réouverture des remises municipales au début de 2027.",
   disclaimer: "Estimation à titre informatif seulement, pas un avis fiscal ou juridique. Les programmes changent souvent et les fonds s’épuisent. Confirmez avec votre comptable ou le responsable du programme avant d’acheter.",
   tag: { ok: "En vigueur", warn: "À confirmer", apply: "Sur demande", off: "Fermé", info: "Info" } as Record<Tag, string>,
   linkOfficial: "Page officielle",
@@ -196,13 +198,14 @@ const fr = {
   linkCity: "Site de la ville",
   linkPdf: "Document de la ville",
   linkBudget: "Résumé du budget 2025-2026",
+  linkPmd: "Mégadéduction (Finances Canada)",
   i_itc: "Crédit d’impôt pour technologies propres (30 %, remboursable)",
-  d_itc: "Tondeuses robots, si reconnues comme véhicules hors route à zéro émission. Sociétés imposables seulement. 20 % si les exigences de main-d’œuvre ne sont pas respectées.",
+  d_itc: "Tondeuses robots, si reconnues comme véhicules hors route à zéro émission (catégorie 56). Les exemples officiels visent surtout l’équipement lourd des mines et de la construction : l’admissibilité d’un robot de tonte n’est pas confirmée. Sociétés imposables seulement.",
   i_ccaR: "Radiation accélérée des tondeuses robots",
-  d_ccaR: "Bas : catégorie 8 avec incitatif accéléré, 30 % la 1re année. Haut : catégorie 56, 100 % la 1re année, si le robot est reconnu comme équipement automoteur entièrement électrique.",
+  d_ccaR: "Bas : catégorie 8 avec incitatif accéléré, 30 % la 1re année (en vigueur). Haut : 100 % la 1re année avec la Mégadéduction à la productivité proposée pour les achats à compter du 15 septembre 2026 (pas encore adoptée), ou avec la catégorie 56 si le robot est reconnu comme équipement automoteur entièrement électrique.",
   i_ccaT: "Radiation des outils à batterie",
   d_ccaT12: "Outils de moins de 500 $ chacun : catégorie 12, 100 % la 1re année.",
-  d_ccaT8: "Outils de 500 $ et plus : catégorie 8 avec incitatif accéléré, 30 % la 1re année.",
+  d_ccaT8: "Outils de 500 $ et plus : catégorie 8 avec incitatif accéléré, 30 % la 1re année (en vigueur). Haut : 100 % avec la Mégadéduction à la productivité proposée (achats à compter du 15 septembre 2026, pas encore adoptée).",
   i_pv: "Prime-Vert (MAPAQ) : équipement de désherbage",
   d_pv: (rate: number) =>
     `Jusqu’à ${rate} % de l’achat, max. 40 000 $ par ferme. La tonte robotisée sous les rangs doit être justifiée comme réduction d’herbicides. Obtenez l’accord de votre direction régionale du MAPAQ avant d’acheter.`,
@@ -235,7 +238,7 @@ const fr = {
   c_csbfp: "Programme de financement des petites entreprises du Canada",
   p_csbfp: "Prêt bancaire garanti par le fédéral : jusqu’à 1,15 M$, dont 500 000 $ max. pour l’équipement. Revenus de 10 M$ ou moins. Fermes exclues.",
   c_qcHarm: "Impôt du Québec",
-  p_qcHarm: "Québec a annoncé qu’il s’harmonise aux radiations accélérées fédérales. Faites confirmer par votre comptable avant de produire votre déclaration.",
+  p_qcHarm: "Québec a prolongé ses radiations accélérées en s’harmonisant en partie au fédéral. Il n’a rien annoncé pour la Mégadéduction à la productivité en date du 14 octobre 2026. Faites confirmer par votre comptable avant de produire votre déclaration.",
   c_noItc: "Crédit de 30 % : sociétés seulement",
   p_noItc: "Un travailleur autonome ou une société de personnes ne peut pas le demander, mais profite quand même de la radiation accélérée.",
   c_exempt: "Organisme exempt d’impôt",
@@ -257,13 +260,13 @@ const fr = {
   sumTools: "outils",
   sumSave: "Économies estimées la 1re année",
   sumDetail: "Détail",
-  sumFoot: "Estimation seulement, à confirmer avec votre comptable. Recherche au 9 octobre 2026.",
+  sumFoot: "Estimation seulement, à confirmer avec votre comptable. Recherche au 14 octobre 2026.",
 };
 
 export type IncentiveStrings = typeof fr;
 
 const en: IncentiveStrings = {
-  eyebrow: "Quebec · Ontario · Federal · updated October 9, 2026",
+  eyebrow: "Quebec · Ontario · Federal · updated October 14, 2026",
   h1: "How much can you recover on robotic mowers and battery tools?",
   lede: "Pick your profile and your purchase. The tool estimates your first-year savings and lists the programs, with official links.",
   s1: "Where are you?",
@@ -326,7 +329,7 @@ const en: IncentiveStrings = {
   bar_label: "First-year savings",
   bar_btn: "See details",
   timing: "Accelerated write-offs cut tax in year one. Over the life of the equipment, the total deduction stays the same. The tax credit and grants are net gains.",
-  watch: "Watch for: federal Budget 2026 this fall, the new Prime-Vert version in force since October 13, 2026 (rates to re-verify), Quebec’s new government after the October 5, 2026 election, and municipal rebates reopening in early 2027.",
+  watch: "Watch for: passage of the Productivity Mega Deduction (proposed September 15, 2026, not yet law) and whether Quebec matches it, the new Prime-Vert version in force since October 13, 2026 (rates to re-verify), Quebec’s new government after the October 5, 2026 election, and municipal rebates reopening in early 2027.",
   disclaimer: "Estimate for information only, not tax or legal advice. Programs change often and funds run out. Confirm with your accountant or the program officer before you buy.",
   tag: { ok: "In force", warn: "To confirm", apply: "Application", off: "Closed", info: "Info" },
   linkOfficial: "Official page",
@@ -336,13 +339,14 @@ const en: IncentiveStrings = {
   linkCity: "City website",
   linkPdf: "City document",
   linkBudget: "2025-26 budget summary",
+  linkPmd: "Mega Deduction (Finance Canada)",
   i_itc: "Clean Technology Investment Tax Credit (30%, refundable)",
-  d_itc: "Robotic mowers, if accepted as non-road zero-emission vehicles. Taxable corporations only. 20% if labour requirements are not met.",
+  d_itc: "Robotic mowers, if accepted as non-road zero-emission vehicles (Class 56). Official examples are mostly heavy mining and construction equipment, so a robotic mower’s eligibility is not confirmed. Taxable corporations only.",
   i_ccaR: "Accelerated write-off on robotic mowers",
-  d_ccaR: "Low: Class 8 with the accelerated incentive, 30% in year one. High: Class 56, 100% in year one, if the robot is accepted as self-propelled, fully electric equipment.",
+  d_ccaR: "Low: Class 8 with the accelerated incentive, 30% in year one (in force). High: 100% in year one under the Productivity Mega Deduction proposed for purchases from September 15, 2026 (not yet law), or under Class 56 if the robot is accepted as self-propelled, fully electric equipment.",
   i_ccaT: "Write-off on battery tools",
   d_ccaT12: "Tools under $500 each: Class 12, 100% in year one.",
-  d_ccaT8: "Tools $500 and over: Class 8 with the accelerated incentive, 30% in year one.",
+  d_ccaT8: "Tools $500 and over: Class 8 with the accelerated incentive, 30% in year one (in force). High: 100% under the proposed Productivity Mega Deduction (purchases from September 15, 2026, not yet law).",
   i_pv: "Prime-Vert (MAPAQ): weeding equipment",
   d_pv: (rate) =>
     `Up to ${rate}% of the purchase, max. $40,000 per farm. Robotic under-row mowing must be justified as herbicide reduction. Get your MAPAQ regional office to agree before you buy.`,
@@ -375,7 +379,7 @@ const en: IncentiveStrings = {
   c_csbfp: "Canada Small Business Financing Program",
   p_csbfp: "Federally guaranteed bank loan: up to $1.15M, with max. $500,000 for equipment. Revenue of $10M or less. Farms excluded.",
   c_qcHarm: "Quebec income tax",
-  p_qcHarm: "Quebec announced it will match the federal accelerated write-offs. Have your accountant confirm before you file.",
+  p_qcHarm: "Quebec extended its accelerated write-offs, partly matching the federal rules. As of October 14, 2026 it had announced nothing for the Productivity Mega Deduction. Have your accountant confirm before you file.",
   c_noItc: "30% credit: corporations only",
   p_noItc: "A sole proprietor or partnership can’t claim it, but still gets the accelerated write-off.",
   c_exempt: "Tax-exempt organization",
@@ -397,7 +401,7 @@ const en: IncentiveStrings = {
   sumTools: "tools",
   sumSave: "Estimated first-year savings",
   sumDetail: "Breakdown",
-  sumFoot: "Estimate only, to confirm with your accountant. Research as of October 9, 2026.",
+  sumFoot: "Estimate only, to confirm with your accountant. Research as of October 14, 2026.",
 };
 
 export const STRINGS: Record<Lang, IncentiveStrings> = { fr, en };
@@ -519,12 +523,16 @@ export function computeIncentives(s: IncentiveInputs, lang: Lang): IncentiveResu
         tag: "warn",
         low: 0.3 * R * s.tax,
         high: (baseHigh - itc) * s.tax,
-        links: [[L.linkClass56, LINKS.class56], [L.linkClasses, LINKS.cca]],
+        links: [[L.linkPmd, LINKS.pmd], [L.linkClass56, LINKS.class56], [L.linkClasses, LINKS.cca]],
       });
     }
     if (Tl > 0) {
-      const cca = s.under500 ? Tl : 0.3 * Tl;
-      add({ t: L.i_ccaT, d: s.under500 ? L.d_ccaT12 : L.d_ccaT8, tag: "ok", low: cca * s.tax, high: cca * s.tax, links: [[L.linkClasses, LINKS.cca]] });
+      if (s.under500) {
+        add({ t: L.i_ccaT, d: L.d_ccaT12, tag: "ok", low: Tl * s.tax, high: Tl * s.tax, links: [[L.linkClasses, LINKS.cca]] });
+      } else {
+        // 30% is law; 100% depends on the proposed Mega Deduction passing.
+        add({ t: L.i_ccaT, d: L.d_ccaT8, tag: "warn", low: 0.3 * Tl * s.tax, high: Tl * s.tax, links: [[L.linkPmd, LINKS.pmd], [L.linkClasses, LINKS.cca]] });
+      }
     }
   }
 

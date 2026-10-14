@@ -12,7 +12,8 @@ export type MeasureErrorKind = "unreachable" | "busy" | "tooLarge" | "http";
 const en = {
   brand: "Kress",
   tabs: { acreage: "Acreage", incentives: "Incentives", roi: "ROI Voyager" },
-  switchLang: { label: "FR", aria: "Passer en français" },
+  langGroup: "Language / Langue",
+  sections: "Sections",
   toDark: "Switch to dark mode",
   toLight: "Switch to light mode",
   loading: "Loading…",
@@ -56,6 +57,9 @@ const en = {
   errorBody:
     "This is usually a public data service, like the Overpass API, being unavailable. Retrying often works; if it doesn’t, wait a minute and try again.",
   tryAgain: "Try again",
+  notFoundTitle: "Page not found.",
+  notFoundBody: "This address doesn’t exist. The tools are all on the home page.",
+  backHome: "Back to Kress",
 };
 
 export type UiStrings = typeof en;
@@ -63,7 +67,8 @@ export type UiStrings = typeof en;
 const fr: UiStrings = {
   brand: "Kress",
   tabs: { acreage: "Superficie", incentives: "Aides", roi: "ROI Voyager" },
-  switchLang: { label: "EN", aria: "Switch to English" },
+  langGroup: "Langue / Language",
+  sections: "Sections",
   toDark: "Passer au mode sombre",
   toLight: "Passer au mode clair",
   loading: "Chargement…",
@@ -109,6 +114,9 @@ const fr: UiStrings = {
   errorBody:
     "C’est habituellement un service public de données, comme l’API Overpass, qui est indisponible. Réessayer fonctionne souvent; sinon, attendez une minute et réessayez.",
   tryAgain: "Réessayer",
+  notFoundTitle: "Page introuvable.",
+  notFoundBody: "Cette adresse n’existe pas. Tous les outils sont sur la page d’accueil.",
+  backHome: "Retour à Kress",
 };
 
 export const UI: Record<Lang, UiStrings> = { en, fr };

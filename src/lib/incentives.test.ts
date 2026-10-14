@@ -87,7 +87,10 @@ describe("computeIncentives: profiles", () => {
     expect(r.low).toBeCloseTo(3000 * 0.122, 2);
     expect(r.high).toBeCloseTo(r.low, 2);
     const over = run({ buyRobot: false, buyTools: true, toolAmt: 3000, under500: false });
-    expect(over.high).toBeCloseTo(0.3 * 3000 * 0.122, 2);
+    // $500+: 30% Class 8 in force; 100% only if the proposed Mega Deduction passes.
+    expect(over.low).toBeCloseTo(0.3 * 3000 * 0.122, 2);
+    expect(over.high).toBeCloseTo(3000 * 0.122, 2);
+    expect(over.items[0].tag).toBe("warn");
   });
 
   it("Saint-Bruno homeowners: $100 counts as in force only on tools", () => {
@@ -115,7 +118,7 @@ describe("summaryText", () => {
     const fr = summaryText(s, computeIncentives(s, "fr"), "fr");
     expect(fr).toContain("Terrain de golf, Québec, Société par actions (inc.)");
     expect(fr).toContain("[À confirmer]");
-    expect(fr.endsWith("Recherche au 9 octobre 2026.")).toBe(true);
+    expect(fr.endsWith("Recherche au 14 octobre 2026.")).toBe(true);
     expect(fr).not.toContain("—");
   });
 });

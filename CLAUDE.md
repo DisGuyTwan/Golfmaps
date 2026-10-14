@@ -48,16 +48,21 @@ src/types/      ambient module declarations for untyped deps
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in
-  `src/lib/incentives.ts` reflect research as of Oct 9, 2026; the "as of" date
+  `src/lib/incentives.ts` reflect research as of Oct 9, 2026, with the federal
+  write-off rules re-checked Oct 14, 2026 (the Productivity Mega Deduction is
+  proposed, not law, so it only raises the high end); the "as of" date
   appears in the copy (`eyebrow`, `sumFoot`). Update both when the data changes.
   Customer-facing copy uses Quebec French and no em dashes. Keep the
   "not tax advice" disclaimer; only "ok" (in force) items count toward the low
   end of the range.
-- **The ROI calculator is a finished, checked port.** Keep its formulas,
-  defaults, the Hydro-Québec Tarif G rate (`HQ_RATE`, update each April 1) and
-  its French labels/footnotes exactly as they are (`roi-copy.ts`; the English is
-  a translation of them, and the formatters default to French); `roi.test.ts` holds the
-  handoff's acceptance values. Equipment is counted once in payback/ROI, and
+- **The ROI calculator is a finished, checked port.** Keep its formulas and
+  French wording (`roi-copy.ts`; the English is a translation, and the
+  formatters default to French). Its defaults are dated market data and need
+  refreshing: gas price (Oct 2026), the Hydro-Québec Tarif G rate (`HQ_RATE`,
+  update each April 1), payroll rates in the footnote (each January), Voyager
+  prices/batteries. When a default changes, update the footnote source and the
+  "defaults" values in `roi.test.ts`; the handoff's original inputs stay there
+  as a regression check on the formulas. Equipment is counted once in payback/ROI, and
   there is deliberately no "Levier 2" / redeployment profit (it double-counted
   the same worker).
 - **Language and theme are app-wide.** Read them with `useLang()` /
