@@ -1,7 +1,9 @@
-# Golf Course Acreage Calculator
+# Kress
 
-A completely free web app for quoting robotic mower jobs. Search for a course (or
-pan to it), and it measures the turf acreage from OpenStreetMap — broken down by
+Live at <https://kress.prodig-e.com>.
+
+A completely free web app for quoting robotic mower jobs. It has two tabs:
+**Acreage** and **Incentives**. Search for a course (or pan to it), and it measures the turf acreage from OpenStreetMap — broken down by
 fairway, green, tee and rough, net of trees, buildings and parking.
 
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite

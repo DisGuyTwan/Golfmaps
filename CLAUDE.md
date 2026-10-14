@@ -1,4 +1,4 @@
-# Golf Course Acreage Calculator
+# Kress
 
 Next.js 16 App Router + React 19 + TypeScript + Tailwind. Measures golf course
 turf acreage from OpenStreetMap for robotic mower quoting, plus a second

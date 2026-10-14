@@ -54,27 +54,28 @@ export default function AppTabs() {
   return (
     <main className="flex h-[100dvh] w-full flex-col overflow-hidden">
       <nav
-        role="tablist"
-        aria-label="Sections"
         className="z-[3100] flex shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-2"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        {TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => select(id)}
-            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
-              tab === id
-                ? "border-emerald-700 text-emerald-800"
-                : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+        <span className="px-2 text-sm font-bold tracking-wide text-emerald-800">Kress</span>
+        <div role="tablist" aria-label="Sections" className="flex items-center gap-1">
+          {TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => select(id)}
+              className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+                tab === id
+                  ? "border-emerald-700 text-emerald-800"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </nav>
 
       <div className="relative min-h-0 flex-1">

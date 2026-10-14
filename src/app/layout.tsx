@@ -1,23 +1,24 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const APP_NAME = "Kress";
 const description =
-  "Measure a golf course's turf acreage from OpenStreetMap — fairways, greens, tees and rough, net of trees, buildings and parking — for robotic mower quoting.";
+  "Robotic mower quoting tools: measure a golf course's turf acreage (fairways, greens, tees and rough) and estimate grant and tax savings in Quebec and Ontario.";
 
 export const metadata: Metadata = {
-  title: "Golf Course Acreage Calculator",
+  title: APP_NAME,
   description,
-  applicationName: "Golf Course Acreage Calculator",
+  applicationName: APP_NAME,
   // Link previews were bare before this: no title, description or type, so a
   // shared link rendered as a naked URL.
   openGraph: {
-    title: "Golf Course Acreage Calculator",
+    title: APP_NAME,
     description,
     type: "website",
   },
   twitter: {
     card: "summary",
-    title: "Golf Course Acreage Calculator",
+    title: APP_NAME,
     description,
   },
 };

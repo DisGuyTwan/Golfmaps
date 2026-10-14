@@ -1,5 +1,5 @@
 {
-  "name": "golf-acreage-calculator",
+  "name": "kress",
   "version": "0.1.0",
   "private": true,
   "description": "Measure a golf course's turf acreage from OpenStreetMap data \u2014 total, by category, and net of trees, buildings and parking \u2014 for robotic mower quoting.",
