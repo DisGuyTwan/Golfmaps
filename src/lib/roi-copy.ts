@@ -55,13 +55,13 @@ const fr = {
   fuelHint: (hours: string, lph: string, litres: string) => `≈ ${hours} h × ${lph} L/h = ${litres} L/saison`,
   ztMaint: "Entretien / saison par zero-turn ($)",
 
-  incSection: "Aides et crédits d'impôt",
+  incSection: "Subventions et crédits d'impôt",
   incMode: "Déduire de l'investissement Voyager",
   incNone: "Aucun",
   incLow: (amount: string) => `En vigueur seulement : ${amount}`,
   incHigh: (amount: string) => `Avec les éléments à confirmer : ${amount}`,
   incHint: (profile: string) =>
-    `Subventions et crédit d'impôt (pas les radiations, qui ne font que devancer l'économie d'impôt), selon l'onglet Aides pour : ${profile}.`,
+    `Subventions et crédit d'impôt (pas les radiations, qui ne font que devancer l'économie d'impôt), selon l'onglet Incitatifs pour : ${profile}.`,
 
   horizon: "Horizon",
   years: "Horizon (années)",
@@ -115,8 +115,10 @@ const fr = {
   paybackTitle: "Délai de récupération et rendement",
   payback: "Délai de récupération",
   roiHorizon: "ROI sur l'horizon",
+  barProfit: "Profit / an",
+  barDetails: "Voir le détail",
   paybackNote:
-    "Investissement net = prix des Voyager − aides et crédits déduits − prix des zero-turn évitées (ou leur valeur de revente si elles sont déjà payées). Économies d'exploitation / an = (main-d'œuvre + essence + entretien zero-turn) − (électricité + entretien + supervision Voyager). Délai de récupération = investissement net ÷ économies d'exploitation / an, exprimé en années et mois. ROI = (économies d'exploitation sur l'horizon − investissement net) ÷ investissement net.",
+    "Investissement net = prix des Voyager − subventions et crédits déduits − prix des zero-turn évitées (ou leur valeur de revente si elles sont déjà payées). Économies d'exploitation / an = (main-d'œuvre + essence + entretien zero-turn) − (électricité + entretien + supervision Voyager). Délai de récupération = investissement net ÷ économies d'exploitation / an, exprimé en années et mois. ROI = (économies d'exploitation sur l'horizon − investissement net) ÷ investissement net.",
 };
 
 export type RoiCopy = typeof fr;
@@ -229,6 +231,8 @@ const en: RoiCopy = {
   paybackTitle: "Payback and return",
   payback: "Payback period",
   roiHorizon: "ROI over the horizon",
+  barProfit: "Profit / year",
+  barDetails: "See details",
   paybackNote:
     "Net investment = Voyager price − grants and credits deducted − zero-turn purchase avoided (or their resale value if already owned). Operating savings / year = (labour + gas + zero-turn maintenance) − (electricity + Voyager maintenance and supervision). Payback = net investment ÷ operating savings / year, in years and months. ROI = (operating savings over the horizon − net investment) ÷ net investment.",
 };

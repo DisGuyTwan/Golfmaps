@@ -5,7 +5,7 @@ import { QUOTE_CATEGORIES, categoryAcres, quoteAcres } from "@/lib/quote";
 import { sendAcresToRoi, setQuoteSettings, useQuoteSettings } from "@/lib/quote-store";
 import { goToTab } from "@/lib/tabs";
 import type { CourseMeasurement } from "@/lib/types";
-import { CopyLinkButton, printAs, ui } from "./ui";
+import { CopyLinkButton, Pop, printAs, ui } from "./ui";
 
 /**
  * Turns a measurement into the acres a quote is built on: which categories
@@ -27,7 +27,7 @@ export default function QuoteSection({
   const ac = (n: number) => formatAcres(n, lang);
 
   return (
-    <div className="space-y-2.5 border-t border-line pt-3">
+    <div className="animate-fade-up space-y-2.5 border-t border-line pt-3">
       <h3 className="text-sm font-bold text-ink">{t.quoteTitle}</h3>
 
       {!result.boundaryOnly && (
@@ -39,7 +39,7 @@ export default function QuoteSection({
                 type="button"
                 aria-pressed={q.include[c]}
                 onClick={() => setQuoteSettings({ include: { ...q.include, [c]: !q.include[c] } })}
-                className={`min-h-8 rounded-full border px-2.5 text-xs font-semibold transition ${
+                className={`min-h-8 rounded-full border px-2.5 text-xs font-semibold transition-all duration-200 active:scale-95 ${
                   q.include[c] ? "border-brand bg-brand text-white" : "border-line bg-surface text-muted hover:text-ink"
                 }`}
               >
@@ -93,7 +93,7 @@ export default function QuoteSection({
 
       <div className="flex items-center justify-between rounded-lg bg-accent-soft px-3 py-2">
         <span className="text-sm font-medium text-accent-ink">{t.quoteTotal}</span>
-        <span className="text-lg font-bold tabular-nums text-accent-ink">{acres !== null ? `${ac(acres)} ac` : "–"}</span>
+        <Pop value={acres !== null ? `${ac(acres)} ac` : "–"} className="text-lg font-bold tabular-nums text-accent-ink" />
       </div>
 
       <div className="flex flex-wrap gap-2">

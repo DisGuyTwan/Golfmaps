@@ -5,7 +5,7 @@ import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import type { CourseMeasurement } from "@/lib/types";
 import type { MeasureError } from "./GolfCourseCalculator";
 import QuoteSection from "./QuoteSection";
-import { ui } from "./ui";
+import { Pop, ui } from "./ui";
 
 interface MeasurePanelProps {
   lang: Lang;
@@ -49,7 +49,7 @@ export default function MeasurePanel({
       className="pointer-events-none absolute inset-x-0 bottom-0 z-[1200] flex justify-center p-3"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="pointer-events-auto max-h-[70dvh] w-full max-w-md space-y-3 overflow-y-auto rounded-2xl bg-surface/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur dark:ring-white/10">
+      <div className="pointer-events-auto max-h-[70dvh] w-full max-w-md animate-fade-up space-y-3 overflow-y-auto rounded-2xl bg-surface/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur dark:ring-white/10">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-ink">{t.panelTitle}</h2>
           {result && (
@@ -61,7 +61,7 @@ export default function MeasurePanel({
 
         {selecting ? (
           <div className="space-y-2">
-            <p className="rounded-md bg-blue-50 px-3 py-2 text-center text-xs font-medium text-blue-700 dark:bg-blue-950/60 dark:text-blue-200">
+            <p className="animate-fade-in rounded-md bg-blue-50 px-3 py-2 text-center text-xs font-medium text-blue-700 dark:bg-blue-950/60 dark:text-blue-200">
               {awaitingSecondCorner ? t.tapSecond : t.tapFirst}
             </p>
             <button
@@ -94,19 +94,19 @@ export default function MeasurePanel({
         )}
 
         {errorText && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/60 dark:text-red-200">
+          <p className="animate-fade-in rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/60 dark:text-red-200">
             {errorText}
           </p>
         )}
 
         {result && !result.found && !error && (
-          <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/60 dark:text-amber-200">
+          <p className="animate-fade-in rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/60 dark:text-amber-200">
             {t.notFound}
           </p>
         )}
 
         {result?.boundaryOnly && !error && (
-          <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/60 dark:text-amber-200">
+          <p className="animate-fade-in rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/60 dark:text-amber-200">
             {t.boundaryOnly}
           </p>
         )}
@@ -118,7 +118,9 @@ export default function MeasurePanel({
             const estimated = key === "rough" && result?.roughEstimated;
             return (
               <div key={key} className="text-center">
-                <div className="text-base font-bold tabular-nums text-ink">{ac(stat.acres)}</div>
+                <div className="text-base font-bold tabular-nums text-ink">
+                  <Pop value={ac(stat.acres)} />
+                </div>
                 <div className="flex items-center justify-center gap-1 text-[11px] text-muted">
                   <span className="inline-block h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: TURF_COLORS[key] }} />
                   {t.categories[key]}
@@ -133,9 +135,10 @@ export default function MeasurePanel({
           <span className="text-sm font-medium text-accent-ink">
             {result?.boundaryOnly ? t.courseArea : t.totalTurf}
           </span>
-          <span className="text-lg font-bold tabular-nums text-accent-ink">
-            {ac(result?.boundaryOnly ? result.courseAcres : (result?.totalTurfAcres ?? 0))} ac
-          </span>
+          <Pop
+            value={`${ac(result?.boundaryOnly ? result.courseAcres : (result?.totalTurfAcres ?? 0))} ac`}
+            className="text-lg font-bold tabular-nums text-accent-ink"
+          />
         </div>
 
         {result &&

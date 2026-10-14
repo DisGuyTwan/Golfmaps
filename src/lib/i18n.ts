@@ -92,7 +92,7 @@ const en = {
 export type UiStrings = typeof en;
 
 const fr: UiStrings = {
-  tabs: { acreage: "Superficie", incentives: "Aides", roi: "ROI Voyager" },
+  tabs: { acreage: "Superficie", incentives: "Incitatifs", roi: "ROI Voyager" },
   langGroup: "Langue / Language",
   sections: "Sections",
   toDark: "Passer au mode sombre",

@@ -21,7 +21,8 @@ src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
 src/components/
-  ui.tsx                     shared TabHeader + style classes for every tab
+  ui.tsx                     shared TabHeader, Loader, Pop + style classes for every tab
+  BootSplash.tsx             boot screen (server-rendered, fades out after hydration)
   AppTabs.tsx                tab bar (Acreage | Incentives | ROI Voyager) + FR/EN and
                              light/dark buttons; tab in the URL hash
   GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure
@@ -104,6 +105,15 @@ src/types/      ambient module declarations for untyped deps
   dark-green header with eyebrow, title, pitch line and Print / PDF button) and
   the `ui.*` class strings (buttons, h2, label, input, card, note, kpi,
   container). Don't introduce new font sizes or button styles per tab.
+- **Motion has one vocabulary.** Tailwind animations in `tailwind.config.ts`
+  (`fade-up`, `fade-in`, `scale-in`, `tab-in`, `pop`, `sheen`, `spin-slow`);
+  `ui.enter` + `delay(n)` for staggered entrances, `<Pop value>` for numbers
+  that recalculate, `<Loader>` for loading states. Theme and language switches
+  use View Transitions in `preferences.ts` (circle reveal / cross-fade) with a
+  fallback. `prefers-reduced-motion` shortens everything (globals.css) and
+  print disables all animation, so PDFs never catch a half-faded frame.
+  When testing PDFs with Playwright, don't call `emulateMedia({ media: "screen" })`
+  before `page.pdf()`: it forces screen styles into the PDF.
 - **Use the theme color tokens, not raw colors.** `bg-brand` (dark green fills:
   headers, buttons, highlight boxes), `text-accent`, `bg-surface`, `text-ink`,
   `text-muted`, `border-line`, `bg-accent-soft`, … are CSS variables in

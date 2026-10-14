@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import BootSplash from "@/components/BootSplash";
 import { PREFERENCES_BOOT_SCRIPT } from "@/lib/preferences-boot";
 import "./globals.css";
 
@@ -43,7 +44,10 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: PREFERENCES_BOOT_SCRIPT }} />
       </head>
-      <body className="h-full">{children}</body>
+      <body className="h-full">
+        <BootSplash />
+        {children}
+      </body>
     </html>
   );
 }

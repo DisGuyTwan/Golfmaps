@@ -6,7 +6,7 @@ import type { BBox } from "./types";
  * out or errors without CORS headers, which the browser reports as a failed
  * request. Failing over to a mirror makes the tool far more reliable.
  */
-export const OVERPASS_ENDPOINTS = [
+const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
@@ -21,7 +21,7 @@ export const OVERPASS_ENDPOINTS = [
  * only have the `leisure=golf_course` outline mapped, so querying for fairways
  * alone returns nothing even when a course is clearly present.
  */
-export function buildFairwayQuery({ south, west, north, east }: BBox): string {
+function buildFairwayQuery({ south, west, north, east }: BBox): string {
   const bbox = `${south},${west},${north},${east}`;
   return `[out:json][timeout:25];
 (
@@ -56,7 +56,7 @@ export class OverpassHttpError extends Error {
 
 const REQUEST_TIMEOUT_MS = 30000;
 /** Largest scan box the cache route accepts (degrees per side), a whole course with margin. */
-export const MAX_BBOX_SPAN_DEG = 0.3;
+const MAX_BBOX_SPAN_DEG = 0.3;
 
 /**
  * "s,w,n,e" rounded to 5 decimals (≈ 1 m). Rounding makes the same course
@@ -79,26 +79,21 @@ export function parseBBoxParam(value: string | null): BBox | null {
 }
 
 /**
- * POSTs the golf query to each Overpass mirror in turn and returns the raw OSM
- * JSON from the first that answers. The query is sent form-encoded as
- * `data=...` (the endpoint's documented POST format). Used by the browser
- * fallback and by the server cache route.
+ * Browser fallback: POSTs the golf query to each Overpass mirror in turn and
+ * returns the raw OSM JSON from the first that answers. The query is sent
+ * form-encoded as `data=...` (the endpoint's documented POST format).
  */
-export async function fetchFromMirrors(
-  bbox: BBox,
-  { timeoutMs = REQUEST_TIMEOUT_MS, deadline = Infinity, headers = {} as Record<string, string> } = {},
-): Promise<unknown> {
+async function fetchFromMirrors(bbox: BBox): Promise<unknown> {
   const body = `data=${encodeURIComponent(buildFairwayQuery(bbox))}`;
   let lastError: unknown = new Error("No Overpass mirror was tried");
 
   for (const url of OVERPASS_ENDPOINTS) {
-    if (Date.now() + 1000 > deadline) break;
     try {
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded", ...headers },
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body,
-        signal: AbortSignal.timeout(Math.min(timeoutMs, deadline - Date.now())),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       if (!response.ok) throw new OverpassHttpError(response.status);
       return await response.json();

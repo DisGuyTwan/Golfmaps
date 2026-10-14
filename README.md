@@ -24,7 +24,14 @@ remembered on the device. Printing always comes out light.
 
 Incentives and ROI Voyager share the same dark-green header with a short
 description and a **Print / PDF** button, so either tab can be saved as a PDF
-and sent to a client.
+and sent to a client. Both keep their key figures in a sticky bar at the bottom
+(savings on Incentives; payback, ROI and profit per year on ROI Voyager).
+
+The app opens on a short boot animation and uses subtle motion throughout:
+the tab underline and EN | FR pill slide, the sun and moon morph, the theme
+spreads from the button in a circle, and numbers tick when they recalculate.
+It all respects the device's reduced-motion setting, and printouts are never
+animated.
 
 ## How it works
 

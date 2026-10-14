@@ -22,7 +22,7 @@ import {
   type ZeroTurnStatus,
 } from "@/lib/roi";
 import { buildShareUrl, prefixed, readParams } from "@/lib/share";
-import { TabHeader, ui } from "./ui";
+import { Pop, TabHeader, delay, ui } from "./ui";
 
 type NumericKey = Exclude<keyof RoiInputs, "batteryKwh" | "ztStatus" | "incentives">;
 /** Field values stay strings so they can be cleared and retyped live. */
@@ -140,6 +140,7 @@ export default function RoiTab() {
   // Live gas price (Statistics Canada via /api/gas-price), unless the price
   // came from a share link or the user typed one; otherwise the dated default.
   const gasTouched = useRef(initial.gasFromLink);
+  const paybackRef = useRef<HTMLDivElement>(null);
   const [gasLivePeriod, setGasLivePeriod] = useState<string | null>(null);
   const [gasEdited, setGasEdited] = useState(initial.gasFromLink);
   useEffect(() => {
@@ -234,9 +235,9 @@ export default function RoiTab() {
         getShareUrl={shareUrl}
       />
 
-      <div className={`${ui.container} grid gap-6 py-6 min-[800px]:grid-cols-[1fr_1.3fr] print:max-w-none print:grid-cols-[1.15fr_1fr] print:gap-3 print:px-0 print:py-2`}>
+      <div className={`${ui.container} grid gap-6 pb-28 pt-6 min-[800px]:grid-cols-[1fr_1.3fr] print:max-w-none print:grid-cols-[1.15fr_1fr] print:gap-3 print:px-0 print:py-2`}>
         {/* Inputs */}
-        <section className={`${ui.card} min-w-0 print:border-0 print:px-2 print:py-1`}>
+        <section className={`${ui.card} ${ui.enter} min-w-0 print:border-0 print:px-2 print:py-1`} style={delay(1)}>
           <H2>{t.site}</H2>
           <Row>
             <div>
@@ -405,7 +406,7 @@ export default function RoiTab() {
         </section>
 
         {/* Outputs */}
-        <section className={`${ui.card} min-w-0 print:border-0 print:px-2 print:py-1`}>
+        <section className={`${ui.card} ${ui.enter} min-w-0 print:border-0 print:px-2 print:py-1`} style={delay(2)}>
           <H2>{t.comparison}</H2>
           <table className="w-full border-collapse text-sm print:text-[10px]">
             <thead>
@@ -442,7 +443,7 @@ export default function RoiTab() {
           <div className="mt-3 rounded-xl bg-brand px-5 py-4 text-white print:py-1.5">
             <div className="text-sm font-semibold text-white/85">{t.profitTitle}</div>
             <div className={`${ui.kpi} my-1 print:text-base`}>
-              {money(r.annualProfit)} {t.perYear}
+              <Pop value={`${money(r.annualProfit)} ${t.perYear}`} />
             </div>
             <div className="text-xs text-white/75">
               <span className="tabular-nums">{money(r.savings)}</span>
@@ -518,6 +519,7 @@ export default function RoiTab() {
           )}
           <Note>{t.depreciationNote}</Note>
 
+          <div ref={paybackRef} className="scroll-mt-4">
           <H2>{t.paybackTitle}</H2>
           <div className="mt-3 grid grid-cols-2 gap-3.5">
             {(
@@ -528,9 +530,12 @@ export default function RoiTab() {
             ).map(([label, value]) => (
               <div key={label} className="rounded-xl bg-brand p-4 text-center text-white print:p-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-white/80">{label}</div>
-                <div className={`${ui.kpi} mt-1 print:text-lg`}>{value}</div>
+                <div className={`${ui.kpi} mt-1 print:text-lg`}>
+                  <Pop value={value} />
+                </div>
               </div>
             ))}
+          </div>
           </div>
           <Note>{t.paybackNote}</Note>
         </section>
@@ -538,6 +543,36 @@ export default function RoiTab() {
         {/* In print the sources run full width under both columns, to fit one page. */}
         <div className="hidden print:col-span-2 print:block print:px-2">
           <Note>{t.sourcesNote}</Note>
+        </div>
+      </div>
+
+      {/* Sticky results bar, like the Incentives tab's savings bar. */}
+      <div
+        className="sticky bottom-0 z-10 border-t border-line bg-surface/95 shadow-[0_-6px_20px_rgba(23,35,27,0.1)] backdrop-blur print:hidden"
+        style={{ paddingBottom: "calc(0.625rem + env(safe-area-inset-bottom, 0px))" }}
+      >
+        <div className={`${ui.container} flex items-center justify-between gap-4 pt-2.5`}>
+          <div className="flex min-w-0 gap-5 sm:gap-8">
+            {(
+              [
+                [t.payback, formatPayback(r.paybackMonths, lang), ""],
+                ["ROI", formatRoi(r.roiPct, lang), ""],
+                [t.barProfit, money(r.annualProfit), "hidden sm:block"],
+              ] as const
+            ).map(([label, value, extra]) => (
+              <div key={label} className={`min-w-0 ${extra}`}>
+                <span className="block truncate text-xs font-semibold uppercase tracking-wider text-muted">{label}</span>
+                <Pop value={value} className="whitespace-nowrap text-xl font-bold tabular-nums text-accent" />
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => paybackRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="shrink-0 whitespace-nowrap text-sm font-semibold text-accent underline underline-offset-2"
+          >
+            {t.barDetails}
+          </button>
         </div>
       </div>
     </div>

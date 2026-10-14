@@ -219,7 +219,7 @@ export default function SearchBox({ lang, onSelect, getBias }: SearchBoxProps) {
 
         {open && visibleSuggestions.length > 0 && (
           <ul
-            className="absolute inset-x-0 top-full mt-2 max-h-[50dvh] overflow-y-auto rounded-2xl bg-surface py-1 shadow-xl ring-1 ring-black/10 dark:ring-white/10"
+            className="absolute inset-x-0 top-full mt-2 max-h-[50dvh] origin-top animate-scale-in overflow-y-auto rounded-2xl bg-surface py-1 shadow-xl ring-1 ring-black/10 dark:ring-white/10"
             onMouseDown={(e) => e.preventDefault()}
           >
             {visibleSuggestions.map((place, index) => (

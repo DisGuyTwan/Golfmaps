@@ -468,7 +468,7 @@ export function rangeText(low: number, high: number, lang: Lang): string {
 }
 
 /** Tax structure that actually applies: only business profiles pick one. */
-export function effectiveStructure(s: IncentiveInputs): Structure | "personal" {
+function effectiveStructure(s: IncentiveInputs): Structure | "personal" {
   if (BUSINESS_PROFILES.includes(s.who)) return s.struct;
   return s.who === "homeowner" ? "personal" : "exempt";
 }

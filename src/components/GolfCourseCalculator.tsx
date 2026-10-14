@@ -14,14 +14,15 @@ import { processOverpassData } from "@/lib/area";
 import type { BBox, CourseMeasurement } from "@/lib/types";
 import MeasurePanel from "./MeasurePanel";
 import SearchBox, { type PlaceResult } from "./SearchBox";
+import { Loader } from "./ui";
 
 // Leaflet touches `window` at import time, so the map component must never run
 // on the server. Dynamically importing it with `ssr: false` keeps it client-only.
 function MapLoading() {
   const lang = useLang();
   return (
-    <div className="flex h-full w-full items-center justify-center bg-canvas text-muted">
-      {UI[lang].loadingMap}
+    <div className="flex h-full w-full items-center justify-center bg-canvas">
+      <Loader label={UI[lang].loadingMap} />
     </div>
   );
 }

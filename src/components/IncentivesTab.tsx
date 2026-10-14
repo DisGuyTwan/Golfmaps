@@ -5,7 +5,7 @@ import { UI } from "@/lib/i18n";
 import { useLang } from "@/lib/preferences";
 import { setIncentiveProfile } from "@/lib/quote-store";
 import { buildShareUrl, prefixed, readParams } from "@/lib/share";
-import { TabHeader, ui } from "./ui";
+import { Pop, TabHeader, delay, ui } from "./ui";
 import {
   BUSINESS_PROFILES,
   CITIES,
@@ -149,7 +149,7 @@ function Chips<V extends string>({
             onChange={() => onChange(option.value)}
             className="peer sr-only"
           />
-          <span className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium leading-tight text-ink-2 transition peer-checked:border-brand peer-checked:bg-brand peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-canvas">
+          <span className="inline-flex min-h-11 cursor-pointer items-center rounded-full border border-line bg-surface px-4 py-2 text-sm font-medium leading-tight text-ink-2 transition-all duration-200 active:scale-95 peer-checked:border-brand peer-checked:shadow-sm peer-checked:bg-brand peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-canvas">
             {option.label}
           </span>
         </label>
@@ -276,7 +276,7 @@ export default function IncentivesTab() {
 
       <div className={`${ui.container} grid gap-8 pb-28 pt-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start lg:pb-12 print:max-w-none print:gap-4 print:px-4 print:pb-0 print:pt-3`}>
         {/* The form is for the meeting; the PDF shows the choices as text instead. */}
-        <form onSubmit={(e) => e.preventDefault()} noValidate className="min-w-0 print:hidden">
+        <form onSubmit={(e) => e.preventDefault()} noValidate className={`${ui.enter} min-w-0 print:hidden`} style={delay(1)}>
           <Step n={1} title={L.s1}>
             <Chips
               name="prov"
@@ -436,7 +436,12 @@ export default function IncentivesTab() {
           </Step>
         </form>
 
-        <section ref={resultsRef} aria-live="polite" className="grid min-w-0 scroll-mt-4 gap-5 lg:sticky lg:top-4 print:gap-3">
+        <section
+          ref={resultsRef}
+          aria-live="polite"
+          className={`${ui.enter} grid min-w-0 scroll-mt-4 gap-5 lg:sticky lg:top-4 print:gap-3`}
+          style={delay(2)}
+        >
           <dl className={`${ui.card} hidden gap-x-4 gap-y-1 text-sm print:grid print:grid-cols-[auto_1fr] print:py-3`}>
             <dt className="font-semibold text-ink-2">{L.sumProfile}</dt>
             <dd>{profile}</dd>
@@ -448,19 +453,21 @@ export default function IncentivesTab() {
             {/* Money kept and tax timing are different kinds of money, so they're never added up in the headline. */}
             <div className="grid gap-1">
               <p className={ui.label}>{L.keptLabel}</p>
-              <p className={`${ui.kpi} text-accent`}>{rangeText(result.keptLow, result.keptHigh, lang)}</p>
+              <p className={`${ui.kpi} text-accent`}>
+                <Pop value={rangeText(result.keptLow, result.keptHigh, lang)} />
+              </p>
               <p className={ui.note}>{L.keptHelp}</p>
             </div>
             <div className="grid gap-1 border-t border-line pt-3">
               <p className={ui.label}>{L.timingLabel}</p>
               <p className="text-2xl font-bold leading-tight tabular-nums text-ink">
-                {rangeText(result.timingLow, result.timingHigh, lang)}
+                <Pop value={rangeText(result.timingLow, result.timingHigh, lang)} />
               </p>
               <p className={ui.note}>{L.timingHelp}</p>
             </div>
             <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 border-t border-line pt-3">
               <span className={ui.label}>{L.totalLabel}</span>
-              <span className="text-base font-bold tabular-nums text-ink">{headline}</span>
+              <Pop value={headline} className="text-base font-bold tabular-nums text-ink" />
             </div>
             <p className="text-sm text-ink-2">{subline}</p>
             <div className="relative h-3.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
@@ -491,7 +498,7 @@ export default function IncentivesTab() {
               <h2 className={ui.h2}>{L.breakdown}</h2>
               <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
                 {result.items.map((item) => (
-                  <div key={item.t} className="grid gap-1.5 px-4 py-3.5 print:break-inside-avoid">
+                  <div key={item.t} className="grid animate-fade-in gap-1.5 px-4 py-3.5 print:animate-none print:break-inside-avoid">
                     <div className="flex items-start justify-between gap-3">
                       <h3 className="text-sm font-semibold leading-snug text-ink">{item.t}</h3>
                       <span className="whitespace-nowrap text-sm font-semibold tabular-nums">
@@ -516,7 +523,7 @@ export default function IncentivesTab() {
               {result.cards.map((card) => (
                 <article
                   key={card.t}
-                  className={`grid gap-1.5 rounded-xl px-4 py-3.5 print:break-inside-avoid ${card.info ? "bg-accent-soft" : "border border-line bg-surface"}`}
+                  className={`grid animate-fade-in gap-1.5 rounded-xl px-4 py-3.5 print:animate-none print:break-inside-avoid ${card.info ? "bg-accent-soft" : "border border-line bg-surface"}`}
                 >
                   <h3 className="text-sm font-semibold leading-snug text-ink">{card.t}</h3>
                   <div>
@@ -560,12 +567,12 @@ export default function IncentivesTab() {
 
       {/* Sticky savings bar on phones */}
       <div
-        className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-line bg-surface px-4 pt-2.5 shadow-[0_-6px_20px_rgba(23,35,27,0.1)] lg:hidden print:hidden"
+        className="sticky bottom-0 z-10 flex items-center justify-between gap-3 border-t border-line bg-surface/95 px-4 pt-2.5 backdrop-blur shadow-[0_-6px_20px_rgba(23,35,27,0.1)] lg:hidden print:hidden"
         style={{ paddingBottom: "calc(0.625rem + env(safe-area-inset-bottom, 0px))" }}
       >
         <div>
           <span className="block text-xs font-semibold uppercase tracking-wider text-muted">{L.bar_label}</span>
-          <span className="text-xl font-bold tabular-nums text-accent">{headline}</span>
+          <Pop value={headline} className="text-xl font-bold tabular-nums text-accent" />
         </div>
         <button
           type="button"
