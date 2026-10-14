@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { UI, type Lang } from "@/lib/i18n";
+
 /**
  * Shared look for every tab: one header, one button set, one type scale.
  * Class strings live here (under src/components, which Tailwind scans) so the
@@ -40,11 +43,20 @@ function PrinterIcon() {
   );
 }
 
+function LinkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
+
 /**
  * Opens the browser's print dialog ("Save as PDF" there). The document title
  * becomes the suggested PDF file name, so it's set for the duration of the print.
  */
-function printAs(fileTitle: string) {
+export function printAs(fileTitle: string) {
   const previous = document.title;
   document.title = fileTitle;
   window.addEventListener("afterprint", () => (document.title = previous), { once: true });
@@ -52,22 +64,54 @@ function printAs(fileTitle: string) {
 }
 
 /**
- * Dark-green header for a tab: eyebrow line, title, one-sentence pitch and a
- * Print / PDF button. Prints too (the button hides), so a PDF opens with it.
+ * Copies a share link (the tab's inputs in the URL). Shows "Link copied" for a
+ * moment; if the clipboard is blocked, offers the link in a prompt instead.
+ */
+export function CopyLinkButton({ lang, getUrl, className }: { lang: Lang; getUrl: () => string; className: string }) {
+  const t = UI[lang];
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    const url = getUrl();
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch {
+      window.prompt(t.copyPrompt, url);
+    }
+  };
+  return (
+    <button type="button" onClick={copy} className={className}>
+      <LinkIcon />
+      <span aria-live="polite">{copied ? t.linkCopied : t.copyLink}</span>
+    </button>
+  );
+}
+
+const onBrandBtn =
+  "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-white/70 px-4 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white print:hidden";
+
+/**
+ * Dark-green header for a tab: eyebrow line, title, one-sentence pitch, a
+ * Print / PDF button and (optionally) Copy link. Prints too (the buttons
+ * hide), so a PDF opens with it.
  */
 export function TabHeader({
+  lang,
   eyebrow,
   title,
   lede,
-  printLabel,
   printTitle,
+  getShareUrl,
 }: {
+  lang: Lang;
   eyebrow: string;
   title: string;
   lede: string;
-  printLabel: string;
   /** Suggested PDF file name, e.g. "Kress - ROI Voyager". */
   printTitle: string;
+  /** Builds the share link with the tab's current inputs. */
+  getShareUrl?: () => string;
 }) {
   return (
     <header
@@ -80,14 +124,13 @@ export function TabHeader({
           <h1 className="text-2xl font-bold leading-tight sm:text-3xl print:text-xl">{title}</h1>
           <p className="max-w-[65ch] text-sm text-white/85 sm:text-base print:text-xs">{lede}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => printAs(printTitle)}
-          className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg border border-white/70 px-4 text-sm font-semibold text-white transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white print:hidden"
-        >
-          <PrinterIcon />
-          {printLabel}
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-2 print:hidden">
+          {getShareUrl && <CopyLinkButton lang={lang} getUrl={getShareUrl} className={onBrandBtn} />}
+          <button type="button" onClick={() => printAs(printTitle)} className={onBrandBtn}>
+            <PrinterIcon />
+            {UI[lang].printPdf}
+          </button>
+        </div>
       </div>
     </header>
   );

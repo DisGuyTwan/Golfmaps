@@ -15,6 +15,7 @@ import * as L from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
 import { TURF_COLORS } from "@/lib/area";
 import { UI, type Lang } from "@/lib/i18n";
+import { decodeView } from "@/lib/share";
 
 import "leaflet/dist/leaflet.css";
 
@@ -52,12 +53,15 @@ export interface GolfMapProps {
   onMapReady: (map: L.Map) => void;
 }
 
-/** Lifts the map instance up and centers on the device location once. */
-function MapInit({ onReady }: { onReady: (map: L.Map) => void }) {
+/**
+ * Lifts the map instance up and, unless a share link set the view, centers on
+ * the device location once.
+ */
+function MapInit({ onReady, locate }: { onReady: (map: L.Map) => void; locate: boolean }) {
   const map = useMap();
   useEffect(() => {
     onReady(map);
-    if (typeof navigator !== "undefined" && navigator.geolocation) {
+    if (locate && typeof navigator !== "undefined" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) =>
           map.setView(
@@ -70,7 +74,7 @@ function MapInit({ onReady }: { onReady: (map: L.Map) => void }) {
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
       );
     }
-  }, [map, onReady]);
+  }, [map, onReady, locate]);
   return null;
 }
 
@@ -123,6 +127,8 @@ export default function GolfMap({
   // documented way to adjust state when a prop changes: the setters run during
   // render, React discards the in-progress output and immediately re-renders
   // with the new values, without committing the first pass or firing effects.
+  // A share link's map view (v=lat,lon,zoom). This component is client-only.
+  const [linkedView] = useState(() => decodeView(new URLSearchParams(window.location.search).get("v")));
   const [prevGeojson, setPrevGeojson] = useState<FeatureCollection | null>(null);
   const [geojsonKey, setGeojsonKey] = useState(0);
   if (geojson !== prevGeojson) {
@@ -132,8 +138,8 @@ export default function GolfMap({
 
   return (
     <MapContainer
-      center={DEFAULT_CENTER}
-      zoom={DEFAULT_ZOOM}
+      center={linkedView ? [linkedView.lat, linkedView.lon] : DEFAULT_CENTER}
+      zoom={linkedView?.zoom ?? DEFAULT_ZOOM}
       scrollWheelZoom
       maxZoom={19}
       attributionControl={false}
@@ -158,7 +164,7 @@ export default function GolfMap({
         </LayersControl.BaseLayer>
       </LayersControl>
 
-      <MapInit onReady={onMapReady} />
+      <MapInit onReady={onMapReady} locate={!linkedView} />
       <SelectCapture selecting={selecting} onMapClick={onMapClick} />
 
       {geojson && geojson.features.length > 0 && (

@@ -4,6 +4,9 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { UI, type Lang } from "@/lib/i18n";
 import { setLang, setTheme, useLang, useTheme } from "@/lib/preferences";
+import { reportError } from "@/lib/report-error";
+import { goToTab } from "@/lib/tabs";
+import AcreageReport from "./AcreageReport";
 import GolfCourseCalculator from "./GolfCourseCalculator";
 
 function TabLoading() {
@@ -25,7 +28,7 @@ const LANGS: { code: Lang; name: string }[] = [
   { code: "fr", name: "Français" },
 ];
 
-const TABS: { id: Tab; hash: string }[] = [
+const TABS: { id: Tab; hash: "" | "#incentives" | "#roi" }[] = [
   { id: "acreage", hash: "" },
   { id: "incentives", hash: "#incentives" },
   { id: "roi", hash: "#roi" },
@@ -72,6 +75,18 @@ export default function AppTabs() {
   const [opened, setOpened] = useState<Record<OverlayTab, boolean>>({ incentives: false, roi: false });
   if (tab !== "acreage" && !opened[tab]) setOpened({ ...opened, [tab]: true });
 
+  // Uncaught errors and rejected promises go to the server log (Vercel).
+  useEffect(() => {
+    const onError = (event: ErrorEvent) => reportError("window", event.error ?? event.message);
+    const onRejection = (event: PromiseRejectionEvent) => reportError("promise", event.reason);
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
+
   // On narrow phones the tab row scrolls; keep the active tab in view.
   const tablistRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -82,9 +97,7 @@ export default function AppTabs() {
 
   const select = (next: Tab) => {
     if (next === tab) return;
-    const target = TABS.find((x) => x.id === next)!;
-    window.history.pushState(null, "", target.hash || `${window.location.pathname}${window.location.search}`);
-    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    goToTab(TABS.find((x) => x.id === next)!.hash);
   };
 
   const panel = (id: OverlayTab, content: React.ReactNode) =>
@@ -161,6 +174,8 @@ export default function AppTabs() {
         <div className="h-full w-full print:hidden">
           <GolfCourseCalculator />
         </div>
+        {/* The Acreage tab prints a report instead of the map. */}
+        {tab === "acreage" && <AcreageReport />}
         {panel("incentives", <IncentivesTab />)}
         {panel("roi", <RoiTab />)}
       </div>

@@ -5,14 +5,20 @@ turf acreage from OpenStreetMap for robotic mower quoting, plus an
 "Incentives" tab that estimates grant/tax savings on robotic mowers and battery
 tools (Quebec, Ontario, federal) and a "ROI Voyager" tab comparing a Kress
 Voyager with a zero-turn crew. Every tab is in English (default) and Quebec
-French, with light and dark themes. No API keys, no backend — every request goes
-straight from the browser to public APIs (built-in `fetch`, no HTTP library).
+French, with light and dark themes. The tabs are connected (measured acres →
+ROI sizing; the Incentives profile → ROI's net investment) and every tab has a
+share link and a client PDF. No API keys and no database: three small route
+handlers (Overpass cache, gas price, client error log) run on Vercel; everything
+else goes straight from the browser to public APIs (built-in `fetch`).
 
 ## Layout
 
 ```
 src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
-                  globals.css (theme color variables)
+                  not-found.tsx, globals.css (theme color variables)
+  api/overpass/   cached Overpass lookup (CDN 1 day); the browser falls back to mirrors
+  api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
+  api/log/        client error reports → Vercel runtime logs
 src/components/
   ui.tsx                     shared TabHeader + style classes for every tab
   AppTabs.tsx                tab bar (Acreage | Incentives | ROI Voyager) + FR/EN and
@@ -20,16 +26,25 @@ src/components/
   GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)
   MeasurePanel.tsx           results panel + legend
+  QuoteSection.tsx           acres for the quote: categories, % rough, override,
+                             Send to ROI, PDF report, Copy link
+  AcreageReport.tsx          print-only Acreage PDF (replaces the map in print)
   SearchBox.tsx              Photon geocoder autocomplete
   IncentivesTab.tsx          incentive checker UI (client-only)
   RoiTab.tsx                 Voyager ROI calculator UI, printable
 src/lib/
-  overpass.ts   builds the Overpass QL query, fails over across 3 mirrors
+  overpass.ts   builds the Overpass QL query; cache route first, then 3 mirrors
   area.ts       OSM → GeoJSON → categorize → clip → acres  (the core logic)
   types.ts      BBox, CourseMeasurement
   incentives.ts program rules, FR/EN copy and savings math (pure, tested)
-  roi.ts        Voyager ROI formulas and formatting (pure, tested)
-  roi-copy.ts   ROI tab copy, FR (handoff original) and EN
+  roi.ts        Voyager ROI model sized from acreage, formatting (pure, tested)
+  roi-copy.ts   ROI tab copy, FR and EN, incl. "as of" source for each default
+  quote.ts      measurement → acres for the quote, share params (pure, tested)
+  quote-store.ts  client store shared by the tabs (useSyncExternalStore)
+  share.ts      share-link helpers (pure, tested); keys r_ / i_ / q_ / v, m, b, n
+  gas.ts        StatCan gas price parsing (pure, tested)
+  report-error.ts  sendBeacon to /api/log
+  tabs.ts       goToTab() for in-app navigation
   i18n.ts       EN/FR copy for the tab bar, Acreage tab, search, error page
   preferences.ts       useLang / useTheme / setLang / setTheme (client)
   preferences-boot.ts  storage keys + inline script that applies them pre-paint
@@ -56,16 +71,28 @@ src/types/      ambient module declarations for untyped deps
   Customer-facing copy uses Quebec French and no em dashes. Keep the
   "not tax advice" disclaimer; only "ok" (in force) items count toward the low
   end of the range.
-- **The ROI calculator is a finished, checked port.** Keep its formulas and
-  French wording (`roi-copy.ts`; the English is a translation, and the
-  formatters default to French). Its defaults are dated market data and need
-  refreshing: gas price (Oct 2026), the Hydro-Québec Tarif G rate (`HQ_RATE`,
-  update each April 1), payroll rates in the footnote (each January), Voyager
-  prices/batteries. When a default changes, update the footnote source and the
-  "defaults" values in `roi.test.ts`; the handoff's original inputs stay there
-  as a regression check on the formulas. Equipment is counted once in payback/ROI, and
-  there is deliberately no "Levier 2" / redeployment profit (it double-counted
-  the same worker).
+- **The ROI compares the same job on both sides.** Both are sized from the
+  acres to mow per week: zero-turn crew in full-time equivalents (paid for the
+  share of their shifts the mowing takes) on whole machines, versus whole
+  Voyager units at their acres per charge, plus supervision time. Existing
+  zero-turns are either a purchase avoided or (already owned) their resale
+  value; grants and the tax credit from the Incentives tab can reduce the
+  Voyager investment (write-offs never do: they're timing). Don't go back to
+  "one employee vs one Voyager": the handoff's figures are reproduced in
+  `roi.test.ts` only as a formula regression with matching inputs.
+- **ROI defaults are dated market data.** Gas (live from StatCan when the route
+  works, else the dated default), the Hydro-Québec Tarif G rate (`HQ_RATE`,
+  update each April 1), payroll rates (each January), Voyager prices and
+  capacities. Each default shows its source under the input (`asOf` in
+  `roi-copy.ts`); when one changes, update that, the footnote and the
+  "defaults" values in `roi.test.ts`. Equipment is counted once in payback/ROI,
+  and there is deliberately no "Levier 2" / redeployment profit.
+- **Incentives keep two kinds of money apart.** Items are `kind: "kept"` (grants,
+  rebates, the refundable credit) or `"timing"` (write-offs). Show and sum them
+  separately; only "kept" feeds the ROI tab.
+- **Measured turf is not quoted turf.** `quote.ts` counts only chosen categories
+  (greens/tees off by default), a share of the rough (80% default) or a manual
+  override, and refuses to quote a boundary-only course without an override.
 - **Language and theme are app-wide.** Read them with `useLang()` /
   `useTheme()` from `src/lib/preferences.ts`; never keep per-tab copies. English
   is the default; the server always renders English/light and the boot script in
@@ -80,9 +107,12 @@ src/types/      ambient module declarations for untyped deps
   `text-muted`, `border-line`, `bg-accent-soft`, … are CSS variables in
   `globals.css` that swap in dark mode, so one class covers both themes. Dark
   values sit under `@media screen`, so printing stays light.
-- **Print / PDF is a client deliverable.** Incentives prints the profile and
-  results (the form is hidden); ROI fits one Letter page. Check both with
-  print emulation after layout changes.
+- **Print / PDF is a client deliverable.** Acreage prints `AcreageReport`
+  (1 page), Incentives the profile and results (about 2 pages, form hidden),
+  ROI one Letter page (printed at 80%, inputs as "label … value", sources full
+  width). Check page counts with print emulation after layout changes.
+- **Share links** put a tab's inputs in the query string (`share.ts`); tabs read
+  them once on load. Keep new inputs in the link, with the tab's prefix.
 - **React 19 rules apply**: no reading/writing refs during render and no
   synchronous setState in effect bodies (the lint config enforces both).
 
@@ -93,5 +123,5 @@ npm install
 npm run dev      # http://localhost:3000
 npm run build    # type check + production build
 npm run lint
-npm test         # vitest: acreage pipeline, incentive math, ROI acceptance values
+npm test         # vitest: acreage pipeline, quote, incentives, ROI model, share links
 ```

@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { UI } from "@/lib/i18n";
 import { useLang } from "@/lib/preferences";
+import { setIncentiveProfile } from "@/lib/quote-store";
+import { buildShareUrl, prefixed, readParams } from "@/lib/share";
 import { TabHeader, ui } from "./ui";
 import {
   BUSINESS_PROFILES,
@@ -71,6 +73,35 @@ const DEFAULT_FORM: FormState = {
   toolAmt: "3000",
   under500: true,
 };
+
+/**
+ * Defaults, overridden by a share link's i_ parameters (i_prov=ON, i_who=farm,
+ * i_robotAmt=48000, …). Unknown or invalid values keep the default.
+ */
+function initialForm(): FormState {
+  const link = readParams(window.location.search, "i_");
+  const f = { ...DEFAULT_FORM };
+  const pick = <V extends string>(value: string | undefined, allowed: readonly V[], fallback: V): V =>
+    allowed.includes(value as V) ? (value as V) : fallback;
+  const flag = (value: string | undefined, fallback: boolean) =>
+    value === "1" ? true : value === "0" ? false : fallback;
+  const amount = (value: string | undefined, fallback: string) =>
+    value !== undefined && Number.isFinite(Number(value)) ? value : fallback;
+  f.prov = pick(link.prov, ["QC", "ON"] as const, f.prov);
+  f.who = pick(link.who, PROFILES, f.who);
+  f.farm = pick(link.farm, FARM_TYPES, f.farm);
+  f.mapaq = pick(link.mapaq, ["yes", "no", "unsure"] as const, f.mapaq);
+  f.struct = pick(link.struct, STRUCTURES, f.struct);
+  f.city = pick(link.city, CITIES, f.city);
+  f.bonus = flag(link.bonus, f.bonus);
+  f.buyRobot = flag(link.buyRobot, f.buyRobot);
+  f.buyTools = flag(link.buyTools, f.buyTools);
+  f.under500 = flag(link.under500, f.under500);
+  f.taxRate = amount(link.taxRate, f.taxRate);
+  f.robotAmt = amount(link.robotAmt, f.robotAmt);
+  f.toolAmt = amount(link.toolAmt, f.toolAmt);
+  return f;
+}
 
 function positive(value: string): number {
   const n = parseFloat(value.replace(",", "."));
@@ -173,7 +204,7 @@ function TagPill({ tag, label }: { tag: Tag; label: string }) {
 
 export default function IncentivesTab() {
   const lang = useLang();
-  const [form, setForm] = useState<FormState>(DEFAULT_FORM);
+  const [form, setForm] = useState<FormState>(initialForm);
   const [taxTouched, setTaxTouched] = useState(false);
   // A key rather than text, so the message follows a language switch.
   const [copyStatus, setCopyStatus] = useState<"copied" | "copyFail" | null>(null);
@@ -183,6 +214,9 @@ export default function IncentivesTab() {
   const L = STRINGS[lang];
   const inputs = useMemo(() => toInputs(form), [form]);
   const result = useMemo(() => computeIncentives(inputs, lang), [inputs, lang]);
+
+  // The ROI tab prices grants and credits for the Voyager with this profile.
+  useEffect(() => setIncentiveProfile(inputs), [inputs]);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -232,11 +266,12 @@ export default function IncentivesTab() {
     // Printed at 85%: the client PDF is the profile plus results, about two pages.
     <div className="h-full overflow-y-auto bg-canvas text-ink print:h-auto print:overflow-visible print:bg-white print:[zoom:0.85]">
       <TabHeader
+        lang={lang}
         eyebrow={L.eyebrow}
         title={L.h1}
         lede={L.lede}
-        printLabel={UI[lang].printPdf}
         printTitle={`Kress - ${UI[lang].tabs.incentives}`}
+        getShareUrl={() => buildShareUrl(window.location, prefixed("i_", { ...form }), "#incentives")}
       />
 
       <div className={`${ui.container} grid gap-8 pb-28 pt-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start lg:pb-12 print:max-w-none print:gap-4 print:px-4 print:pb-0 print:pt-3`}>
@@ -410,7 +445,23 @@ export default function IncentivesTab() {
           </dl>
           <div className={`${ui.card} grid gap-2 print:break-inside-avoid`}>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted">{L.kicker}</p>
-            <p className={`${ui.kpi} text-accent`}>{headline}</p>
+            {/* Money kept and tax timing are different kinds of money, so they're never added up in the headline. */}
+            <div className="grid gap-1">
+              <p className={ui.label}>{L.keptLabel}</p>
+              <p className={`${ui.kpi} text-accent`}>{rangeText(result.keptLow, result.keptHigh, lang)}</p>
+              <p className={ui.note}>{L.keptHelp}</p>
+            </div>
+            <div className="grid gap-1 border-t border-line pt-3">
+              <p className={ui.label}>{L.timingLabel}</p>
+              <p className="text-2xl font-bold leading-tight tabular-nums text-ink">
+                {rangeText(result.timingLow, result.timingHigh, lang)}
+              </p>
+              <p className={ui.note}>{L.timingHelp}</p>
+            </div>
+            <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 border-t border-line pt-3">
+              <span className={ui.label}>{L.totalLabel}</span>
+              <span className="text-base font-bold tabular-nums text-ink">{headline}</span>
+            </div>
             <p className="text-sm text-ink-2">{subline}</p>
             <div className="relative h-3.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
               <div
@@ -447,8 +498,9 @@ export default function IncentivesTab() {
                         {isZeroItem(item) ? "–" : rangeText(item.low, item.high, lang)}
                       </span>
                     </div>
-                    <div>
+                    <div className="flex flex-wrap items-center gap-2">
                       <TagPill tag={item.tag} label={L.tag[item.tag]} />
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{L.kind[item.kind]}</span>
                     </div>
                     <p className="text-sm text-muted">{item.d}</p>
                     <Links links={item.links} />

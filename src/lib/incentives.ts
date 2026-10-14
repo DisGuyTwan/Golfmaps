@@ -71,10 +71,35 @@ export interface IncentiveInputs {
   under500: boolean;
 }
 
+/** Golf course is preselected because this app is built for golf quoting. */
+export const DEFAULT_INCENTIVE_INPUTS: IncentiveInputs = {
+  prov: "QC",
+  who: "golf",
+  farm: "orchard",
+  mapaq: "yes",
+  bonus: false,
+  struct: "corp",
+  city: "stbruno",
+  tax: DEFAULT_TAX_RATE.corp / 100,
+  buyRobot: true,
+  buyTools: true,
+  robotAmt: 24000,
+  toolAmt: 3000,
+  under500: true,
+};
+
+/**
+ * kept = money the buyer keeps (grants, rebates, the refundable tax credit).
+ * timing = faster write-offs: less tax now, but the same total deduction over
+ * the equipment's life, so it's a cash-flow gain rather than money kept.
+ */
+export type ItemKind = "kept" | "timing";
+
 export interface IncentiveItem {
   t: string;
   d: string;
   tag: Tag;
+  kind: ItemKind;
   low: number;
   high: number;
   links: Link[];
@@ -99,6 +124,11 @@ export interface IncentiveResult {
   low: number;
   /** Savings including items that need confirmation or approval. */
   high: number;
+  /** The same totals split by kind (kept + timing = low/high). */
+  keptLow: number;
+  keptHigh: number;
+  timingLow: number;
+  timingHigh: number;
 }
 
 const LINKS = {
@@ -173,6 +203,12 @@ const fr = {
   city_stsauveur: "Saint-Sauveur",
   city_other: "Autre ville",
   kicker: "Économies estimées la 1re année",
+  keptLabel: "Argent conservé (subventions et crédit d’impôt)",
+  keptHelp: "Montant que l’acheteur garde.",
+  timingLabel: "Impôt reporté (radiations accélérées)",
+  timingHelp: "Moins d’impôt dès la 1re année, mais la déduction totale sur la durée de vie de l’équipement reste la même.",
+  totalLabel: "Effet total la 1re année",
+  kind: { kept: "Argent conservé", timing: "Impôt reporté" } as Record<ItemKind, string>,
   ofPurchase: (p: string, range: string) => `sur un achat de ${p}${range}`,
   pctRange: (a: string, b: string) => (a === b ? ` (${a} de l’achat)` : ` (${a} à ${b} de l’achat)`),
   none: "Aucune aide trouvée pour ce profil et cet achat.",
@@ -185,7 +221,7 @@ const fr = {
   copy: "Copier mon résumé",
   copied: "Résumé copié. Collez-le dans un texto à votre conseiller.",
   copyFail: "Copie bloquée. Sélectionnez le texte ci-dessous.",
-  bar_label: "Économies 1re année",
+  bar_label: "Effet total 1re année",
   bar_btn: "Voir le détail",
   timing: "L’amortissement accéléré réduit l’impôt dès la 1re année. Sur la durée de vie de l’équipement, la déduction totale reste la même. Le crédit d’impôt et les subventions sont des gains nets.",
   watch: "À surveiller : adoption de la Mégadéduction à la productivité (proposée le 15 septembre 2026, pas encore adoptée) et décision de Québec de l’appliquer ou non, nouvelle version de Prime-Vert en vigueur depuis le 13 octobre 2026 (taux à revalider), nouveau gouvernement du Québec élu le 5 octobre 2026, réouverture des remises municipales au début de 2027.",
@@ -258,7 +294,6 @@ const fr = {
   sumBuy: "Achat",
   sumRobots: "robots",
   sumTools: "outils",
-  sumSave: "Économies estimées la 1re année",
   sumDetail: "Détail",
   sumFoot: "Estimation seulement, à confirmer avec votre comptable. Recherche au 14 octobre 2026.",
 };
@@ -314,6 +349,12 @@ const en: IncentiveStrings = {
   city_stsauveur: "Saint-Sauveur",
   city_other: "Other city",
   kicker: "Estimated first-year savings",
+  keptLabel: "Money kept (grants and tax credit)",
+  keptHelp: "Money the buyer keeps.",
+  timingLabel: "Tax deferred (faster write-offs)",
+  timingHelp: "Less tax in year one, but the total deduction over the equipment’s life stays the same.",
+  totalLabel: "Total first-year effect",
+  kind: { kept: "Money kept", timing: "Tax timing" },
   ofPurchase: (p, range) => `on a ${p} purchase${range}`,
   pctRange: (a, b) => (a === b ? ` (${a} of the purchase)` : ` (${a} to ${b} of the purchase)`),
   none: "No support found for this profile and purchase.",
@@ -326,7 +367,7 @@ const en: IncentiveStrings = {
   copy: "Copy my summary",
   copied: "Summary copied. Paste it in a text to your dealer.",
   copyFail: "Copy blocked. Select the text below.",
-  bar_label: "First-year savings",
+  bar_label: "Total first-year effect",
   bar_btn: "See details",
   timing: "Accelerated write-offs cut tax in year one. Over the life of the equipment, the total deduction stays the same. The tax credit and grants are net gains.",
   watch: "Watch for: passage of the Productivity Mega Deduction (proposed September 15, 2026, not yet law) and whether Quebec matches it, the new Prime-Vert version in force since October 13, 2026 (rates to re-verify), Quebec’s new government after the October 5, 2026 election, and municipal rebates reopening in early 2027.",
@@ -399,7 +440,6 @@ const en: IncentiveStrings = {
   sumBuy: "Purchase",
   sumRobots: "robots",
   sumTools: "tools",
-  sumSave: "Estimated first-year savings",
   sumDetail: "Breakdown",
   sumFoot: "Estimate only, to confirm with your accountant. Research as of October 14, 2026.",
 };
@@ -447,7 +487,7 @@ export function computeIncentives(s: IncentiveInputs, lang: Lang): IncentiveResu
   const taxable = struct === "corp" || struct === "soleprop";
   const items: IncentiveItem[] = [];
   const cards: ProgramCard[] = [];
-  const add = (item: IncentiveItem) => items.push(item);
+  const add = (item: Omit<IncentiveItem, "kind">, kind: ItemKind = "kept") => items.push({ ...item, kind });
   const card = (c: ProgramCard) => cards.push(c);
 
   // Grants and rebates
@@ -524,14 +564,14 @@ export function computeIncentives(s: IncentiveInputs, lang: Lang): IncentiveResu
         low: 0.3 * R * s.tax,
         high: (baseHigh - itc) * s.tax,
         links: [[L.linkPmd, LINKS.pmd], [L.linkClass56, LINKS.class56], [L.linkClasses, LINKS.cca]],
-      });
+      }, "timing");
     }
     if (Tl > 0) {
       if (s.under500) {
-        add({ t: L.i_ccaT, d: L.d_ccaT12, tag: "ok", low: Tl * s.tax, high: Tl * s.tax, links: [[L.linkClasses, LINKS.cca]] });
+        add({ t: L.i_ccaT, d: L.d_ccaT12, tag: "ok", low: Tl * s.tax, high: Tl * s.tax, links: [[L.linkClasses, LINKS.cca]] }, "timing");
       } else {
         // 30% is law; 100% depends on the proposed Mega Deduction passing.
-        add({ t: L.i_ccaT, d: L.d_ccaT8, tag: "warn", low: 0.3 * Tl * s.tax, high: Tl * s.tax, links: [[L.linkPmd, LINKS.pmd], [L.linkClasses, LINKS.cca]] });
+        add({ t: L.i_ccaT, d: L.d_ccaT8, tag: "warn", low: 0.3 * Tl * s.tax, high: Tl * s.tax, links: [[L.linkPmd, LINKS.pmd], [L.linkClasses, LINKS.cca]] }, "timing");
       }
     }
   }
@@ -549,9 +589,18 @@ export function computeIncentives(s: IncentiveInputs, lang: Lang): IncentiveResu
   if (taxable && qc) card({ t: L.c_qcHarm, p: L.p_qcHarm, tag: "warn", links: [[L.linkBudget, LINKS.qcBudget]] });
   if (taxable) card({ t: L.c_lease, p: L.p_lease, tag: "info", info: true });
 
-  const low = items.reduce((sum, i) => sum + i.low, 0);
-  const high = items.reduce((sum, i) => sum + i.high, 0);
-  return { P, R, Tl, items, cards, low, high };
+  const sum = (kind: ItemKind, end: "low" | "high") =>
+    items.reduce((total, i) => (i.kind === kind ? total + i[end] : total), 0);
+  const keptLow = sum("kept", "low");
+  const keptHigh = sum("kept", "high");
+  const timingLow = sum("timing", "low");
+  const timingHigh = sum("timing", "high");
+  return {
+    P, R, Tl, items, cards,
+    low: keptLow + timingLow,
+    high: keptHigh + timingHigh,
+    keptLow, keptHigh, timingLow, timingHigh,
+  };
 }
 
 /** True when an item has no dollar value to show (closed or unconfirmed). */
@@ -583,13 +632,15 @@ export function summaryText(s: IncentiveInputs, r: IncentiveResult, lang: Lang):
     L.sumTitle,
     `${L.sumProfile}${sep}${profile}`,
     `${L.sumBuy}${sep}${purchase}`,
-    `${L.sumSave}${sep}${r.high > 0 ? rangeText(r.low, r.high, lang) : formatMoney(0, lang)}`,
+    `${L.keptLabel}${sep}${rangeText(r.keptLow, r.keptHigh, lang)}`,
+    `${L.timingLabel}${sep}${rangeText(r.timingLow, r.timingHigh, lang)}`,
+    `${L.totalLabel}${sep}${r.high > 0 ? rangeText(r.low, r.high, lang) : formatMoney(0, lang)}`,
     "",
     `${L.sumDetail}${sep.trimEnd()}`,
   ];
   for (const i of r.items) {
     const amount = isZeroItem(i) ? "–" : rangeText(i.low, i.high, lang);
-    lines.push(`- ${i.t} [${L.tag[i.tag]}]: ${amount}${i.links[0] ? ` ${i.links[0][1]}` : ""}`);
+    lines.push(`- ${i.t} [${L.tag[i.tag]} · ${L.kind[i.kind]}]: ${amount}${i.links[0] ? ` ${i.links[0][1]}` : ""}`);
   }
   for (const c of r.cards) {
     if (c.links?.[0]) lines.push(`- ${c.t}: ${c.links[0][1]}`);

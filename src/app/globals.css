@@ -104,6 +104,7 @@ html.dark .leaflet-bar a {
   html,
   body {
     height: auto;
+    background: white;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }

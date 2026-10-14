@@ -4,7 +4,11 @@ import { useCallback, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type * as L from "leaflet";
 import { UI, type MeasureErrorKind } from "@/lib/i18n";
-import { OverpassHttpError, fetchFairways } from "@/lib/overpass";
+import { OverpassHttpError, bboxParam, fetchFairways, parseBBoxParam } from "@/lib/overpass";
+import { encodeQuote } from "@/lib/quote";
+import { setCourseName, setMeasurement, useCourseName, useQuoteSettings } from "@/lib/quote-store";
+import { reportError } from "@/lib/report-error";
+import { buildShareUrl, encodeView } from "@/lib/share";
 import { useLang } from "@/lib/preferences";
 import { processOverpassData } from "@/lib/area";
 import type { BBox, CourseMeasurement } from "@/lib/types";
@@ -51,10 +55,8 @@ export default function GolfCourseCalculator() {
   >(null);
 
   const mapRef = useRef<L.Map | null>(null);
-
-  const handleMapReady = useCallback((map: L.Map) => {
-    mapRef.current = map;
-  }, []);
+  const courseName = useCourseName();
+  const quoteSettings = useQuoteSettings();
 
   const runMeasure = useCallback(async (bboxOverride?: BBox) => {
     const map = mapRef.current;
@@ -75,13 +77,46 @@ export default function GolfCourseCalculator() {
         };
       }
       const overpassJson = await fetchFairways(bbox);
-      setResult(processOverpassData(overpassJson));
+      const measurement = processOverpassData(overpassJson);
+      setResult(measurement);
+      setMeasurement(measurement);
     } catch (err) {
-      setError(toMeasureError(err));
+      const measureError = toMeasureError(err);
+      setError(measureError);
+      reportError(`measure:${measureError.kind}${measureError.status ? `:${measureError.status}` : ""}`, err);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // A share link with m=1 measures again on open: the scan box (b=) if one was
+  // drawn, else the linked view (v=, applied by GolfMap).
+  const handleMapReady = useCallback(
+    (map: L.Map) => {
+      mapRef.current = map;
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("m") !== "1") return;
+      const box = parseBBoxParam(params.get("b"));
+      map.whenReady(() => {
+        if (box) setScanBox([box.south, box.west, box.north, box.east]);
+        void runMeasure(box ?? undefined);
+      });
+    },
+    [runMeasure],
+  );
+
+  const getShareUrl = useCallback(() => {
+    const map = mapRef.current;
+    const center = map?.getCenter();
+    const box = scanBox ? { south: scanBox[0], west: scanBox[1], north: scanBox[2], east: scanBox[3] } : null;
+    return buildShareUrl(window.location, {
+      v: map && center ? encodeView(center.lat, center.lng, map.getZoom()) : undefined,
+      m: result ? 1 : undefined,
+      b: box ? bboxParam(box) : undefined,
+      n: courseName ?? undefined,
+      ...encodeQuote(quoteSettings),
+    });
+  }, [scanBox, result, courseName, quoteSettings]);
 
   const getSearchBias = useCallback(() => {
     const map = mapRef.current;
@@ -94,6 +129,7 @@ export default function GolfCourseCalculator() {
     (place: PlaceResult) => {
       const map = mapRef.current;
       if (!map) return;
+      setCourseName(place.primary);
 
       if (place.bbox) {
         const [south, west, north, east] = place.bbox;
@@ -154,6 +190,8 @@ export default function GolfCourseCalculator() {
 
   const handleClear = useCallback(() => {
     setResult(null);
+    setMeasurement(null);
+    setCourseName(null);
     setError(null);
     setScanBox(null);
     setFirstCorner(null);
@@ -185,6 +223,7 @@ export default function GolfCourseCalculator() {
         onStartSelect={handleStartSelect}
         onCancelSelect={handleCancelSelect}
         onClear={handleClear}
+        getShareUrl={getShareUrl}
       />
     </div>
   );

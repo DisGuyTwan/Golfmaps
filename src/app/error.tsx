@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { UI } from "@/lib/i18n";
 import { useLang } from "@/lib/preferences";
 import { ui } from "@/components/ui";
+import { reportError } from "@/lib/report-error";
 
 /**
  * Route-level error boundary. The measurement path talks to three third-party
@@ -21,6 +22,7 @@ export default function Error({
 
   useEffect(() => {
     console.error(error);
+    reportError("render", error);
   }, [error]);
 
   return (

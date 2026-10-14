@@ -4,6 +4,7 @@ import { TURF_COLORS } from "@/lib/area";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import type { CourseMeasurement } from "@/lib/types";
 import type { MeasureError } from "./GolfCourseCalculator";
+import QuoteSection from "./QuoteSection";
 import { ui } from "./ui";
 
 interface MeasurePanelProps {
@@ -17,6 +18,7 @@ interface MeasurePanelProps {
   onStartSelect: () => void;
   onCancelSelect: () => void;
   onClear: () => void;
+  getShareUrl: () => string;
 }
 
 const CATEGORIES = ["fairway", "rough", "green", "tee"] as const;
@@ -32,6 +34,7 @@ export default function MeasurePanel({
   onStartSelect,
   onCancelSelect,
   onClear,
+  getShareUrl,
 }: MeasurePanelProps) {
   const t = UI[lang];
   const ac = (acres: number) => formatAcres(acres, lang);
@@ -165,6 +168,10 @@ export default function MeasurePanel({
           )}
 
         {result?.roughEstimated && <p className="text-[11px] text-faint">{t.roughNote}</p>}
+
+        {result && (result.found || result.boundaryOnly) && !error && (
+          <QuoteSection lang={lang} result={result} getShareUrl={getShareUrl} />
+        )}
 
         <p className="text-center text-[10px] text-faint">{t.attribution}</p>
       </div>

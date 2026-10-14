@@ -7,7 +7,15 @@ A completely free web app for quoting robotic mower jobs. It has three tabs:
 fairway, green, tee and rough, net of trees, buildings and parking.
 
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite
-tiles, the public Overpass API, and Photon for search.
+tiles, the public Overpass API, Photon for search and Statistics Canada for the
+gas price. Three small Vercel functions cache course lookups and the gas price
+and collect client errors in the runtime logs.
+
+The tabs work together: measure a course, choose what's actually mowed, and
+**Send to ROI** sizes the zero-turn crew and the Voyager fleet for those acres;
+the ROI tab prices grants and credits with the profile picked on the
+Incentives tab. Every tab has a **Copy link** (its inputs go in the URL, so a
+quote can be reopened or sent) and a **Print / PDF** for clients.
 
 Every tab is in **English (default) and French**: the EN | FR switch at the top
 right switches the whole app, including printouts and the 404 page. A sun/moon button switches between **light and dark
@@ -39,6 +47,15 @@ and sent to a client.
    rather than subtracted wholesale (`src/lib/area.ts`).
 5. Results are drawn on the map (layered course → rough → fairway → tee → green)
    and summarized in the side panel.
+6. **Acres for the quote**: measured turf isn't all robot-mowed. Choose the
+   categories (greens and tees are off by default: they're usually reel-mowed),
+   the share of the rough actually mowed (80% by default) or type the acreage by
+   hand, then Send to ROI, print the PDF report or copy a link that re-measures
+   the same area with the same settings.
+
+Lookups go through `/api/overpass` first, which Vercel's CDN caches for a day,
+so a course measured once is instant and survives busy mirrors; if the route
+fails, the browser calls the mirrors directly.
 
 ### How rough is handled
 
@@ -58,8 +75,10 @@ least often, so the app is deliberately careful about it:
 A second tab estimates first-year savings on robotic mowers and battery tools
 for a customer proposal: pick the province, profile (landscaper, golf course,
 farm, municipality, institution, developer, homeowner), structure and purchase,
-and it shows a savings range, a line-by-line breakdown with status and official
-links, other useful programs, and a "Copy my summary" button. Link straight to it
+and it shows two separate figures: **money kept** (grants and the refundable
+tax credit) and **tax deferred** (faster write-offs, which lower tax now but not
+over the equipment's life), then a line-by-line breakdown with status and
+official links, other useful programs, and a "Copy my summary" button. Link straight to it
 with `/#incentives`.
 
 The low end counts only rules in force; the high end adds items that need
@@ -71,15 +90,21 @@ tax advice.
 
 ## ROI Voyager tab
 
-A live ROI calculator for client meetings: one employee on a 60"
-zero-turn versus one Kress Voyager, over a 1 to 10 year horizon. It shows the
-total cost of each option, the profit recovered per year, cost per mowing hour,
-and payback/ROI, and recalculates on every keystroke. "Print / PDF" prints a
+A live ROI calculator for client meetings: a crew on 60" zero-turns versus
+Kress Voyagers **mowing the same acreage**, over a 1 to 10 year horizon. From the
+acres to mow per week it sizes the zero-turn crew (full-time equivalents and
+machines, at about 3 acres/h) and the Voyager fleet (7 or 19 acres per charge),
+adds Voyager supervision time, treats existing zero-turns as either due for
+replacement or already owned (resale value), and can deduct grants and credits
+from the Incentives tab. It shows total cost, profit per year, cost per acre
+mowed and payback/ROI, with the source and date of each default under its
+input, and recalculates on every keystroke. "Print / PDF" prints a
 one-page Letter summary, in the language on screen, to leave with the client. Link straight to it with
 `/#roi`. Formulas and sources are in `src/lib/roi.ts` (copy in
-`src/lib/roi-copy.ts`). Defaults are dated market data (gas ≈ $2.00/L, early
-October 2026; Hydro-Québec Rate G, April 1, 2026; KR800 10 kWh, KR804 38 kWh)
-and need refreshing over time.
+`src/lib/roi-copy.ts`). The gas price is fetched from Statistics Canada
+(Montréal, monthly) through `/api/gas-price`, cached a day; the other defaults
+are dated market data (Hydro-Québec Rate G, April 1, 2026; KR800 10 kWh,
+KR804 38 kWh) and need refreshing over time.
 
 ## Tech stack
 

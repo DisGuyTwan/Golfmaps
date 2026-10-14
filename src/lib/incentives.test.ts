@@ -112,12 +112,33 @@ describe("computeIncentives: profiles", () => {
   });
 });
 
+describe("money kept vs tax timing", () => {
+  it("splits the totals: the ITC is kept, write-offs are timing", () => {
+    const r = run();
+    const itc = r.items.find((i) => i.t === STRINGS.en.i_itc)!;
+    const cca = r.items.find((i) => i.t === STRINGS.en.i_ccaR)!;
+    expect([itc.kind, cca.kind]).toEqual(["kept", "timing"]);
+    expect([r.keptLow, r.keptHigh]).toEqual([0, itc.high]);
+    expect(r.timingLow).toBeCloseTo(cca.low, 6);
+    expect(r.keptLow + r.timingLow).toBeCloseTo(r.low, 6);
+    expect(r.keptHigh + r.timingHigh).toBeCloseTo(r.high, 6);
+  });
+  it("grants and rebates count as kept", () => {
+    const farm = run({ who: "farm" });
+    expect(farm.items.find((i) => i.t === STRINGS.en.i_pv)?.kind).toBe("kept");
+    const home = run({ who: "homeowner", buyRobot: false, buyTools: true, toolAmt: 300 });
+    expect([home.keptLow, home.timingHigh]).toEqual([100, 0]);
+  });
+});
+
 describe("summaryText", () => {
   it("lists profile, purchase, range and links in the chosen language", () => {
     const s = { ...base };
-    const fr = summaryText(s, computeIncentives(s, "fr"), "fr");
+    const fr = summaryText(s, computeIncentives(s, "fr"), "fr").replace(/[\u00a0\u202f]/g, " ");
     expect(fr).toContain("Terrain de golf, Québec, Société par actions (inc.)");
-    expect(fr).toContain("[À confirmer]");
+    expect(fr).toContain("[À confirmer · Argent conservé]");
+    expect(fr).toContain("Argent conservé (subventions et crédit d’impôt) : 0 $ – 7 200 $");
+    expect(fr).toContain("Impôt reporté (radiations accélérées) : 878 $ – 2 050 $");
     expect(fr.endsWith("Recherche au 14 octobre 2026.")).toBe(true);
     expect(fr).not.toContain("—");
   });

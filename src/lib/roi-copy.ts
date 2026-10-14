@@ -1,103 +1,92 @@
 /**
- * ROI Voyager tab copy. The French is the handoff's original text, kept word
- * for word; the English is a translation of it. Numbers are formatted by the
- * caller (roi.ts formatters), so only words live here.
+ * ROI Voyager tab copy. The French started from the handoff's text; the
+ * English is a translation of it. Numbers are formatted by the caller (roi.ts
+ * formatters), so only words live here.
  */
 import type { RoiLang } from "./roi";
 
-export interface RoiCopy {
-  eyebrow: string;
-  title: string;
-  lede: string;
-  model: string;
-  model7: string;
-  model19: string;
-  modelCustom: string;
-  voyPrice: string;
-  voyEnergy: string;
-  energyHint: (days: string, kwh: number, kwhSeason: string) => string;
-  voyMaint: string;
-  crew: string;
-  wage: string;
-  burden: string;
-  weeks: string;
-  hoursPerWeek: string;
-  hoursPerSeason: (hours: string) => string;
-  ztMowHrs: string;
-  ztMowHint: string;
-  voyMowHrs: string;
-  mowTotals: (zt: string, voy: string) => string;
-  ztPrice: string;
-  ztLph: string;
-  gasPrice: string;
-  ztFuel: string;
-  fuelHint: (hours: string, lph: string, litres: string) => string;
-  ztMaint: string;
-  horizon: string;
-  years: string;
-  sourcesNote: string;
-  comparison: string;
-  equipment: string;
-  energy: string;
-  maintenance: string;
-  labor: string;
-  total: string;
-  doMore: string;
-  profitTitle: string;
-  perYear: string;
-  overHorizon: string;
-  cphTitle: string;
-  ztCrew: string;
-  depreciation: string;
-  ztMaintRow: string;
-  fuel: string;
-  laborPaid: string;
-  voyMaintRow: string;
-  electricity: string;
-  mowHoursSeason: string;
-  opCostYear: string;
-  cphRow: string;
-  cphSaving: (amount: string, pct: number) => string;
-  depreciationNote: string;
-  paybackTitle: string;
-  payback: string;
-  roiHorizon: string;
-  paybackNote: string;
-}
+const plural = (n: number, word: string, suffix = "s") => (n > 1 ? `${word}${suffix}` : word);
 
-const fr: RoiCopy = {
+const fr = {
   eyebrow: "Kress Voyager · Québec · données au 14 octobre 2026",
   title: "Calculateur ROI — Tonte Autonome Voyager",
-  lede: "Ce qu'une Kress Voyager fait économiser par rapport à un employé sur une zero-turn de 60 po : coût total, coût par heure de tonte, délai de récupération et rendement. Tout se recalcule en direct.",
+  lede: "Ce que des Kress Voyager font économiser par rapport à une équipe sur zero-turn de 60 po, pour la même superficie : coût total, coût par acre, délai de récupération et rendement. Tout se recalcule en direct.",
+
+  site: "Terrain à tondre",
+  area: "Superficie à tondre (acres)",
+  useAcreage: (ac: string) => `Utiliser l'onglet Superficie : ${ac} ac`,
+  mowsPerWeek: "Tontes par semaine",
+  weeklyAcres: (ac: string) => `= ${ac} acres à tondre par semaine`,
+
   model: "Modèle",
   model7: "7 acres/jour — 85 000 $ (batterie 10 kWh)",
   model19: "19 acres/jour (60 po) — 115 000 $ (batterie 38 kWh)",
   modelCustom: "Personnalisé",
-  voyPrice: "Prix d'équipement ($)",
+  voyPrice: "Prix par Voyager ($)",
+  voyAcresPerDay: "Acres par charge (1 charge/jour)",
+  voyDaysPerWeek: "Jours de tonte / semaine",
+  voyDaysHint: "Elle peut tondre 7 jours sur 7.",
+  voyMaint: "Entretien / an par Voyager ($)",
+  supHrs: "Supervision (h/jour par Voyager)",
+  supHint: "Déplacements entre les zones, cartographie, dégagements, surveillance.",
   voyEnergy: "Énergie / an ($) — auto",
-  energyHint: (days, kwh, kwhSeason) => `≈ ${days} journées × ${kwh} kWh = ${kwhSeason} kWh/saison`,
-  voyMaint: "Entretien / an ($)",
+  energyHint: (charges: string, kwh: number, kwhSeason: string) => `≈ ${charges} charges × ${kwh} kWh = ${kwhSeason} kWh/saison`,
+  fleet: (n: number) => `= ${n} Voyager ${plural(n, "nécessaire")}`,
+
   crew: "Équipe zero-turn remplacée — saisonnier",
   wage: "Salaire horaire ($/h)",
   burden: "Charges sociales (%)",
   weeks: "Nombre de semaines / saison",
   hoursPerWeek: "Heures / semaine",
-  hoursPerSeason: (hours) => `= ${hours} heures / saison`,
+  hoursPerSeason: (hours: string) => `= ${hours} heures / saison`,
   ztMowHrs: "Heures de tonte / jour — zero-turn",
   ztMowHint: "Quart de 8 h moins déplacements, dîner, pauses",
-  voyMowHrs: "Heures de tonte / jour — Voyager",
-  mowTotals: (zt, voy) => `= ${zt} h de tonte zero-turn / ${voy} h Voyager par saison`,
+  ztAcresPerHour: "Rendement zero-turn (acres/h)",
+  crewLine: (fte: string, machines: number, hours: string) =>
+    `= ${fte} opérateur à temps plein sur ${machines} zero-turn, ${hours} h de tonte par saison`,
+  ztStatus: "Zero-turn actuelles",
+  ztReplace: "À remplacer : achat évité",
+  ztOwn: "Déjà payées : on les vend",
   ztPrice: "Prix tondeuse zero-turn ($)",
+  ztResale: "Valeur de revente par zero-turn ($)",
   ztLph: "Consommation (L/h)",
   gasPrice: "Prix essence ($/L)",
   ztFuel: "Essence / saison ($) — auto",
-  fuelHint: (hours, lph, litres) => `≈ ${hours} h × ${lph} L/h = ${litres} L/saison`,
-  ztMaint: "Entretien / saison ($)",
+  fuelHint: (hours: string, lph: string, litres: string) => `≈ ${hours} h × ${lph} L/h = ${litres} L/saison`,
+  ztMaint: "Entretien / saison par zero-turn ($)",
+
+  incSection: "Aides et crédits d'impôt",
+  incMode: "Déduire de l'investissement Voyager",
+  incNone: "Aucun",
+  incLow: (amount: string) => `En vigueur seulement : ${amount}`,
+  incHigh: (amount: string) => `Avec les éléments à confirmer : ${amount}`,
+  incHint: (profile: string) =>
+    `Subventions et crédit d'impôt (pas les radiations, qui ne font que devancer l'économie d'impôt), selon l'onglet Aides pour : ${profile}.`,
+
   horizon: "Horizon",
   years: "Horizon (années)",
+
+  asOf: {
+    price: "Prix Kress, octobre 2026",
+    capacity: "Selon Kress (acres par charge)",
+    supervision: "Estimation à ajuster",
+    wage: "Médiane 2023-2025, Québec.ca",
+    burden: "Taux 2026",
+    ztRate: "60 po ≈ 12 km/h, 65 % d'efficacité",
+    ztPrice: "Prix affichés convertis, octobre 2026",
+    resale: "Estimation, zero-turn de quelques saisons",
+    maint: "Estimation",
+    gasDefault: "Régie de l'énergie, début octobre 2026",
+    gasLive: (month: string) => `Statistique Canada, Montréal, ${month} (mis à jour chaque jour)`,
+    hq: "Tarif G d'Hydro-Québec au 1er avril 2026",
+  },
+
   sourcesNote:
-    "Salaire par défaut (23 $/h) : médiane québécoise de 22 $/h pour les manœuvres en aménagement paysager (CNP 85121, Québec.ca, moyenne 2023-2025), ajustée pour un opérateur de tondeuse commerciale. Charges sociales par défaut (25 %) : RRQ 6,3 % + AE ≈ 1,82 % + RQAP 0,602 % + FSS 1,65 à 4,26 % + vacances 4 % + jours fériés + CNESST (taux aménagement paysager à confirmer). Zero-turn 60 po commercial (25 000 $) : Exmark Lazer Z X et Toro Z Master 6000 affichés à environ 18 800 à 19 600 $ US, convertis en $ CA avec escompte concessionnaire. Essence calculée automatiquement : 5,3 L/h (fiche John Deere Z965M, 60 po) × heures de tonte réelles × environ 2,00 $/L (essence ordinaire, relevé de la Régie de l'énergie, début octobre 2026). Entretien zero-turn (3 000 $/saison) : estimation, non vérifiée. Énergie Voyager calculée automatiquement : une charge complète par journée de travail de 8 h, selon la capacité de batterie du modèle choisi, facturée au tarif G d'Hydro-Québec, tarif commercial petite puissance (12,388 ¢/kWh pour les 15 090 premiers kWh du mois, en vigueur au 1er avril 2026).",
+    "Salaire par défaut (23 $/h) : médiane québécoise de 22 $/h pour les manœuvres en aménagement paysager (CNP 85121, Québec.ca, moyenne 2023-2025), ajustée pour un opérateur de tondeuse commerciale. Charges sociales par défaut (25 %) : RRQ 6,3 % + AE ≈ 1,82 % + RQAP 0,602 % + FSS 1,65 à 4,26 % + vacances 4 % + jours fériés + CNESST (taux aménagement paysager à confirmer). Zero-turn 60 po commercial (25 000 $) : Exmark Lazer Z X et Toro Z Master 6000 affichés à environ 18 800 à 21 300 $ US, convertis en $ CA avec escompte concessionnaire. Rendement zero-turn (3 acres/h) : plateau de 60 po à environ 12 km/h avec 65 % d'efficacité au champ. Essence calculée automatiquement : 5,3 L/h (fiche John Deere Z965M, 60 po) × heures de tonte requises × prix de l'essence ordinaire (Statistique Canada, Montréal, ou 2,00 $/L, Régie de l'énergie, début octobre 2026). Entretien zero-turn (3 000 $/saison) : estimation, non vérifiée. Capacité Voyager selon Kress : jusqu'à 7 acres par charge (KR800, 10 kWh) et 19 acres par charge (KR804, 38 kWh). Énergie Voyager : une charge complète par tranche de superficie, facturée au tarif G d'Hydro-Québec (12,388 ¢/kWh pour les 15 090 premiers kWh du mois, en vigueur au 1er avril 2026). Supervision (0,5 h/jour) et valeur de revente (8 000 $) : estimations à ajuster.",
+
   comparison: "Comparaison des coûts",
+  colZt: (n: number) => `Zero-turn ×${n}`,
+  colVoy: (n: number) => `Voyager ×${n}`,
   equipment: "Équipement",
   energy: "Énergie",
   maintenance: "Entretien",
@@ -107,39 +96,57 @@ const fr: RoiCopy = {
   profitTitle: "Profit récupéré sur le travail existant",
   perYear: "/ an",
   overHorizon: " sur l'horizon complet",
-  cphTitle: "Coût par heure de tonte (annuel)",
-  ztCrew: "Homme + zero-turn",
+  cpaTitle: "Coût par acre tondu (annuel)",
+  ztCrew: "Équipe + zero-turn",
   depreciation: "Amortissement",
   ztMaintRow: "Entretien / réparations",
   fuel: "Essence",
-  laborPaid: "Main-d'œuvre (heures payées)",
+  laborPaid: "Main-d'œuvre (part des quarts payés)",
   voyMaintRow: "Entretien / lames",
   electricity: "Électricité",
-  mowHoursSeason: "Heures de tonte / saison",
+  supervision: "Supervision",
+  acresSeason: "Acres tondus / saison",
   opCostYear: "Coût d'exploitation / an",
-  cphRow: "Coût / heure de tonte",
-  cphSaving: (amount, pct) => `Économie : ${amount} par heure de tonte (${pct} % de moins)`,
+  cpaRow: "Coût / acre tondu",
+  cpaSaving: (amount: string, pct: number) => `Économie : ${amount} par acre tondu (${pct} % de moins)`,
+  cpaMore: (amount: string) => `Les Voyager coûtent ${amount} de plus par acre tondu`,
   depreciationNote:
-    "Amortissement linéaire sur l'horizon choisi, sans valeur résiduelle. Main-d'œuvre zero-turn = toutes les heures payées (pas seulement les heures de tonte), car l'employé est payé pour son quart complet.",
+    "Amortissement linéaire sur l'horizon choisi, sans valeur résiduelle. Main-d'œuvre zero-turn = part des quarts payés que la tonte occupe (heures de tonte requises ÷ heures de tonte par quart); le reste du temps de l'équipe sert à d'autres tâches et n'est pas compté comme économie. La supervision des Voyager est comptée au même salaire chargé.",
   paybackTitle: "Délai de récupération et rendement",
   payback: "Délai de récupération",
   roiHorizon: "ROI sur l'horizon",
   paybackNote:
-    "Investissement net = prix Voyager − prix zero-turn évité. Économies d'exploitation / an = (main-d'œuvre + essence + entretien zero-turn) − (électricité + entretien Voyager). Délai de récupération = investissement net ÷ économies d'exploitation / an, exprimé en années et mois. ROI = (économies d'exploitation sur l'horizon − investissement net) ÷ investissement net.",
+    "Investissement net = prix des Voyager − aides et crédits déduits − prix des zero-turn évitées (ou leur valeur de revente si elles sont déjà payées). Économies d'exploitation / an = (main-d'œuvre + essence + entretien zero-turn) − (électricité + entretien + supervision Voyager). Délai de récupération = investissement net ÷ économies d'exploitation / an, exprimé en années et mois. ROI = (économies d'exploitation sur l'horizon − investissement net) ÷ investissement net.",
 };
+
+export type RoiCopy = typeof fr;
 
 const en: RoiCopy = {
   eyebrow: "Kress Voyager · Quebec · data as of October 14, 2026",
   title: "ROI Calculator: Voyager Autonomous Mowing",
-  lede: "What one Kress Voyager saves compared with an employee on a 60 in. zero-turn: total cost, cost per mowing hour, payback and return. Everything recalculates live.",
+  lede: "What Kress Voyagers save compared with a crew on 60 in. zero-turns mowing the same acreage: total cost, cost per acre, payback and return. Everything recalculates live.",
+
+  site: "Area to mow",
+  area: "Area to mow (acres)",
+  useAcreage: (ac) => `Use the Acreage tab: ${ac} ac`,
+  mowsPerWeek: "Mowings per week",
+  weeklyAcres: (ac) => `= ${ac} acres to mow per week`,
+
   model: "Model",
   model7: "7 acres/day: $85,000 (10 kWh battery)",
   model19: "19 acres/day (60 in.): $115,000 (38 kWh battery)",
   modelCustom: "Custom",
-  voyPrice: "Equipment price ($)",
+  voyPrice: "Price per Voyager ($)",
+  voyAcresPerDay: "Acres per charge (1 charge/day)",
+  voyDaysPerWeek: "Mowing days / week",
+  voyDaysHint: "It can mow 7 days a week.",
+  voyMaint: "Maintenance / year per Voyager ($)",
+  supHrs: "Supervision (h/day per Voyager)",
+  supHint: "Moving it between areas, mapping, clearing jams, checking on it.",
   voyEnergy: "Energy / year ($), auto",
-  energyHint: (days, kwh, kwhSeason) => `≈ ${days} workdays × ${kwh} kWh = ${kwhSeason} kWh/season`,
-  voyMaint: "Maintenance / year ($)",
+  energyHint: (charges, kwh, kwhSeason) => `≈ ${charges} charges × ${kwh} kWh = ${kwhSeason} kWh/season`,
+  fleet: (n) => `= ${n} ${plural(n, "Voyager")} needed`,
+
   crew: "Zero-turn crew replaced, seasonal",
   wage: "Hourly wage ($/h)",
   burden: "Payroll burden (%)",
@@ -148,19 +155,52 @@ const en: RoiCopy = {
   hoursPerSeason: (hours) => `= ${hours} hours / season`,
   ztMowHrs: "Mowing hours / day, zero-turn",
   ztMowHint: "8 h shift minus travel, lunch and breaks",
-  voyMowHrs: "Mowing hours / day, Voyager",
-  mowTotals: (zt, voy) => `= ${zt} h of zero-turn mowing / ${voy} h Voyager per season`,
+  ztAcresPerHour: "Zero-turn output (acres/h)",
+  crewLine: (fte, machines, hours) =>
+    `= ${fte} full-time operator on ${machines} ${plural(machines, "zero-turn")}, ${hours} h of mowing per season`,
+  ztStatus: "Current zero-turns",
+  ztReplace: "Due for replacement: purchase avoided",
+  ztOwn: "Already owned: sell them",
   ztPrice: "Zero-turn mower price ($)",
+  ztResale: "Resale value per zero-turn ($)",
   ztLph: "Fuel use (L/h)",
   gasPrice: "Gas price ($/L)",
   ztFuel: "Gas / season ($), auto",
   fuelHint: (hours, lph, litres) => `≈ ${hours} h × ${lph} L/h = ${litres} L/season`,
-  ztMaint: "Maintenance / season ($)",
+  ztMaint: "Maintenance / season per zero-turn ($)",
+
+  incSection: "Grants and tax credits",
+  incMode: "Deduct from the Voyager investment",
+  incNone: "None",
+  incLow: (amount) => `In force only: ${amount}`,
+  incHigh: (amount) => `Including items to confirm: ${amount}`,
+  incHint: (profile) =>
+    `Grants and tax credit (not write-offs, which only bring the tax saving forward), from the Incentives tab for: ${profile}.`,
+
   horizon: "Horizon",
   years: "Horizon (years)",
+
+  asOf: {
+    price: "Kress pricing, October 2026",
+    capacity: "Per Kress (acres per charge)",
+    supervision: "Estimate, adjust as needed",
+    wage: "2023-2025 median, Québec.ca",
+    burden: "2026 rates",
+    ztRate: "60 in. at ≈ 12 km/h, 65% efficiency",
+    ztPrice: "Converted list prices, October 2026",
+    resale: "Estimate, a few seasons old",
+    maint: "Estimate",
+    gasDefault: "Régie de l'énergie, early October 2026",
+    gasLive: (month) => `Statistics Canada, Montréal, ${month} (refreshed daily)`,
+    hq: "Hydro-Québec Rate G, April 1, 2026",
+  },
+
   sourcesNote:
-    "Default wage ($23/h): Quebec median of $22/h for landscaping labourers (NOC 85121, Québec.ca, 2023-2025 average), adjusted for a commercial mower operator. Default payroll burden (25%): QPP 6.3% + EI ≈ 1.82% + QPIP 0.602% + HSF 1.65 to 4.26% + 4% vacation + statutory holidays + CNESST (landscaping rate to be confirmed). Commercial 60 in. zero-turn ($25,000): Exmark Lazer Z X and Toro Z Master 6000 listed at about US$18,800 to US$19,600, converted to CAD with a dealer discount. Gas calculated automatically: 5.3 L/h (John Deere Z965M spec sheet, 60 in.) × actual mowing hours × about $2.00/L (regular gas, Régie de l'énergie survey, early October 2026). Zero-turn maintenance ($3,000/season): estimate, not verified. Voyager energy calculated automatically: one full charge per 8 h workday, based on the chosen model's battery capacity, billed at Hydro-Québec Rate G, small-power commercial rate (12.388¢/kWh for the first 15,090 kWh each month, in effect April 1, 2026).",
+    "Default wage ($23/h): Quebec median of $22/h for landscaping labourers (NOC 85121, Québec.ca, 2023-2025 average), adjusted for a commercial mower operator. Default payroll burden (25%): QPP 6.3% + EI ≈ 1.82% + QPIP 0.602% + HSF 1.65 to 4.26% + 4% vacation + statutory holidays + CNESST (landscaping rate to be confirmed). Commercial 60 in. zero-turn ($25,000): Exmark Lazer Z X and Toro Z Master 6000 listed at about US$18,800 to US$21,300, converted to CAD with a dealer discount. Zero-turn output (3 acres/h): 60 in. deck at about 12 km/h with 65% field efficiency. Gas calculated automatically: 5.3 L/h (John Deere Z965M spec sheet, 60 in.) × mowing hours needed × regular gas price (Statistics Canada, Montréal, or $2.00/L, Régie de l'énergie, early October 2026). Zero-turn maintenance ($3,000/season): estimate, not verified. Voyager capacity per Kress: up to 7 acres per charge (KR800, 10 kWh) and 19 acres per charge (KR804, 38 kWh). Voyager energy: one full charge per batch of acreage, billed at Hydro-Québec Rate G (12.388¢/kWh for the first 15,090 kWh each month, in effect April 1, 2026). Supervision (0.5 h/day) and resale value ($8,000): estimates to adjust.",
+
   comparison: "Cost comparison",
+  colZt: (n) => `Zero-turn ×${n}`,
+  colVoy: (n) => `Voyager ×${n}`,
   equipment: "Equipment",
   energy: "Energy",
   maintenance: "Maintenance",
@@ -170,25 +210,27 @@ const en: RoiCopy = {
   profitTitle: "Profit recovered on existing work",
   perYear: "/ year",
   overHorizon: " over the full horizon",
-  cphTitle: "Cost per mowing hour (annual)",
-  ztCrew: "Worker + zero-turn",
+  cpaTitle: "Cost per acre mowed (annual)",
+  ztCrew: "Crew + zero-turn",
   depreciation: "Depreciation",
   ztMaintRow: "Maintenance / repairs",
   fuel: "Gas",
-  laborPaid: "Labour (paid hours)",
+  laborPaid: "Labour (share of paid shifts)",
   voyMaintRow: "Maintenance / blades",
   electricity: "Electricity",
-  mowHoursSeason: "Mowing hours / season",
+  supervision: "Supervision",
+  acresSeason: "Acres mowed / season",
   opCostYear: "Operating cost / year",
-  cphRow: "Cost / mowing hour",
-  cphSaving: (amount, pct) => `Savings: ${amount} per mowing hour (${pct}% less)`,
+  cpaRow: "Cost / acre mowed",
+  cpaSaving: (amount, pct) => `Savings: ${amount} per acre mowed (${pct}% less)`,
+  cpaMore: (amount) => `Voyagers cost ${amount} more per acre mowed`,
   depreciationNote:
-    "Straight-line depreciation over the chosen horizon, no residual value. Zero-turn labour = all paid hours (not just mowing hours), because the employee is paid for the full shift.",
+    "Straight-line depreciation over the chosen horizon, no residual value. Zero-turn labour = the share of paid shifts the mowing takes (mowing hours needed ÷ mowing hours per shift); the rest of the crew's time goes to other work and isn't counted as a saving. Voyager supervision is costed at the same loaded wage.",
   paybackTitle: "Payback and return",
   payback: "Payback period",
   roiHorizon: "ROI over the horizon",
   paybackNote:
-    "Net investment = Voyager price − zero-turn price avoided. Operating savings / year = (labour + gas + zero-turn maintenance) − (electricity + Voyager maintenance). Payback = net investment ÷ operating savings / year, in years and months. ROI = (operating savings over the horizon − net investment) ÷ net investment.",
+    "Net investment = Voyager price − grants and credits deducted − zero-turn purchase avoided (or their resale value if already owned). Operating savings / year = (labour + gas + zero-turn maintenance) − (electricity + Voyager maintenance and supervision). Payback = net investment ÷ operating savings / year, in years and months. ROI = (operating savings over the horizon − net investment) ÷ net investment.",
 };
 
 export const ROI_COPY: Record<RoiLang, RoiCopy> = { fr, en };
