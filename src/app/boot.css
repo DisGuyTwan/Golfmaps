@@ -7,7 +7,7 @@
  * Timeline, from page load:
  *   0.00–2.40 s  progress arc, bar and percentage run to 100
  *   0.35–2.10 s  the mower drives 8 passes, each stripe filling behind it
- *   0.50–0.85 s  wordmark letters rise in
+ *   0.50–1.05 s  CALCULATOR wordmark letters rise in
  *   0.70–2.30 s  three boot-log lines appear, each confirmed "OK"
  * If scripts never load it hides itself after 8 s instead of blocking the page.
  */
@@ -273,9 +273,9 @@
 
 .boot-word {
   display: flex;
-  gap: 0.42em;
-  margin-left: 0.42em;
-  font-size: clamp(30px, 6.5vmin, 58px);
+  gap: 0.24em;
+  margin-left: 0.24em;
+  font-size: clamp(24px, 5.6vmin, 54px);
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1;

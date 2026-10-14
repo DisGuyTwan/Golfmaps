@@ -139,7 +139,7 @@ export function TabHeader({
   eyebrow: string;
   title: string;
   lede: string;
-  /** Suggested PDF file name, e.g. "Kress - ROI Voyager". */
+  /** Suggested PDF file name, e.g. "Calculator - ROI Voyager". */
   printTitle: string;
   /** Builds the share link with the tab's current inputs. */
   getShareUrl?: () => string;

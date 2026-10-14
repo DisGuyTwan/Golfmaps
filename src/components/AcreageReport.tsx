@@ -26,10 +26,10 @@ export default function AcreageReport() {
     <div className="hidden bg-white text-ink print:block">
       <TabHeader
         lang={lang}
-        eyebrow={`Kress · ${date}`}
+        eyebrow={`Calculator · ${date}`}
         title={t.reportTitle}
         lede={t.reportLede}
-        printTitle={`Kress - ${t.tabs.acreage}`}
+        printTitle={`Calculator - ${t.tabs.acreage}`}
       />
       <div className="space-y-4 px-4 py-4">
         {!m ? (

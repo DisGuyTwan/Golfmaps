@@ -8,11 +8,11 @@ describe("share links", () => {
   });
   it("builds a link with the query before the tab hash, dropping empty values", () => {
     const url = buildShareUrl(
-      { origin: "https://kress.prodig-e.com", pathname: "/" },
+      { origin: "https://calculator.prodig-e.com", pathname: "/" },
       { ...prefixed("r_", { area: 60, model: "19", note: "" }), m: true },
       "#roi",
     );
-    expect(url).toBe("https://kress.prodig-e.com/?r_area=60&r_model=19&m=1#roi");
+    expect(url).toBe("https://calculator.prodig-e.com/?r_area=60&r_model=19&m=1#roi");
   });
   it("round-trips a map view and rejects nonsense", () => {
     expect(decodeView(encodeView(46.343212, -72.542812, 16.4))).toEqual({ lat: 46.34321, lon: -72.54281, zoom: 16 });

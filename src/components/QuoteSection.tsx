@@ -109,7 +109,7 @@ export default function QuoteSection({
         >
           {t.sendToRoi}
         </button>
-        <button type="button" onClick={() => printAs(`Kress - ${t.tabs.acreage}`)} className={ui.btnSecondary}>
+        <button type="button" onClick={() => printAs(`Calculator - ${t.tabs.acreage}`)} className={ui.btnSecondary}>
           {t.reportPdf}
         </button>
         <CopyLinkButton lang={lang} getUrl={getShareUrl} className={ui.btnSecondary} />

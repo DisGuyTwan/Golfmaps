@@ -270,7 +270,7 @@ export default function IncentivesTab() {
         eyebrow={L.eyebrow}
         title={L.h1}
         lede={L.lede}
-        printTitle={`Kress - ${UI[lang].tabs.incentives}`}
+        printTitle={`Calculator - ${UI[lang].tabs.incentives}`}
         getShareUrl={() => buildShareUrl(window.location, prefixed("i_", { ...form }), "#incentives")}
       />
 

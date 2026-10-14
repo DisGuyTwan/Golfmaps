@@ -231,7 +231,7 @@ export default function RoiTab() {
         eyebrow={t.eyebrow}
         title={t.title}
         lede={t.lede}
-        printTitle={`Kress - ${UI[lang].tabs.roi}`}
+        printTitle={`Calculator - ${UI[lang].tabs.roi}`}
         getShareUrl={shareUrl}
       />
 

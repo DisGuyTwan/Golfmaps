@@ -1,4 +1,8 @@
-# Kress
+# Calculator
+
+The app is called **Calculator** (calculator.prodig-e.com). "Kress" only
+names the mower product (Kress Voyager, KR800/KR804); don't use it as the
+app's brand.
 
 Next.js 16 App Router + React 19 + TypeScript + Tailwind. Measures golf course
 turf acreage from OpenStreetMap for robotic mower quoting, plus an

@@ -86,7 +86,7 @@ const en = {
   tryAgain: "Try again",
   notFoundTitle: "Page not found.",
   notFoundBody: "This address doesn’t exist. The tools are all on the home page.",
-  backHome: "Back to Kress",
+  backHome: "Back to Calculator",
 };
 
 export type UiStrings = typeof en;
@@ -170,7 +170,7 @@ const fr: UiStrings = {
   tryAgain: "Réessayer",
   notFoundTitle: "Page introuvable.",
   notFoundBody: "Cette adresse n’existe pas. Tous les outils sont sur la page d’accueil.",
-  backHome: "Retour à Kress",
+  backHome: "Retour à Calculator",
 };
 
 export const UI: Record<Lang, UiStrings> = { en, fr };

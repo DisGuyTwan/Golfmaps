@@ -4,7 +4,7 @@ import { PREFERENCES_BOOT_SCRIPT } from "@/lib/preferences-boot";
 import "./globals.css";
 import "./boot.css";
 
-const APP_NAME = "Kress";
+const APP_NAME = "Calculator";
 const description =
   "Robotic mower quoting tools: measure a golf course's turf acreage, estimate grant and tax savings in Quebec and Ontario, and compare a Kress Voyager with a zero-turn crew.";
 

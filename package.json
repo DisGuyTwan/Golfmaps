@@ -1,8 +1,8 @@
 {
-  "name": "kress",
+  "name": "calculator",
   "version": "0.1.0",
   "private": true,
-  "description": "Kress sales tools, in English and French: golf course turf acreage from OpenStreetMap, grant and tax savings on robotic mowers, and a Voyager vs zero-turn ROI calculator.",
+  "description": "Calculator (calculator.prodig-e.com): robotic mower sales tools in English and French: golf course turf acreage from OpenStreetMap, grant and tax savings on robotic mowers, and a Voyager vs zero-turn ROI calculator.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

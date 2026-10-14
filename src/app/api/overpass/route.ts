@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     const data = await fetchFromMirrorsHedged(bbox, {
       hedgeMs: 8000,
       timeoutMs: 50000,
-      headers: { "User-Agent": "Kress acreage tool (https://kress.prodig-e.com)" },
+      headers: { "User-Agent": "Prodig-e Calculator (https://calculator.prodig-e.com)" },
     });
     return Response.json(data, {
       headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800" },

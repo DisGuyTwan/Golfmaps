@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const SEEN_KEY = "kress-booted";
+const SEEN_KEY = "calculator-booted";
 /** Full sequence on the first load of a session; a quick fade on later loads. */
 const FIRST_MS = 2700;
 const REPEAT_MS = 700;
@@ -68,7 +68,7 @@ const LOG: { en: string; fr: string }[] = [
  *   with telemetry readouts;
  * - emblem: rotating dashed ring, dial ticks, a progress arc, and a robot mower
  *   laying down alternating mowing stripes under a radar sweep;
- * - wordmark, tagline, a three-line boot log and a progress bar counting to 100.
+ * - CALCULATOR wordmark, tagline, a three-line boot log and a progress bar counting to 100.
  * Styles, the reduced-motion version and the no-JavaScript failsafe live in
  * src/app/boot.css.
  */
@@ -121,7 +121,7 @@ export default function BootSplash() {
         </span>
         <span className="boot-tele boot-tele-tr">OSM · OVERPASS · STATCAN</span>
         <span className="boot-tele boot-tele-bl">46.3432° N · 72.5428° W</span>
-        <span className="boot-tele boot-tele-br">KRESS · 2026.10</span>
+        <span className="boot-tele boot-tele-br">CALCULATOR · 2026.10</span>
       </div>
 
       <div className="boot-center">
@@ -202,8 +202,8 @@ export default function BootSplash() {
         </div>
 
         <div className="boot-word">
-          {"KRESS".split("").map((letter, i) => (
-            <span key={i} style={{ animationDelay: `${0.5 + i * 0.07}s` }}>
+          {"CALCULATOR".split("").map((letter, i) => (
+            <span key={i} style={{ animationDelay: `${0.5 + i * 0.05}s` }}>
               {letter}
             </span>
           ))}

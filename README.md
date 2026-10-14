@@ -1,6 +1,6 @@
-# Kress
+# Calculator
 
-Live at <https://kress.prodig-e.com>.
+Live at <https://calculator.prodig-e.com>.
 
 A completely free web app for quoting robotic mower jobs. It has three tabs:
 **Acreage**, **Incentives** and **ROI Voyager**. Search for a course (or pan to it), and it measures the turf acreage from OpenStreetMap — broken down by
