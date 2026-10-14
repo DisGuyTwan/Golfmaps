@@ -8,6 +8,7 @@ import { quoteAcres } from "@/lib/quote";
 import { useIncentiveProfile, useMeasurement, useQuoteSettings, useRoiImport } from "@/lib/quote-store";
 import { ROI_COPY } from "@/lib/roi-copy";
 import {
+  DEFAULT_GAS_PERIOD,
   ROI_DEFAULTS,
   VOYAGER_PRESETS,
   computeRoi,
@@ -148,6 +149,8 @@ export default function RoiTab() {
       .then((gas: { price?: unknown; period?: unknown } | null) => {
         if (cancelled || gasTouched.current || !gas) return;
         if (typeof gas.price !== "number" || typeof gas.period !== "string") return;
+        // StatCan lags a month or more: never replace a more recent default.
+        if (gas.period < DEFAULT_GAS_PERIOD) return;
         const price = gas.price;
         setFields((prev) => ({ ...prev, gasPrice: price.toFixed(2) }));
         setGasLivePeriod(gas.period);

@@ -113,6 +113,69 @@ export async function fetchFromMirrors(
 }
 
 /**
+ * Server version: hedged requests. Starts the first mirror, then the next one
+ * if no answer came within `hedgeMs` (or straight away if a mirror fails),
+ * resolves with the first good answer and cancels the rest. A slow mirror then
+ * costs seconds, not the whole budget. A 400 (bad or too-large query) fails
+ * the same way everywhere, so it rejects at once.
+ */
+export function fetchFromMirrorsHedged(
+  bbox: BBox,
+  { hedgeMs = 8000, timeoutMs = 50000, headers = {} as Record<string, string>, endpoints = OVERPASS_ENDPOINTS } = {},
+): Promise<unknown> {
+  const body = `data=${encodeURIComponent(buildFairwayQuery(bbox))}`;
+  const deadline = Date.now() + timeoutMs;
+
+  return new Promise((resolve, reject) => {
+    const controllers: AbortController[] = [];
+    let next = 0;
+    let running = 0;
+    let done = false;
+    let lastError: unknown = new Error("No Overpass mirror answered");
+    let hedge: ReturnType<typeof setTimeout> | undefined;
+
+    const settle = (finish: () => void) => {
+      if (done) return;
+      done = true;
+      clearTimeout(hedge);
+      for (const c of controllers) c.abort();
+      finish();
+    };
+
+    const launch = () => {
+      clearTimeout(hedge);
+      if (done || next >= endpoints.length) return;
+      const url = endpoints[next++];
+      const controller = new AbortController();
+      controllers.push(controller);
+      running += 1;
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", ...headers },
+        body,
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(Math.max(1000, deadline - Date.now()))]),
+      })
+        .then(async (response) => {
+          if (!response.ok) throw new OverpassHttpError(response.status);
+          return response.json();
+        })
+        .then((json) => settle(() => resolve(json)))
+        .catch((err) => {
+          if (done) return;
+          lastError = err;
+          if (err instanceof OverpassHttpError && err.status === 400) return settle(() => reject(err));
+          running -= 1;
+          if (next < endpoints.length) launch();
+          else if (running === 0) settle(() => reject(lastError));
+        });
+      if (next < endpoints.length) hedge = setTimeout(launch, hedgeMs);
+    };
+
+    launch();
+  });
+}
+
+/**
  * Fetches the golf features for a scan box. Goes through this app's cache
  * route first (/api/overpass: shared CDN cache, so a course measured once is
  * instant and survives busy mirrors), then falls back to calling the mirrors

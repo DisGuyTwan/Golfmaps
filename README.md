@@ -102,7 +102,9 @@ input, and recalculates on every keystroke. "Print / PDF" prints a
 one-page Letter summary, in the language on screen, to leave with the client. Link straight to it with
 `/#roi`. Formulas and sources are in `src/lib/roi.ts` (copy in
 `src/lib/roi-copy.ts`). The gas price is fetched from Statistics Canada
-(Montréal, monthly) through `/api/gas-price`, cached a day; the other defaults
+(Montréal, monthly) through `/api/gas-price`, cached a day, and used once it is
+at least as recent as the dated default (StatCan publishes about a month late);
+the other defaults
 are dated market data (Hydro-Québec Rate G, April 1, 2026; KR800 10 kWh,
 KR804 38 kWh) and need refreshing over time.
 

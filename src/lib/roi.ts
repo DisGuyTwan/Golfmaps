@@ -104,6 +104,12 @@ export const ROI_DEFAULTS: RoiInputs = {
   years: 5,
 };
 
+/**
+ * Month of the default gas price above. The live StatCan price (monthly,
+ * about a month late) only replaces it once it is at least this recent.
+ */
+export const DEFAULT_GAS_PERIOD = "2026-10";
+
 export interface CostColumn {
   equip: number;
   energy: number;

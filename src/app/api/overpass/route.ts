@@ -1,4 +1,4 @@
-import { OverpassHttpError, fetchFromMirrors, parseBBoxParam } from "@/lib/overpass";
+import { OverpassHttpError, fetchFromMirrorsHedged, parseBBoxParam } from "@/lib/overpass";
 
 /**
  * Cached Overpass lookup. The browser asks this route first; a 200 is cached
@@ -16,9 +16,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const data = await fetchFromMirrors(bbox, {
-      timeoutMs: 25000,
-      deadline: Date.now() + 50000,
+    const data = await fetchFromMirrorsHedged(bbox, {
+      hedgeMs: 8000,
+      timeoutMs: 50000,
       headers: { "User-Agent": "Kress acreage tool (https://kress.prodig-e.com)" },
     });
     return Response.json(data, {

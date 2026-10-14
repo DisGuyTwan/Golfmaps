@@ -16,7 +16,8 @@ else goes straight from the browser to public APIs (built-in `fetch`).
 ```
 src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
                   not-found.tsx, globals.css (theme color variables)
-  api/overpass/   cached Overpass lookup (CDN 1 day); the browser falls back to mirrors
+  api/overpass/   cached Overpass lookup (CDN 1 day, hedged mirror requests);
+                  the browser falls back to calling the mirrors itself
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
 src/components/
@@ -80,8 +81,9 @@ src/types/      ambient module declarations for untyped deps
   Voyager investment (write-offs never do: they're timing). Don't go back to
   "one employee vs one Voyager": the handoff's figures are reproduced in
   `roi.test.ts` only as a formula regression with matching inputs.
-- **ROI defaults are dated market data.** Gas (live from StatCan when the route
-  works, else the dated default), the Hydro-Québec Tarif G rate (`HQ_RATE`,
+- **ROI defaults are dated market data.** Gas (live from StatCan only once its
+  month is at least `DEFAULT_GAS_PERIOD`, since StatCan lags; else the dated
+  default; bump both together), the Hydro-Québec Tarif G rate (`HQ_RATE`,
   update each April 1), payroll rates (each January), Voyager prices and
   capacities. Each default shows its source under the input (`asOf` in
   `roi-copy.ts`); when one changes, update that, the footnote and the
