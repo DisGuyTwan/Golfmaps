@@ -42,6 +42,20 @@ least often, so the app is deliberately careful about it:
   it reports that instead of estimating. "Boundary minus nothing" would claim the
   entire property is rough, which would quietly inflate a quote.
 
+## Incentives tab
+
+A second tab estimates first-year savings on robotic mowers and battery tools
+for a customer proposal: pick the province, profile (landscaper, golf course,
+farm, municipality, institution, developer, homeowner), structure and purchase,
+and it shows a savings range, a line-by-line breakdown with status and official
+links, other useful programs, and a "Copy my summary" button. French or English,
+defaulting to the device language. Link straight to it with `/#incentives`.
+
+The low end counts only rules in force; the high end adds items that need
+confirmation or approval (Class 56, the Clean Tech ITC, Prime-Vert, GMF).
+Research as of October 9, 2026, in `src/lib/incentives.ts`. Estimate only, not
+tax advice.
+
 ## Tech stack
 
 - **Next.js 14 (App Router)** + **TypeScript** + **Tailwind CSS**

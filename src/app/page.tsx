@@ -1,9 +1,5 @@
-import GolfCourseCalculator from "@/components/GolfCourseCalculator";
+import AppTabs from "@/components/AppTabs";
 
 export default function Home() {
-  return (
-    <main className="h-[100dvh] w-full overflow-hidden">
-      <GolfCourseCalculator />
-    </main>
-  );
+  return <AppTabs />;
 }
