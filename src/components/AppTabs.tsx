@@ -116,9 +116,6 @@ export default function AppTabs() {
         className="z-[3100] flex shrink-0 items-center border-b border-line bg-surface px-1 print:hidden"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <span className="hidden shrink-0 px-2 text-sm font-bold tracking-wide text-accent min-[420px]:inline">
-          {t.brand}
-        </span>
         <div ref={tablistRef} role="tablist" aria-label={t.sections} className="flex min-w-0 flex-1 items-center overflow-x-auto">
           {TABS.map(({ id }) => (
             <button

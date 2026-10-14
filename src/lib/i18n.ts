@@ -10,7 +10,6 @@ export type { Lang };
 export type MeasureErrorKind = "unreachable" | "busy" | "tooLarge" | "http";
 
 const en = {
-  brand: "Kress",
   tabs: { acreage: "Acreage", incentives: "Incentives", roi: "ROI Voyager" },
   langGroup: "Language / Langue",
   sections: "Sections",
@@ -93,7 +92,6 @@ const en = {
 export type UiStrings = typeof en;
 
 const fr: UiStrings = {
-  brand: "Kress",
   tabs: { acreage: "Superficie", incentives: "Aides", roi: "ROI Voyager" },
   langGroup: "Langue / Language",
   sections: "Sections",
