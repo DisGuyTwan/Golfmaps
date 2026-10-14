@@ -29,7 +29,7 @@ and sent to a client. Both keep their key figures in a sticky bar at the bottom
 
 The app opens on a full-screen boot sequence (aurora backdrop, a glass app
 icon where a small mower lays stripes, the Calculator wordmark, status chips
-and an iris reveal into the app; about 2.7 s on the first visit, quicker after)
+and an iris reveal into the app; it plays in full, about 3 s, on every load)
 and uses subtle motion throughout:
 the tab underline and EN | FR pill slide, the sun and moon morph, the theme
 spreads from the button in a circle, and numbers tick when they recalculate.

@@ -1,9 +1,9 @@
 /*
  * Full-screen boot sequence (src/components/BootSplash.tsx).
  *
- * Server-rendered, so it covers the page before any JavaScript runs; exits
- * with an iris reveal (a hole opening from the centre) once the app has
- * hydrated. Always dark (a brand moment, whatever the theme); text follows
+ * Server-rendered, so it covers the page before any JavaScript runs. Plays
+ * in full on every load: BootSplash waits for every finite animation here to
+ * finish, then exits with an iris reveal (a hole opening from the centre). Always dark (a brand moment, whatever the theme); text follows
  * <html lang>, which the boot script sets before paint.
  * Timeline, from page load:
  *   0.00–0.90 s  icon springs in; its gradient border keeps spinning
@@ -56,24 +56,24 @@
 
 /* ── Backdrop ─────────────────────────────────────────────────────────── */
 
+/* Soft radial gradients, no blur filter: cheap to paint while the app loads. */
 .boot-aurora {
   position: absolute;
   inset: -20%;
-  filter: blur(70px) saturate(1.2);
   opacity: 0;
   animation: boot-fade-in 1.2s ease-out forwards;
 }
 .boot-blob {
   position: absolute;
   border-radius: 999px;
-  mix-blend-mode: screen;
+  will-change: transform;
 }
 .boot-blob-1 {
   width: 55vmax;
   height: 55vmax;
   left: 8%;
   top: 6%;
-  background: radial-gradient(circle, rgb(34 197 94 / 0.55), transparent 65%);
+  background: radial-gradient(circle, rgb(34 197 94 / 0.42), rgb(34 197 94 / 0.12) 40%, transparent 70%);
   animation: boot-drift-1 9s ease-in-out infinite alternate;
 }
 .boot-blob-2 {
@@ -81,7 +81,7 @@
   height: 50vmax;
   right: 4%;
   bottom: 2%;
-  background: radial-gradient(circle, rgb(20 184 166 / 0.45), transparent 65%);
+  background: radial-gradient(circle, rgb(20 184 166 / 0.34), rgb(20 184 166 / 0.1) 40%, transparent 70%);
   animation: boot-drift-2 11s ease-in-out infinite alternate;
 }
 .boot-blob-3 {
@@ -89,7 +89,7 @@
   height: 40vmax;
   left: 40%;
   top: 40%;
-  background: radial-gradient(circle, rgb(163 230 53 / 0.3), transparent 65%);
+  background: radial-gradient(circle, rgb(163 230 53 / 0.22), rgb(163 230 53 / 0.06) 40%, transparent 70%);
   animation: boot-drift-3 13s ease-in-out infinite alternate;
 }
 .boot-dots {

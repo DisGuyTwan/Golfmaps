@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 
-const SEEN_KEY = "calculator-booted";
-/** Full sequence on the first load of a session; a quick reveal on later loads. */
-const FIRST_MS = 2700;
-const REPEAT_MS = 700;
+/** Pause on the finished frame before the iris opens. */
+const HOLD_MS = 250;
+/** Never keep the app waiting longer than this, whatever happens. */
+const MAX_MS = 5000;
 const EXIT_MS = 850;
 
 // App icon geometry (SVG units, viewBox 120 × 120): six vertical mowing passes.
@@ -62,22 +62,44 @@ const WORD = "Calculator";
 export default function BootSplash() {
   const [phase, setPhase] = useState<"on" | "leaving" | "gone">("on");
 
+  // Leave only once the sequence has actually played to the end. The CSS
+  // animations start at first paint, not at navigation or hydration, so a
+  // fixed timer cut them short on slow loads; instead, wait for every finite
+  // animation in the splash to finish (looping ones like the aurora don't
+  // count), hold the final frame briefly, then open the iris.
   useEffect(() => {
-    let seen = false;
-    try {
-      seen = sessionStorage.getItem(SEEN_KEY) === "1";
-      sessionStorage.setItem(SEEN_KEY, "1");
-    } catch {
-      /* storage blocked: play the full sequence */
+    let cancelled = false;
+    const timers: number[] = [];
+    const leave = () => {
+      if (cancelled) return;
+      setPhase("leaving");
+      timers.push(window.setTimeout(() => setPhase("gone"), EXIT_MS));
+    };
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      leave();
+      return () => {
+        cancelled = true;
+      };
     }
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const minimum = reduced ? 0 : seen ? REPEAT_MS : FIRST_MS;
-    const wait = Math.max(0, minimum - performance.now());
-    const leave = window.setTimeout(() => setPhase("leaving"), wait);
-    const gone = window.setTimeout(() => setPhase("gone"), wait + EXIT_MS);
+
+    const boot = document.getElementById("boot");
+    const sequence = (boot?.getAnimations?.({ subtree: true }) ?? []).filter(
+      (a) =>
+        Number.isFinite(Number(a.effect?.getComputedTiming().endTime)) &&
+        (a as CSSAnimation).animationName !== "boot-failsafe",
+    );
+    const finished = sequence.length
+      ? Promise.all(sequence.map((a) => a.finished.catch(() => undefined)))
+      : new Promise((resolve) => timers.push(window.setTimeout(resolve, 3000)));
+    const cap = new Promise((resolve) => timers.push(window.setTimeout(resolve, MAX_MS)));
+    void Promise.race([finished, cap]).then(() => {
+      if (!cancelled) timers.push(window.setTimeout(leave, HOLD_MS));
+    });
+
     return () => {
-      window.clearTimeout(leave);
-      window.clearTimeout(gone);
+      cancelled = true;
+      timers.forEach((id) => window.clearTimeout(id));
     };
   }, []);
 
