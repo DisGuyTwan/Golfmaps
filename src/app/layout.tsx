@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import BootSplash from "@/components/BootSplash";
 import { PREFERENCES_BOOT_SCRIPT } from "@/lib/preferences-boot";
 import "./globals.css";
+import "./boot.css";
 
 const APP_NAME = "Kress";
 const description =

@@ -15,14 +15,15 @@ else goes straight from the browser to public APIs (built-in `fetch`).
 
 ```
 src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
-                  not-found.tsx, globals.css (theme color variables)
+                  not-found.tsx, globals.css (theme color variables), boot.css
   api/overpass/   cached Overpass lookup (CDN 1 day, hedged mirror requests);
                   the browser falls back to calling the mirrors itself
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
 src/components/
   ui.tsx                     shared TabHeader, Loader, Pop + style classes for every tab
-  BootSplash.tsx             boot screen (server-rendered, fades out after hydration)
+  BootSplash.tsx             full-screen boot sequence (server-rendered, fades out
+                             after hydration; styles and timeline in app/boot.css)
   AppTabs.tsx                tab bar (Acreage | Incentives | ROI Voyager) + FR/EN and
                              light/dark buttons; tab in the URL hash
   GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure
