@@ -1,365 +1,338 @@
 /*
  * Full-screen boot sequence (src/components/BootSplash.tsx).
  *
- * Server-rendered, so it covers the page before any JavaScript runs, and fades
- * out once the app has hydrated. Always dark (a brand moment, whatever the
- * theme); text follows <html lang>, which the boot script sets before paint.
+ * Server-rendered, so it covers the page before any JavaScript runs; exits
+ * with an iris reveal (a hole opening from the centre) once the app has
+ * hydrated. Always dark (a brand moment, whatever the theme); text follows
+ * <html lang>, which the boot script sets before paint.
  * Timeline, from page load:
- *   0.00–2.40 s  progress arc, bar and percentage run to 100
- *   0.35–2.10 s  the mower drives 8 passes, each stripe filling behind it
- *   0.50–1.05 s  CALCULATOR wordmark letters rise in
- *   0.70–2.30 s  three boot-log lines appear, each confirmed "OK"
+ *   0.00–0.90 s  icon springs in; its gradient border keeps spinning
+ *   0.45–2.00 s  the mower lays six stripes, then a shine sweeps the icon
+ *   0.55–1.30 s  "Calculator" letters rise in, then shimmer
+ *   0.90–2.30 s  status chips appear and turn from spinner to check
+ *   0.10–2.50 s  progress line fills
  * If scripts never load it hides itself after 8 s instead of blocking the page.
  */
 
-@property --boot-p {
-  syntax: "<integer>";
+@property --boot-hole {
+  syntax: "<length>";
   inherits: false;
-  initial-value: 0;
+  initial-value: 0px;
+}
+@property --boot-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
 }
 
 #boot {
-  --b-accent: 134 207 152;
-  --b-bright: 187 247 208;
-  --b-band-a: #1f4f2e;
-  --b-band-b: #2c6b3e;
+  --b-ink: 236 245 239;
+  --b-accent: 74 222 128;
+  --b-soft: 187 247 208;
   position: fixed;
   inset: 0;
   z-index: 9999;
   display: grid;
   place-items: center;
   overflow: hidden;
-  color: rgb(236 241 238);
-  background: #040a06;
-  font-family: inherit;
-  transition:
-    opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1),
-    visibility 0s linear 0.7s;
+  color: rgb(var(--b-ink));
+  background: #040906;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent var(--boot-hole), #000 calc(var(--boot-hole) + 1px));
+  mask-image: radial-gradient(circle at 50% 50%, transparent var(--boot-hole), #000 calc(var(--boot-hole) + 1px));
+  transition: visibility 0s linear 0.85s;
   animation: boot-failsafe 0s linear 8s forwards;
 }
+/* Exit: an iris opens from the centre onto the app (plus a fade where @property is missing). */
 #boot.boot-done {
-  opacity: 0;
   visibility: hidden;
+  animation:
+    boot-iris 0.85s cubic-bezier(0.65, 0, 0.35, 1) forwards,
+    boot-fade-out 0.45s ease-in 0.4s forwards;
 }
-#boot.boot-done .boot-center {
-  transform: scale(1.06);
-  filter: blur(6px);
+#boot.boot-done .boot-stage {
+  transform: scale(0.94);
+  opacity: 0;
 }
 
 /* ── Backdrop ─────────────────────────────────────────────────────────── */
 
-.boot-backdrop {
+.boot-aurora {
   position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(55% 45% at 50% 42%, rgb(var(--b-accent) / 0.16), transparent 70%),
-    radial-gradient(90% 70% at 50% 110%, rgb(30 90 50 / 0.45), transparent 70%),
-    linear-gradient(180deg, #050d08 0%, #0a1d12 100%);
-}
-.boot-backdrop::after {
-  /* vignette */
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at center, transparent 55%, rgb(0 0 0 / 0.55) 100%);
-}
-
-/* Perspective grid floor scrolling toward the viewer. */
-.boot-grid {
-  position: absolute;
-  left: -50%;
-  right: -50%;
-  bottom: -2%;
-  height: 48%;
-  background-image:
-    linear-gradient(rgb(var(--b-accent) / 0.22) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--b-accent) / 0.22) 1px, transparent 1px);
-  background-size: 56px 56px;
-  transform: perspective(420px) rotateX(64deg);
-  transform-origin: bottom center;
-  -webkit-mask-image: linear-gradient(to top, #000 15%, transparent 85%);
-  mask-image: linear-gradient(to top, #000 15%, transparent 85%);
+  inset: -20%;
+  filter: blur(70px) saturate(1.2);
   opacity: 0;
-  animation:
-    boot-grid 1.1s linear infinite,
-    boot-fade-in 0.8s ease-out 0.1s forwards;
+  animation: boot-fade-in 1.2s ease-out forwards;
 }
-
-.boot-particles span {
+.boot-blob {
   position: absolute;
-  bottom: -10px;
   border-radius: 999px;
-  background: rgb(var(--b-bright));
-  box-shadow: 0 0 8px rgb(var(--b-accent) / 0.9);
-  opacity: 0;
-  animation-name: boot-rise;
-  animation-timing-function: linear;
-  animation-iteration-count: infinite;
+  mix-blend-mode: screen;
 }
-
-.boot-scanlines {
+.boot-blob-1 {
+  width: 55vmax;
+  height: 55vmax;
+  left: 8%;
+  top: 6%;
+  background: radial-gradient(circle, rgb(34 197 94 / 0.55), transparent 65%);
+  animation: boot-drift-1 9s ease-in-out infinite alternate;
+}
+.boot-blob-2 {
+  width: 50vmax;
+  height: 50vmax;
+  right: 4%;
+  bottom: 2%;
+  background: radial-gradient(circle, rgb(20 184 166 / 0.45), transparent 65%);
+  animation: boot-drift-2 11s ease-in-out infinite alternate;
+}
+.boot-blob-3 {
+  width: 40vmax;
+  height: 40vmax;
+  left: 40%;
+  top: 40%;
+  background: radial-gradient(circle, rgb(163 230 53 / 0.3), transparent 65%);
+  animation: boot-drift-3 13s ease-in-out infinite alternate;
+}
+.boot-dots {
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(0deg, rgb(255 255 255 / 0.025) 0 1px, transparent 1px 3px);
-  pointer-events: none;
+  background-image: radial-gradient(rgb(255 255 255 / 0.09) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(ellipse 55% 50% at 50% 48%, #000 0%, transparent 100%);
+  mask-image: radial-gradient(ellipse 55% 50% at 50% 48%, #000 0%, transparent 100%);
 }
-/* One bright line sweeping down the screen. */
-.boot-sweep {
+/* Film grain: a tiny fractal-noise SVG, tiled. */
+.boot-grain {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 120px;
-  background: linear-gradient(180deg, transparent, rgb(var(--b-accent) / 0.08) 70%, rgb(var(--b-accent) / 0.25) 100%);
-  border-bottom: 1px solid rgb(var(--b-accent) / 0.35);
-  animation: boot-sweep 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  inset: 0;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* ── HUD corners and telemetry ────────────────────────────────────────── */
+/* ── Stage ────────────────────────────────────────────────────────────── */
 
-.boot-hud {
-  position: absolute;
-  inset: clamp(12px, 3vmin, 32px);
-  pointer-events: none;
-  opacity: 0;
-  animation: boot-fade-in 0.6s ease-out 0.2s forwards;
-}
-.boot-corner {
-  position: absolute;
-  width: clamp(22px, 5vmin, 44px);
-  height: clamp(22px, 5vmin, 44px);
-  border-color: rgb(var(--b-accent) / 0.7);
-  border-style: solid;
-  border-width: 0;
-}
-.boot-tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
-.boot-tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
-.boot-bl { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; }
-.boot-br { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; }
-.boot-tele {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font: 600 clamp(9px, 1.4vmin, 11px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0.14em;
-  color: rgb(var(--b-accent) / 0.75);
-  white-space: nowrap;
-}
-.boot-tele-tl { top: clamp(10px, 2.2vmin, 18px); left: clamp(30px, 7vmin, 60px); }
-.boot-tele-tr { top: clamp(10px, 2.2vmin, 18px); right: clamp(30px, 7vmin, 60px); }
-.boot-tele-bl { bottom: clamp(10px, 2.2vmin, 18px); left: clamp(30px, 7vmin, 60px); }
-.boot-tele-br { bottom: clamp(10px, 2.2vmin, 18px); right: clamp(30px, 7vmin, 60px); }
-.boot-blink {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgb(var(--b-bright));
-  box-shadow: 0 0 8px rgb(var(--b-accent));
-  animation: boot-blink 1s steps(2, jump-none) infinite;
-}
-@media (max-width: 520px) {
-  .boot-tele-tr,
-  .boot-tele-bl {
-    display: none;
-  }
-}
-
-/* ── Centre stack ─────────────────────────────────────────────────────── */
-
-.boot-center {
+.boot-stage {
   position: relative;
   display: grid;
   justify-items: center;
-  gap: clamp(10px, 2.2vmin, 20px);
-  padding: 0 16px;
+  gap: clamp(14px, 2.6vmin, 24px);
+  padding: 0 20px;
   text-align: center;
   transition:
-    transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1),
-    filter 0.7s ease;
+    transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.45s ease;
 }
 
-.boot-emblem {
-  position: relative;
-  width: min(78vw, 46vh, 460px);
-  aspect-ratio: 1;
-  animation: boot-emblem-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+/* App icon: glass tile inside a spinning gradient border. */
+.boot-icon {
+  --size: clamp(116px, 21vmin, 188px);
+  width: var(--size);
+  height: var(--size);
+  padding: 2px;
+  border-radius: 28%;
+  background: conic-gradient(
+    from var(--boot-angle),
+    rgb(255 255 255 / 0.08) 0deg,
+    rgb(255 255 255 / 0.08) 200deg,
+    rgb(var(--b-soft)) 280deg,
+    rgb(var(--b-accent)) 320deg,
+    rgb(255 255 255 / 0.08) 360deg
+  );
+  box-shadow:
+    0 30px 90px -20px rgb(var(--b-accent) / 0.55),
+    0 0 0 1px rgb(255 255 255 / 0.04);
+  animation:
+    boot-icon-in 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+    boot-angle 2.6s linear infinite;
 }
-.boot-svg {
+.boot-icon-inner {
+  position: relative;
   width: 100%;
   height: 100%;
-  overflow: visible;
-  filter: drop-shadow(0 0 22px rgb(var(--b-accent) / 0.35));
+  overflow: hidden;
+  border-radius: calc(28% - 1px);
+  background: linear-gradient(160deg, #0f2a19, #071209);
 }
-.boot-outer {
-  fill: none;
-  stroke: rgb(var(--b-accent) / 0.45);
-  stroke-width: 1.5;
-  stroke-dasharray: 2 9;
-  transform-origin: 200px 200px;
-  animation: boot-spin 18s linear infinite;
-}
-.boot-ticks line {
-  stroke: rgb(var(--b-accent) / 0.35);
-  stroke-width: 1.5;
-}
-.boot-ticks .boot-tick-long {
-  stroke: rgb(var(--b-accent) / 0.85);
-  stroke-width: 2;
-}
-.boot-ticks {
-  transform-origin: 200px 200px;
-  animation: boot-spin-rev 40s linear infinite;
-}
-.boot-track {
-  fill: none;
-  stroke: rgb(255 255 255 / 0.08);
-  stroke-width: 6;
-}
-.boot-arc {
-  fill: none;
-  stroke-width: 6;
-  stroke-linecap: round;
-  stroke-dasharray: 955.04;
-  stroke-dashoffset: 955.04;
-  transform-origin: 200px 200px;
-  transform: rotate(-90deg);
-  animation: boot-arc 2.4s cubic-bezier(0.65, 0, 0.35, 1) 0.1s forwards;
-}
-.boot-disc {
-  fill: #07150c;
+.boot-icon-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .boot-stripe {
   transform-box: fill-box;
-  transform: scaleX(0);
+  transform: scaleY(0);
   animation-name: boot-stripe;
   animation-timing-function: linear;
   animation-fill-mode: forwards;
 }
-.boot-stripe:nth-of-type(odd) { fill: var(--b-band-a); }
-.boot-stripe:nth-of-type(even) { fill: var(--b-band-b); }
-.boot-stripe-ltr { transform-origin: left center; }
-.boot-stripe-rtl { transform-origin: right center; }
-.boot-trail {
-  fill: none;
-  stroke: rgb(var(--b-bright) / 0.25);
-  stroke-width: 1;
-  stroke-dasharray: 3 6;
+.boot-stripe:nth-of-type(odd) { fill: #1e6b3a; }
+.boot-stripe:nth-of-type(even) { fill: #2f8a4c; }
+.boot-stripe-down { transform-origin: center top; }
+.boot-stripe-up { transform-origin: center bottom; }
+/* The mower bows out once the last stripe is laid (≈ 2.0 s). */
+.boot-mower {
+  animation: boot-hide 0.35s ease-out 2.05s forwards;
 }
 .boot-mower rect {
-  fill: rgb(var(--b-bright));
-  filter: drop-shadow(0 0 6px rgb(var(--b-accent)));
+  fill: #f0fdf4;
+  filter: drop-shadow(0 0 4px rgb(var(--b-soft)));
 }
-.boot-mower .boot-mower-eye {
-  fill: #0a1d12;
-}
-.boot-mark {
-  fill: rgb(var(--b-bright));
-}
-.boot-halo {
-  animation: boot-pulse 2.4s ease-in-out infinite;
-  transform-origin: 200px 200px;
-}
-
-/* Radar sweep over the mowing disc (disc = 69% of the emblem). */
-.boot-radar {
+/* Glass: a soft top highlight, then one diagonal shine once the mowing is done. */
+.boot-icon-glass {
   position: absolute;
-  inset: 15.5%;
-  border-radius: 999px;
-  background: conic-gradient(from 0deg, transparent 0deg 285deg, rgb(var(--b-accent) / 0.05) 300deg, rgb(var(--b-bright) / 0.35) 360deg);
-  mix-blend-mode: screen;
-  animation: boot-spin 2.2s linear infinite;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.18) 0%, rgb(255 255 255 / 0.04) 38%, transparent 60%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+.boot-icon-shine {
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(115deg, transparent 40%, rgb(255 255 255 / 0.45) 50%, transparent 60%);
+  transform: translateX(-70%);
+  animation: boot-shine 0.9s cubic-bezier(0.4, 0, 0.2, 1) 1.95s forwards;
 }
 
+/* Wordmark: letters rise out of a mask, then a light shimmer passes. */
 .boot-word {
   display: flex;
-  gap: 0.24em;
-  margin-left: 0.24em;
-  font-size: clamp(24px, 5.6vmin, 54px);
-  font-weight: 800;
-  letter-spacing: 0;
-  line-height: 1;
-  text-shadow: 0 0 24px rgb(var(--b-accent) / 0.55);
+  margin: clamp(6px, 1.4vmin, 14px) 0 0;
+  font-size: clamp(46px, 10vmin, 112px);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.045em;
 }
-.boot-word span {
+.boot-letter {
   display: inline-block;
-  opacity: 0;
-  animation: boot-letter 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  overflow: hidden;
+  padding: 0 0.01em 0.08em;
+}
+.boot-letter > span {
+  display: inline-block;
+  transform: translateY(105%);
+  background: linear-gradient(100deg, #ffffff 0%, #ffffff 35%, rgb(var(--b-soft)) 50%, #ffffff 65%, #ffffff 100%);
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation-name: boot-rise, boot-shimmer;
+  animation-duration: 0.7s, 1.6s;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1), ease-in-out;
+  animation-fill-mode: forwards;
 }
 .boot-tagline {
   margin: 0;
-  font-size: clamp(11px, 1.8vmin, 14px);
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: rgb(var(--b-accent) / 0.85);
+  max-width: 42ch;
+  font-size: clamp(15px, 2.2vmin, 20px);
+  font-weight: 450;
+  line-height: 1.4;
+  color: rgb(var(--b-ink) / 0.62);
   opacity: 0;
-  animation: boot-fade-in 0.6s ease-out 0.8s forwards;
+  transform: translateY(8px);
+  animation: boot-up 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) 0.8s forwards;
 }
 
-.boot-log {
-  display: grid;
-  gap: 6px;
-  margin: 2px 0 0;
+/* Status chips: glass pills, spinner → check. */
+.boot-steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: clamp(4px, 1vmin, 10px) 0 0;
   padding: 0;
   list-style: none;
-  font: 500 clamp(10px, 1.6vmin, 12.5px) / 1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: rgb(236 241 238 / 0.7);
-  text-align: left;
 }
-.boot-log li {
+.boot-steps li {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  padding: 8px 14px 8px 10px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.05);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  font-size: clamp(12.5px, 1.7vmin, 14px);
+  font-weight: 550;
+  color: rgb(var(--b-ink) / 0.85);
   opacity: 0;
-  transform: translateY(4px);
-  animation: boot-log-in 0.4s ease-out forwards;
+  transform: translateY(8px);
+  animation: boot-up 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
-.boot-ok {
-  flex: none;
-  padding: 2px 6px;
-  border: 1px solid rgb(var(--b-accent) / 0.5);
-  border-radius: 4px;
-  font-size: 0.85em;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: rgb(var(--b-accent) / 0.3);
-  animation: boot-ok 0.3s ease-out forwards;
+.boot-step-state {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  animation: boot-done-dot 0.35s ease-out forwards;
+}
+.boot-spinner {
+  position: absolute;
+  inset: 1px;
+  border-radius: 999px;
+  border: 2px solid rgb(255 255 255 / 0.15);
+  border-top-color: rgb(var(--b-soft));
+  animation-name: boot-spin, boot-hide;
+  animation-duration: 0.8s, 0.2s;
+  animation-timing-function: linear, ease-out;
+  animation-iteration-count: infinite, 1;
+  animation-fill-mode: none, forwards;
+}
+.boot-check {
+  position: absolute;
+  inset: 3px;
+  fill: none;
+  stroke: #052e16;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: boot-draw 0.35s ease-out forwards;
+}
+.boot-step-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: rgb(var(--b-soft) / 0.9);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .boot-progress {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: min(72vw, 440px);
-  margin-top: 4px;
-}
-.boot-progress-track {
   position: relative;
-  flex: 1;
-  height: 3px;
+  width: min(64vw, 280px);
+  height: 2px;
+  margin-top: clamp(6px, 1.6vmin, 14px);
   overflow: hidden;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.08);
 }
-.boot-progress-fill {
-  height: 100%;
-  width: 0;
+.boot-progress span {
+  position: absolute;
+  inset: 0;
+  transform: scaleX(0);
+  transform-origin: left;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgb(var(--b-accent) / 0.4), rgb(var(--b-bright)));
-  box-shadow: 0 0 12px rgb(var(--b-accent));
+  background: linear-gradient(90deg, rgb(var(--b-accent) / 0.3), rgb(var(--b-soft)));
+  box-shadow: 0 0 14px rgb(var(--b-accent));
   animation: boot-fill 2.4s cubic-bezier(0.65, 0, 0.35, 1) 0.1s forwards;
 }
-.boot-pct {
-  min-width: 4ch;
-  font: 700 clamp(11px, 1.7vmin, 13px) / 1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: rgb(var(--b-bright));
-  text-align: right;
-  counter-reset: boot-p var(--boot-p);
-  animation: boot-count 2.4s cubic-bezier(0.65, 0, 0.35, 1) 0.1s forwards;
-}
-.boot-pct::after {
-  content: counter(boot-p) "%";
+
+.boot-domain {
+  position: absolute;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: rgb(var(--b-ink) / 0.35);
+  opacity: 0;
+  animation: boot-fade-in 0.8s ease-out 1.1s forwards;
 }
 
 /* Language: both are rendered; <html lang> (set before paint) picks one. */
@@ -375,52 +348,42 @@ html:lang(fr) #boot .boot-en {
 
 /* ── Keyframes ────────────────────────────────────────────────────────── */
 
-@keyframes boot-grid { to { background-position: 0 56px; } }
 @keyframes boot-fade-in { to { opacity: 1; } }
-@keyframes boot-rise {
-  0% { transform: translateY(0); opacity: 0; }
-  15% { opacity: 0.8; }
-  85% { opacity: 0.5; }
-  100% { transform: translateY(-105vh); opacity: 0; }
-}
-@keyframes boot-sweep {
-  from { transform: translateY(-130px); }
-  to { transform: translateY(100vh); }
-}
-@keyframes boot-blink { 50% { opacity: 0.2; } }
-@keyframes boot-spin { to { transform: rotate(360deg); } }
-@keyframes boot-spin-rev { to { transform: rotate(-360deg); } }
-@keyframes boot-arc { to { stroke-dashoffset: 0; } }
-@keyframes boot-stripe { to { transform: scaleX(1); } }
-@keyframes boot-pulse { 50% { opacity: 0.55; } }
-@keyframes boot-emblem-in {
-  from { opacity: 0; transform: scale(0.88); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes boot-letter {
-  from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+@keyframes boot-fade-out { to { opacity: 0; } }
+@keyframes boot-iris { to { --boot-hole: 150vmax; } }
+@keyframes boot-angle { to { --boot-angle: 360deg; } }
+@keyframes boot-drift-1 { to { transform: translate(14vmax, 8vmax) scale(1.15); } }
+@keyframes boot-drift-2 { to { transform: translate(-12vmax, -10vmax) scale(0.9); } }
+@keyframes boot-drift-3 { to { transform: translate(-10vmax, 6vmax) scale(1.2); } }
+@keyframes boot-icon-in {
+  from { opacity: 0; transform: scale(0.6) translateY(16px); filter: blur(10px); }
   to { opacity: 1; transform: none; filter: none; }
 }
-@keyframes boot-log-in { to { opacity: 1; transform: none; } }
-@keyframes boot-ok {
+@keyframes boot-stripe { to { transform: scaleY(1); } }
+@keyframes boot-shine { to { transform: translateX(70%); } }
+@keyframes boot-rise { to { transform: none; } }
+@keyframes boot-shimmer { to { background-position: 0% 0; } }
+@keyframes boot-up { to { opacity: 1; transform: none; } }
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@keyframes boot-hide { to { opacity: 0; } }
+@keyframes boot-draw { to { stroke-dashoffset: 0; } }
+@keyframes boot-done-dot {
   to {
-    color: #0a1d12;
-    background: rgb(var(--b-bright));
-    border-color: rgb(var(--b-bright));
-    box-shadow: 0 0 10px rgb(var(--b-accent) / 0.8);
+    background: rgb(var(--b-soft));
+    box-shadow: 0 0 12px rgb(var(--b-accent) / 0.8);
   }
 }
-@keyframes boot-fill { to { width: 100%; } }
-@keyframes boot-count { to { --boot-p: 100; } }
+@keyframes boot-fill { to { transform: scaleX(1); } }
 @keyframes boot-failsafe { to { opacity: 0; visibility: hidden; } }
 
-/* Reduced motion: the finished frame, no movement (the splash also leaves at once). */
+/* Reduced motion: the finished frame, no drifting or driving (the splash also leaves at once). */
 @media (prefers-reduced-motion: reduce) {
   .boot-mower,
-  .boot-sweep,
-  .boot-particles,
-  .boot-radar {
+  .boot-icon-shine {
     display: none;
+  }
+  .boot-blob {
+    animation: none;
   }
 }
 
