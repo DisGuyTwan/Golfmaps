@@ -5,7 +5,8 @@ import { UI } from "@/lib/i18n";
 import { useLang } from "@/lib/preferences";
 import { setIncentiveProfile } from "@/lib/quote-store";
 import { buildShareUrl, prefixed, readParams } from "@/lib/share";
-import { Pop, TabHeader, delay, ui } from "./ui";
+import { Icon, type IconName } from "./icons";
+import { Pop, SectionTitle, TabHeader, delay, ui } from "./ui";
 import {
   BUSINESS_PROFILES,
   CITIES,
@@ -158,12 +159,18 @@ function Chips<V extends string>({
   );
 }
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+function Step({ n, icon, title, children }: { n: number; icon: IconName; title: string; children: React.ReactNode }) {
   return (
     <fieldset className="space-y-3 border-t border-line py-5 first:border-t-0 first:pt-0">
       <legend className="contents">
-        <span className={`flex items-baseline gap-2 ${ui.h2}`}>
-          <span className="text-accent">{n}</span>
+        <span className={`flex items-center gap-3 ${ui.h2}`}>
+          {/* Icon tile with the step number in its corner. */}
+          <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
+            <Icon name={icon} className="h-[18px] w-[18px]" />
+            <span className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold leading-none text-white ring-2 ring-canvas">
+              {n}
+            </span>
+          </span>
           {title}
         </span>
       </legend>
@@ -186,8 +193,15 @@ function Links({ links }: { links?: Link[] }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
       {links.map(([label, url]) => (
-        <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-accent underline underline-offset-2">
+        <a
+          key={url}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 font-medium text-accent underline underline-offset-2"
+        >
           {label}
+          <Icon name="external" className="h-3.5 w-3.5 print:hidden" />
         </a>
       ))}
     </div>
@@ -267,6 +281,7 @@ export default function IncentivesTab() {
     <div className="h-full overflow-y-auto bg-canvas text-ink print:h-auto print:overflow-visible print:bg-white print:[zoom:0.85]">
       <TabHeader
         lang={lang}
+        icon="coins"
         eyebrow={L.eyebrow}
         title={L.h1}
         lede={L.lede}
@@ -277,7 +292,7 @@ export default function IncentivesTab() {
       <div className={`${ui.container} grid gap-8 pb-28 pt-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start lg:pb-12 print:max-w-none print:gap-4 print:px-4 print:pb-0 print:pt-3`}>
         {/* The form is for the meeting; the PDF shows the choices as text instead. */}
         <form onSubmit={(e) => e.preventDefault()} noValidate className={`${ui.enter} min-w-0 print:hidden`} style={delay(1)}>
-          <Step n={1} title={L.s1}>
+          <Step n={1} icon="pin" title={L.s1}>
             <Chips
               name="prov"
               value={form.prov}
@@ -286,7 +301,7 @@ export default function IncentivesTab() {
             />
           </Step>
 
-          <Step n={2} title={L.s2}>
+          <Step n={2} icon="building" title={L.s2}>
             <Chips
               name="who"
               value={form.who}
@@ -380,7 +395,7 @@ export default function IncentivesTab() {
             )}
           </Step>
 
-          <Step n={3} title={L.s3}>
+          <Step n={3} icon="cart" title={L.s3}>
             {(
               [
                 ["buyRobot", "robotAmt", L.robotLabel, L.robotHelp, 100],
@@ -449,7 +464,10 @@ export default function IncentivesTab() {
             <dd>{purchase}</dd>
           </dl>
           <div className={`${ui.card} grid gap-2 print:break-inside-avoid`}>
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted">{L.kicker}</p>
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted">
+              <Icon name="wallet" className="h-3.5 w-3.5" />
+              {L.kicker}
+            </p>
             {/* Money kept and tax timing are different kinds of money, so they're never added up in the headline. */}
             <div className="grid gap-1">
               <p className={ui.label}>{L.keptLabel}</p>
@@ -495,7 +513,7 @@ export default function IncentivesTab() {
 
           {result.items.length > 0 && (
             <div className="grid gap-2">
-              <h2 className={ui.h2}>{L.breakdown}</h2>
+              <SectionTitle icon="list">{L.breakdown}</SectionTitle>
               <div className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
                 {result.items.map((item) => (
                   <div key={item.t} className="grid animate-fade-in gap-1.5 px-4 py-3.5 print:animate-none print:break-inside-avoid">
@@ -519,7 +537,7 @@ export default function IncentivesTab() {
 
           {result.cards.length > 0 && (
             <div className="grid gap-2">
-              <h2 className={ui.h2}>{L.programs}</h2>
+              <SectionTitle icon="layers">{L.programs}</SectionTitle>
               {result.cards.map((card) => (
                 <article
                   key={card.t}
@@ -538,10 +556,12 @@ export default function IncentivesTab() {
 
           <div className="flex flex-wrap items-center gap-3 print:hidden">
             <button type="button" onClick={copySummary} className={ui.btnPrimary}>
+              <Icon name={copyStatus === "copied" ? "check" : "copy"} />
               {L.copy}
             </button>
             {copyStatus && (
-              <span role="status" className="text-sm text-muted">
+              <span role="status" className="inline-flex animate-fade-in items-center gap-1.5 text-sm text-muted">
+                <Icon name={copyStatus === "copied" ? "check" : "info"} className="h-3.5 w-3.5" />
                 {L[copyStatus]}
               </span>
             )}
@@ -577,9 +597,10 @@ export default function IncentivesTab() {
         <button
           type="button"
           onClick={() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-          className="whitespace-nowrap text-sm font-semibold text-accent underline underline-offset-2"
+          className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-accent underline underline-offset-2"
         >
           {L.bar_btn}
+          <Icon name="arrowDown" className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>

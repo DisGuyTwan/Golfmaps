@@ -29,8 +29,8 @@ const en = {
   tapSecond: "Tap the opposite corner of the scan area",
   cancel: "Cancel",
   measuring: "Measuring…",
-  measure: "⛳ Measure course in view",
-  selectArea: "▭ Select area",
+  measure: "Measure course in view",
+  selectArea: "Select area",
   notFound:
     "No golf course found in view. Search a course above, or pan/zoom so the course fills the screen, then measure again.",
   boundaryOnly:
@@ -55,7 +55,7 @@ const en = {
   overridePlaceholder: "Optional",
   quoteTotal: "Acres for quote",
   needsOverride: "Only the outline is mapped: enter the mowed acreage by hand.",
-  sendToRoi: "Send to ROI →",
+  sendToRoi: "Send to ROI",
   reportPdf: "PDF report",
   reportTitle: "Turf acreage report",
   reportLede:
@@ -111,8 +111,8 @@ const fr: UiStrings = {
   tapSecond: "Touchez le coin opposé de la zone à analyser",
   cancel: "Annuler",
   measuring: "Mesure en cours…",
-  measure: "⛳ Mesurer le terrain affiché",
-  selectArea: "▭ Choisir une zone",
+  measure: "Mesurer le terrain affiché",
+  selectArea: "Choisir une zone",
   notFound:
     "Aucun terrain de golf trouvé dans la vue. Cherchez un terrain ci-dessus, ou déplacez la carte pour que le terrain remplisse l’écran, puis mesurez de nouveau.",
   boundaryOnly:
@@ -137,7 +137,7 @@ const fr: UiStrings = {
   overridePlaceholder: "Facultatif",
   quoteTotal: "Acres pour la soumission",
   needsOverride: "Seul le contour est cartographié : entrez la superficie tondue à la main.",
-  sendToRoi: "Envoyer au ROI →",
+  sendToRoi: "Envoyer au ROI",
   reportPdf: "Rapport PDF",
   reportTitle: "Rapport de superficie du gazon",
   reportLede:

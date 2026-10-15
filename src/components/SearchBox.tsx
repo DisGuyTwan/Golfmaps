@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { UI, type Lang } from "@/lib/i18n";
+import { Icon } from "./icons";
 
 export interface PlaceResult {
   id: string;
@@ -175,16 +176,7 @@ export default function SearchBox({ lang, onSelect, getBias }: SearchBoxProps) {
     >
       <div className="pointer-events-auto relative w-full max-w-md">
         <div className="flex items-center gap-2 rounded-full bg-surface px-4 py-2.5 shadow-lg ring-1 ring-black/10 dark:ring-white/10">
-          <svg
-            className="h-4 w-4 shrink-0 text-faint"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m21 21-4.3-4.3" strokeLinecap="round" />
-          </svg>
+          <Icon name="search" className="h-4 w-4 text-faint" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -212,7 +204,7 @@ export default function SearchBox({ lang, onSelect, getBias }: SearchBoxProps) {
               className="shrink-0 text-faint transition hover:text-ink-2"
               aria-label={t.clearSearch}
             >
-              ✕
+              <Icon name="close" />
             </button>
           )}
         </div>
@@ -234,9 +226,10 @@ export default function SearchBox({ lang, onSelect, getBias }: SearchBoxProps) {
                     index === activeIndex ? "bg-surface-2" : "hover:bg-surface-2/60"
                   }`}
                 >
-                  <span className="mt-0.5 text-base leading-none">
-                    {place.isGolf ? "⛳" : "📍"}
-                  </span>
+                  <Icon
+                    name={place.isGolf ? "flag" : "pin"}
+                    className={`mt-0.5 h-4 w-4 ${place.isGolf ? "text-accent" : "text-muted"}`}
+                  />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-ink">
                       {place.primary}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { UI, type Lang } from "@/lib/i18n";
+import { Icon, type IconName } from "./icons";
 
 /**
  * Shared look for every tab: one header, one button set, one type scale.
@@ -64,22 +65,30 @@ export function Loader({ label }: { label: string }) {
   );
 }
 
-function PrinterIcon() {
+/** Section heading (h2) led by its icon in the accent color. */
+export function SectionTitle({ icon, className = "", children }: { icon: IconName; className?: string; children: React.ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-      <path d="M6 9V2h12v7" />
-      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-      <rect x="6" y="14" width="12" height="8" />
-    </svg>
+    <h2 className={`flex items-center gap-2 ${ui.h2} ${className}`}>
+      <Icon name={icon} className="h-[18px] w-[18px] text-accent print:h-3.5 print:w-3.5" />
+      {children}
+    </h2>
   );
 }
 
-function LinkIcon() {
+const NOTICE = {
+  info: { icon: "info", cls: "bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-200" },
+  warn: { icon: "alert", cls: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-200" },
+  error: { icon: "alert", cls: "bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-200" },
+} as const;
+
+/** Short message box with its icon: info (blue), warn (amber) or error (red). */
+export function Notice({ tone, children }: { tone: keyof typeof NOTICE; children: React.ReactNode }) {
+  const { icon, cls } = NOTICE[tone];
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-    </svg>
+    <p className={`flex animate-fade-in items-start gap-2 rounded-md px-3 py-2 text-xs font-medium ${cls}`}>
+      <Icon name={icon} className="mt-px h-3.5 w-3.5" />
+      <span className="min-w-0">{children}</span>
+    </p>
   );
 }
 
@@ -113,7 +122,7 @@ export function CopyLinkButton({ lang, getUrl, className }: { lang: Lang; getUrl
   };
   return (
     <button type="button" onClick={copy} className={className}>
-      <LinkIcon />
+      <Icon name={copied ? "check" : "link"} />
       <span aria-live="polite">{copied ? t.linkCopied : t.copyLink}</span>
     </button>
   );
@@ -129,6 +138,7 @@ const onBrandBtn =
  */
 export function TabHeader({
   lang,
+  icon,
   eyebrow,
   title,
   lede,
@@ -136,6 +146,8 @@ export function TabHeader({
   getShareUrl,
 }: {
   lang: Lang;
+  /** The tab's icon (same as in the tab bar), shown in the eyebrow line. */
+  icon: IconName;
   eyebrow: string;
   title: string;
   lede: string;
@@ -156,7 +168,12 @@ export function TabHeader({
       />
       <div className={`${ui.container} relative flex flex-wrap items-start justify-between gap-4 py-6 print:max-w-none print:px-4 print:py-3`}>
         <div className="min-w-0 max-w-3xl space-y-2 print:space-y-1">
-          <p className={`${ui.enter} text-xs font-semibold uppercase tracking-wider text-white/75`}>{eyebrow}</p>
+          <p className={`${ui.enter} flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/75`}>
+            <span className="grid h-6 w-6 place-items-center rounded-md bg-white/15 text-white ring-1 ring-white/25 print:h-5 print:w-5">
+              <Icon name={icon} className="h-3.5 w-3.5" />
+            </span>
+            {eyebrow}
+          </p>
           <h1 className={`${ui.enter} text-2xl font-bold leading-tight sm:text-3xl print:text-xl`} style={delay(1)}>
             {title}
           </h1>
@@ -167,7 +184,7 @@ export function TabHeader({
         <div className={`${ui.enter} flex shrink-0 flex-wrap gap-2 print:hidden`} style={delay(3)}>
           {getShareUrl && <CopyLinkButton lang={lang} getUrl={getShareUrl} className={onBrandBtn} />}
           <button type="button" onClick={() => printAs(printTitle)} className={onBrandBtn}>
-            <PrinterIcon />
+            <Icon name="printer" />
             {UI[lang].printPdf}
           </button>
         </div>

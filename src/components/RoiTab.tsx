@@ -22,7 +22,8 @@ import {
   type ZeroTurnStatus,
 } from "@/lib/roi";
 import { buildShareUrl, prefixed, readParams } from "@/lib/share";
-import { Pop, TabHeader, delay, ui } from "./ui";
+import { Icon, type IconName } from "./icons";
+import { Pop, SectionTitle, TabHeader, delay, ui } from "./ui";
 
 type NumericKey = Exclude<keyof RoiInputs, "batteryKwh" | "ztStatus" | "incentives">;
 /** Field values stay strings so they can be cleared and retyped live. */
@@ -79,11 +80,14 @@ function Label({ htmlFor, children }: { htmlFor: string; children: React.ReactNo
   );
 }
 
-function H2({ children }: { children: React.ReactNode }) {
+function H2({ icon, children }: { icon: IconName; children: React.ReactNode }) {
   return (
-    <h2 className={`${ui.h2} mb-2 mt-6 border-b border-line pb-1.5 first:mt-0 print:mb-1 print:mt-2 print:pb-0.5 print:text-sm`}>
+    <SectionTitle
+      icon={icon}
+      className="mb-2 mt-6 border-b border-line pb-1.5 first:mt-0 print:mb-1 print:mt-2 print:pb-0.5 print:text-sm"
+    >
       {children}
-    </h2>
+    </SectionTitle>
   );
 }
 
@@ -228,6 +232,7 @@ export default function RoiTab() {
     <div className="h-full overflow-y-auto bg-canvas text-ink print:h-auto print:overflow-visible print:bg-white print:[zoom:0.8]">
       <TabHeader
         lang={lang}
+        icon="trend"
         eyebrow={t.eyebrow}
         title={t.title}
         lede={t.lede}
@@ -238,7 +243,7 @@ export default function RoiTab() {
       <div className={`${ui.container} grid gap-6 pb-28 pt-6 min-[800px]:grid-cols-[1fr_1.3fr] print:max-w-none print:grid-cols-[1.15fr_1fr] print:gap-3 print:px-0 print:py-2`}>
         {/* Inputs */}
         <section className={`${ui.card} ${ui.enter} min-w-0 print:border-0 print:px-2 print:py-1`} style={delay(1)}>
-          <H2>{t.site}</H2>
+          <H2 icon="map">{t.site}</H2>
           <Row>
             <div>
               <Label htmlFor="area">{t.area}</Label>
@@ -253,14 +258,15 @@ export default function RoiTab() {
             <button
               type="button"
               onClick={() => setFields((prev) => ({ ...prev, area: String(Math.round(measuredAcres * 100) / 100) }))}
-              className="mt-2 text-sm font-semibold text-accent underline underline-offset-2 print:hidden"
+              className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-accent underline underline-offset-2 print:hidden"
             >
+              <Icon name="ruler" className="h-3.5 w-3.5" />
               {t.useAcreage(decimal(measuredAcres))}
             </button>
           )}
           <Derived>{t.weeklyAcres(decimal(r.weeklyAcres, 1))}</Derived>
 
-          <H2>Voyager</H2>
+          <H2 icon="mower">Voyager</H2>
           <Label htmlFor="model">{t.model}</Label>
           <select id="model" value={model} onChange={(e) => changeModel(e.target.value as VoyagerModel)} className={inputCls}>
             <option value="7">{t.model7}</option>
@@ -308,7 +314,7 @@ export default function RoiTab() {
           </Row>
           <Derived>{t.fleet(r.units)}</Derived>
 
-          <H2>{t.crew}</H2>
+          <H2 icon="users">{t.crew}</H2>
           <Row>
             <div>
               <Label htmlFor="wage">{t.wage}</Label>
@@ -387,7 +393,7 @@ export default function RoiTab() {
             </div>
           </Row>
 
-          <H2>{t.incSection}</H2>
+          <H2 icon="coins">{t.incSection}</H2>
           <Label htmlFor="incMode">{t.incMode}</Label>
           <select id="incMode" value={incMode} onChange={(e) => setIncMode(e.target.value as IncMode)} className={inputCls}>
             <option value="none">{t.incNone}</option>
@@ -396,7 +402,7 @@ export default function RoiTab() {
           </select>
           <Hint>{t.incHint(incentives.profile)}</Hint>
 
-          <H2>{t.horizon}</H2>
+          <H2 icon="calendar">{t.horizon}</H2>
           <Label htmlFor="years">{t.years}</Label>
           {field("years", { min: 1, max: 10 })}
 
@@ -407,7 +413,7 @@ export default function RoiTab() {
 
         {/* Outputs */}
         <section className={`${ui.card} ${ui.enter} min-w-0 print:border-0 print:px-2 print:py-1`} style={delay(2)}>
-          <H2>{t.comparison}</H2>
+          <H2 icon="scale">{t.comparison}</H2>
           <table className="w-full border-collapse text-sm print:text-[10px]">
             <thead>
               <tr className="bg-accent-soft text-accent-ink">
@@ -439,9 +445,12 @@ export default function RoiTab() {
             </tbody>
           </table>
 
-          <H2>{t.doMore}</H2>
+          <H2 icon="zap">{t.doMore}</H2>
           <div className="mt-3 rounded-xl bg-brand px-5 py-4 text-white print:py-1.5">
-            <div className="text-sm font-semibold text-white/85">{t.profitTitle}</div>
+            <div className="flex items-center gap-1.5 text-sm font-semibold text-white/85">
+              <Icon name="wallet" className="h-4 w-4" />
+              {t.profitTitle}
+            </div>
             <div className={`${ui.kpi} my-1 print:text-base`}>
               <Pop value={`${money(r.annualProfit)} ${t.perYear}`} />
             </div>
@@ -451,12 +460,13 @@ export default function RoiTab() {
             </div>
           </div>
 
-          <H2>{t.cpaTitle}</H2>
+          <H2 icon="table">{t.cpaTitle}</H2>
           <div className="grid gap-3.5 sm:grid-cols-2 print:grid-cols-2">
             {(
               [
                 {
                   title: t.ztCrew,
+                  icon: "users",
                   annual: r.ztAnnual,
                   rows: [
                     [t.depreciation, money(r.ztDep)],
@@ -468,6 +478,7 @@ export default function RoiTab() {
                 },
                 {
                   title: "Voyager",
+                  icon: "mower",
                   annual: r.voyAnnual,
                   rows: [
                     [t.depreciation, money(r.voyDep)],
@@ -483,7 +494,10 @@ export default function RoiTab() {
                 <thead>
                   <tr className="bg-accent-soft text-accent-ink">
                     <th className="px-2.5 py-2 text-left print:py-1" colSpan={2}>
-                      {col.title}
+                      <span className="flex items-center gap-1.5">
+                        <Icon name={col.icon} className="h-4 w-4 print:h-3 print:w-3" />
+                        {col.title}
+                      </span>
                     </th>
                   </tr>
                 </thead>
@@ -520,16 +534,19 @@ export default function RoiTab() {
           <Note>{t.depreciationNote}</Note>
 
           <div ref={paybackRef} className="scroll-mt-4">
-          <H2>{t.paybackTitle}</H2>
+          <H2 icon="clock">{t.paybackTitle}</H2>
           <div className="mt-3 grid grid-cols-2 gap-3.5">
             {(
               [
-                [t.payback, formatPayback(r.paybackMonths, lang)],
-                [t.roiHorizon, formatRoi(r.roiPct, lang)],
+                [t.payback, formatPayback(r.paybackMonths, lang), "clock"],
+                [t.roiHorizon, formatRoi(r.roiPct, lang), "trend"],
               ] as const
-            ).map(([label, value]) => (
+            ).map(([label, value, icon]) => (
               <div key={label} className="rounded-xl bg-brand p-4 text-center text-white print:p-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-white/80">{label}</div>
+                <div className="flex items-center justify-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/80">
+                  <Icon name={icon} className="h-3.5 w-3.5" />
+                  {label}
+                </div>
                 <div className={`${ui.kpi} mt-1 print:text-lg`}>
                   <Pop value={value} />
                 </div>
@@ -569,9 +586,10 @@ export default function RoiTab() {
           <button
             type="button"
             onClick={() => paybackRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            className="shrink-0 whitespace-nowrap text-sm font-semibold text-accent underline underline-offset-2"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-sm font-semibold text-accent underline underline-offset-2"
           >
             {t.barDetails}
+            <Icon name="arrowDown" className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>

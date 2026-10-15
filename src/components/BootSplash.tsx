@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ICON_PATHS, type IconName } from "./icons";
 
 /** Pause on the finished frame before the iris opens. */
 const HOLD_MS = 250;
@@ -32,16 +33,12 @@ function Bi({ en, fr }: { en: string; fr: string }) {
   );
 }
 
-const ICONS = {
-  map: "M9 3 3 5.5v15.5l6-2.5 6 2.5 6-2.5V3l-6 2.5L9 3Zm0 0v15.5m6-13V21",
-  coin: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4v10m3-7.5c0-1.1-1.3-2-3-2s-3 .9-3 2 1.3 1.7 3 2 3 .9 3 2-1.3 2-3 2-3-.9-3-2",
-  chart: "M4 20h16M7 16l4-5 3 3 5-7",
-};
 
-const STEPS: { icon: keyof typeof ICONS; en: string; fr: string }[] = [
+// Same icons as the tab bar.
+const STEPS: { icon: IconName; en: string; fr: string }[] = [
   { icon: "map", en: "Acreage", fr: "Superficie" },
-  { icon: "coin", en: "Incentives", fr: "Incitatifs" },
-  { icon: "chart", en: "ROI Voyager", fr: "ROI Voyager" },
+  { icon: "coins", en: "Incentives", fr: "Incitatifs" },
+  { icon: "trend", en: "ROI Voyager", fr: "ROI Voyager" },
 ];
 
 const WORD = "Calculator";
@@ -173,7 +170,7 @@ export default function BootSplash() {
                   </svg>
                 </span>
                 <svg viewBox="0 0 24 24" className="boot-step-icon">
-                  <path d={ICONS[step.icon]} />
+                  <path d={ICON_PATHS[step.icon]} />
                 </svg>
                 <Bi en={step.en} fr={step.fr} />
               </li>

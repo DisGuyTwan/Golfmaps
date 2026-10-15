@@ -7,6 +7,7 @@ import { setLang, setTheme, useLang, useTheme } from "@/lib/preferences";
 import { reportError } from "@/lib/report-error";
 import { goToTab } from "@/lib/tabs";
 import AcreageReport from "./AcreageReport";
+import { Icon, type IconName } from "./icons";
 import GolfCourseCalculator from "./GolfCourseCalculator";
 import { Loader } from "./ui";
 
@@ -33,10 +34,10 @@ const LANGS: { code: Lang; name: string }[] = [
   { code: "fr", name: "Français" },
 ];
 
-const TABS: { id: Tab; hash: "" | "#incentives" | "#roi" }[] = [
-  { id: "acreage", hash: "" },
-  { id: "incentives", hash: "#incentives" },
-  { id: "roi", hash: "#roi" },
+const TABS: { id: Tab; hash: "" | "#incentives" | "#roi"; icon: IconName }[] = [
+  { id: "acreage", hash: "", icon: "map" },
+  { id: "incentives", hash: "#incentives", icon: "coins" },
+  { id: "roi", hash: "#roi", icon: "trend" },
 ];
 
 // The active tab lives in the URL hash so a direct link can be shared
@@ -164,17 +165,21 @@ export default function AppTabs() {
           aria-label={t.sections}
           className="relative flex min-w-0 flex-1 items-center overflow-x-auto"
         >
-          {TABS.map(({ id }) => (
+          {TABS.map(({ id, icon }) => (
             <button
               key={id}
               type="button"
               role="tab"
               aria-selected={tab === id}
               onClick={() => select(id)}
-              className={`shrink-0 whitespace-nowrap px-2.5 py-2.5 text-sm font-semibold transition-colors duration-300 sm:px-3 ${
+              className={`group inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2 py-2.5 text-sm font-semibold transition-colors duration-300 sm:px-3 ${
                 tab === id ? "text-accent" : "text-muted hover:text-ink-2"
               }`}
             >
+              <Icon
+                name={icon}
+                className={`hidden h-4 w-4 transition-transform duration-300 min-[400px]:block ${tab === id ? "scale-110" : "group-hover:-translate-y-px"}`}
+              />
               {t.tabs[id]}
             </button>
           ))}

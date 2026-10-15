@@ -26,6 +26,7 @@ export default function AcreageReport() {
     <div className="hidden bg-white text-ink print:block">
       <TabHeader
         lang={lang}
+        icon="map"
         eyebrow={`Calculator · ${date}`}
         title={t.reportTitle}
         lede={t.reportLede}

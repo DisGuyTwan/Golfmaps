@@ -5,7 +5,8 @@ import { QUOTE_CATEGORIES, categoryAcres, quoteAcres } from "@/lib/quote";
 import { sendAcresToRoi, setQuoteSettings, useQuoteSettings } from "@/lib/quote-store";
 import { goToTab } from "@/lib/tabs";
 import type { CourseMeasurement } from "@/lib/types";
-import { CopyLinkButton, Pop, printAs, ui } from "./ui";
+import { Icon } from "./icons";
+import { CopyLinkButton, Notice, Pop, printAs, ui } from "./ui";
 
 /**
  * Turns a measurement into the acres a quote is built on: which categories
@@ -28,7 +29,10 @@ export default function QuoteSection({
 
   return (
     <div className="animate-fade-up space-y-2.5 border-t border-line pt-3">
-      <h3 className="text-sm font-bold text-ink">{t.quoteTitle}</h3>
+      <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
+        <Icon name="calculator" className="h-4 w-4 text-accent" />
+        {t.quoteTitle}
+      </h3>
 
       {!result.boundaryOnly && (
         <>
@@ -39,10 +43,14 @@ export default function QuoteSection({
                 type="button"
                 aria-pressed={q.include[c]}
                 onClick={() => setQuoteSettings({ include: { ...q.include, [c]: !q.include[c] } })}
-                className={`min-h-8 rounded-full border px-2.5 text-xs font-semibold transition-all duration-200 active:scale-95 ${
+                className={`inline-flex min-h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold transition-all duration-200 active:scale-95 ${
                   q.include[c] ? "border-brand bg-brand text-white" : "border-line bg-surface text-muted hover:text-ink"
                 }`}
               >
+                <Icon
+                  name="check"
+                  className={`h-3 transition-all duration-200 ${q.include[c] ? "w-3 opacity-100" : "-mr-1 w-0 opacity-0"}`}
+                />
                 {t.quoteCats[c]} · {ac(categoryAcres(result, c))}
               </button>
             ))}
@@ -86,9 +94,7 @@ export default function QuoteSection({
       </div>
       {!result.boundaryOnly && q.include.rough && <p className="text-[11px] text-faint">{t.roughPctHint}</p>}
       {result.boundaryOnly && acres === null && (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/60 dark:text-amber-200">
-          {t.needsOverride}
-        </p>
+        <Notice tone="warn">{t.needsOverride}</Notice>
       )}
 
       <div className="flex items-center justify-between rounded-lg bg-accent-soft px-3 py-2">
@@ -105,11 +111,13 @@ export default function QuoteSection({
             sendAcresToRoi(acres);
             goToTab("#roi");
           }}
-          className={`${ui.btnPrimary} flex-1`}
+          className={`${ui.btnPrimary} group flex-1`}
         >
           {t.sendToRoi}
+          <Icon name="arrowRight" className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
         </button>
         <button type="button" onClick={() => printAs(`Calculator - ${t.tabs.acreage}`)} className={ui.btnSecondary}>
+          <Icon name="file" />
           {t.reportPdf}
         </button>
         <CopyLinkButton lang={lang} getUrl={getShareUrl} className={ui.btnSecondary} />

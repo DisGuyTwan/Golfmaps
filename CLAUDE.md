@@ -25,7 +25,9 @@ src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
 src/components/
-  ui.tsx                     shared TabHeader, Loader, Pop + style classes for every tab
+  ui.tsx                     shared TabHeader, SectionTitle, Notice, Loader, Pop + style
+                             classes for every tab
+  icons.tsx                  the app's line-icon set (<Icon name>, ICON_PATHS)
   BootSplash.tsx             full-screen boot sequence (server-rendered, fades out
                              after hydration; styles and timeline in app/boot.css)
   AppTabs.tsx                tab bar (Acreage | Incentives | ROI Voyager) + FR/EN and
@@ -119,6 +121,12 @@ src/types/      ambient module declarations for untyped deps
   print disables all animation, so PDFs never catch a half-faded frame.
   When testing PDFs with Playwright, don't call `emulateMedia({ media: "screen" })`
   before `page.pdf()`: it forces screen styles into the PDF.
+- **Icons come from `src/components/icons.tsx`, never emoji or Unicode
+  symbols** (no ⛳ ▭ ✕ → in copy or JSX). One style: 24 px grid, 1.75 stroke,
+  round caps, `currentColor`; size with `h-4 w-4` style classes (passing a
+  className replaces the default size). Each tab has one icon (map, coins,
+  trend) used in the tab bar, its header and the boot screen. Add a path to
+  `ICON_PATHS` rather than inlining an `<svg>`; the favicon is `app/icon.svg`.
 - **Use the theme color tokens, not raw colors.** `bg-brand` (dark green fills:
   headers, buttons, highlight boxes), `text-accent`, `bg-surface`, `text-ink`,
   `text-muted`, `border-line`, `bg-accent-soft`, … are CSS variables in
