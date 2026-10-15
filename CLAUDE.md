@@ -7,7 +7,7 @@ app's brand.
 Next.js 16 App Router + React 19 + TypeScript + Tailwind. Measures golf course
 turf acreage from OpenStreetMap for robotic mower quoting, plus an
 "Incentives" tab that estimates grant/tax savings on robotic mowers and battery
-tools (Quebec, Ontario, federal) and a "ROI Voyager" tab comparing a Kress
+tools (Quebec, Ontario, federal) and an "ROI" tab comparing a Kress
 Voyager with a zero-turn crew. Every tab is in English (default) and Quebec
 French, with light and dark themes. The tabs are connected (measured acres →
 ROI sizing; the Incentives profile → ROI's net investment) and every tab has a
@@ -30,7 +30,7 @@ src/components/
   icons.tsx                  the app's line-icon set (<Icon name>, ICON_PATHS)
   BootSplash.tsx             full-screen boot sequence (server-rendered, fades out
                              after hydration; styles and timeline in app/boot.css)
-  AppTabs.tsx                tab bar (Acreage | Incentives | ROI Voyager) + FR/EN and
+  AppTabs.tsx                tab bar (Acreage | Incentives | ROI) + FR/EN and
                              light/dark buttons; tab in the URL hash
   GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)

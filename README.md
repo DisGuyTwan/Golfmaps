@@ -3,7 +3,7 @@
 Live at <https://calculator.prodig-e.com>.
 
 A completely free web app for quoting robotic mower jobs. It has three tabs:
-**Acreage**, **Incentives** and **ROI Voyager**. Search for a course (or pan to it), and it measures the turf acreage from OpenStreetMap — broken down by
+**Acreage**, **Incentives** and **ROI**. Search for a course (or pan to it), and it measures the turf acreage from OpenStreetMap — broken down by
 fairway, green, tee and rough, net of trees, buildings and parking.
 
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite
@@ -22,10 +22,10 @@ right switches the whole app, including printouts and the 404 page. A sun/moon b
 mode** (it follows the device setting until you pick one). Both choices are
 remembered on the device. Printing always comes out light.
 
-Incentives and ROI Voyager share the same dark-green header with a short
+Incentives and ROI share the same dark-green header with a short
 description and a **Print / PDF** button, so either tab can be saved as a PDF
 and sent to a client. Both keep their key figures in a sticky bar at the bottom
-(savings on Incentives; payback, ROI and profit per year on ROI Voyager).
+(savings on Incentives; payback, ROI and profit per year on ROI).
 
 The app opens on a full-screen boot sequence (aurora backdrop, a glass app
 icon where a small mower lays stripes, the Calculator wordmark, status chips
@@ -98,7 +98,7 @@ Research as of October 9, 2026 (federal write-offs re-checked October 14,
 `src/lib/incentives.ts`. Estimate only, not
 tax advice.
 
-## ROI Voyager tab
+## ROI tab
 
 A live ROI calculator for client meetings: a crew on 60" zero-turns versus
 Kress Voyagers **mowing the same acreage**, over a 1 to 10 year horizon. From the

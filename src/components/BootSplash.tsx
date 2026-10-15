@@ -38,7 +38,7 @@ function Bi({ en, fr }: { en: string; fr: string }) {
 const STEPS: { icon: IconName; en: string; fr: string }[] = [
   { icon: "map", en: "Acreage", fr: "Superficie" },
   { icon: "coins", en: "Incentives", fr: "Incitatifs" },
-  { icon: "trend", en: "ROI Voyager", fr: "ROI Voyager" },
+  { icon: "trend", en: "ROI", fr: "ROI" },
 ];
 
 const WORD = "Calculator";

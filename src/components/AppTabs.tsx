@@ -178,7 +178,7 @@ export default function AppTabs() {
             >
               <Icon
                 name={icon}
-                className={`hidden h-4 w-4 transition-transform duration-300 min-[400px]:block ${tab === id ? "scale-110" : "group-hover:-translate-y-px"}`}
+                className={`hidden h-4 w-4 transition-transform duration-300 min-[420px]:block ${tab === id ? "scale-110" : "group-hover:-translate-y-px"}`}
               />
               {t.tabs[id]}
             </button>

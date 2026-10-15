@@ -1,5 +1,5 @@
 /**
- * ROI Voyager tab copy. The French started from the handoff's text; the
+ * ROI tab copy. The French started from the handoff's text; the
  * English is a translation of it. Numbers are formatted by the caller (roi.ts
  * formatters), so only words live here.
  */

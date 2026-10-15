@@ -10,7 +10,7 @@ export type { Lang };
 export type MeasureErrorKind = "unreachable" | "busy" | "tooLarge" | "http";
 
 const en = {
-  tabs: { acreage: "Acreage", incentives: "Incentives", roi: "ROI Voyager" },
+  tabs: { acreage: "Acreage", incentives: "Incentives", roi: "ROI" },
   langGroup: "Language / Langue",
   sections: "Sections",
   toDark: "Switch to dark mode",
@@ -92,7 +92,7 @@ const en = {
 export type UiStrings = typeof en;
 
 const fr: UiStrings = {
-  tabs: { acreage: "Superficie", incentives: "Incitatifs", roi: "ROI Voyager" },
+  tabs: { acreage: "Superficie", incentives: "Incitatifs", roi: "ROI" },
   langGroup: "Langue / Language",
   sections: "Sections",
   toDark: "Passer au mode sombre",
