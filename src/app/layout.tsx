@@ -6,7 +6,7 @@ import "./boot.css";
 
 const APP_NAME = "Calculator";
 const description =
-  "Robotic mower quoting tools: measure a golf course's turf acreage, estimate grant and tax savings in Quebec and Ontario, and compare a Kress Voyager with a zero-turn crew.";
+  "Robotic mower quoting tools: measure a golf course's turf or a sod farm's fields, estimate grant and tax savings in Quebec and Ontario, and compare a Kress Voyager with a zero-turn crew.";
 
 export const metadata: Metadata = {
   title: APP_NAME,

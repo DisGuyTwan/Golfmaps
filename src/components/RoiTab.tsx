@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { UI } from "@/lib/i18n";
 import { DEFAULT_INCENTIVE_INPUTS, computeIncentives, describeInputs } from "@/lib/incentives";
 import { useLang } from "@/lib/preferences";
-import { quoteAcres } from "@/lib/quote";
-import { useIncentiveProfile, useMeasurement, useQuoteSettings, useRoiImport } from "@/lib/quote-store";
+import { acresForQuote } from "@/lib/quote";
+import { useIncentiveProfile, useMeasurement, useMode, useQuoteSettings, useRoiImport, useSod } from "@/lib/quote-store";
 import { ROI_COPY } from "@/lib/roi-copy";
 import {
   DEFAULT_GAS_PERIOD,
@@ -139,7 +139,7 @@ export default function RoiTab() {
     setSeenImport(roiImport.version);
     setFields((prev) => ({ ...prev, area: String(Math.round(roiImport.acres * 100) / 100) }));
   }
-  const measuredAcres = quoteAcres(useMeasurement(), useQuoteSettings());
+  const measuredAcres = acresForQuote(useMode(), useMeasurement(), useSod(), useQuoteSettings());
 
   // Live gas price (Statistics Canada via /api/gas-price), unless the price
   // came from a share link or the user typed one; otherwise the dated default.

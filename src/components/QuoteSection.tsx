@@ -1,31 +1,59 @@
 "use client";
 
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
-import { QUOTE_CATEGORIES, categoryAcres, quoteAcres } from "@/lib/quote";
+import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, type AcreageMode, type QuoteSettings } from "@/lib/quote";
 import { sendAcresToRoi, setQuoteSettings, useQuoteSettings } from "@/lib/quote-store";
 import { goToTab } from "@/lib/tabs";
-import type { CourseMeasurement } from "@/lib/types";
+import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { Icon } from "./icons";
 import { CopyLinkButton, Notice, Pop, printAs, ui } from "./ui";
 
+/** A 0–100 % input bound to one quote setting. */
+function PctInput({ label, field, q }: { label: string; field: "roughPct" | "grassPct" | "sodPct"; q: QuoteSettings }) {
+  return (
+    <label className="space-y-1">
+      <span className="block text-xs font-semibold text-ink-2">{label}</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        max={100}
+        step={5}
+        value={q[field]}
+        onChange={(e) => setQuoteSettings({ [field]: Number(e.target.value) || 0 })}
+        className={`${ui.input} py-1.5 text-sm`}
+      />
+    </label>
+  );
+}
+
 /**
- * Turns a measurement into the acres a quote is built on: which categories
- * count, how much of the rough is really mowed, or a number typed by hand.
- * Then sends it to the ROI tab, prints the PDF report or copies a share link.
+ * Turns a measurement into the acres a quote is built on. For a mapped
+ * course: which categories count and how much of the rough is really mowed.
+ * For a course with only an outline: the share of the satellite grass robots
+ * mow. For a sod farm: the share of the fields being mowed. A number typed by
+ * hand wins over all of them. Then sends it to the ROI tab, prints the PDF
+ * report or copies a share link.
  */
 export default function QuoteSection({
   lang,
+  mode,
   result,
+  sod,
   getShareUrl,
 }: {
   lang: Lang;
-  result: CourseMeasurement;
+  mode: AcreageMode;
+  result: CourseMeasurement | null;
+  sod: SodMeasurement | null;
   getShareUrl: () => string;
 }) {
   const t = UI[lang];
   const q = useQuoteSettings();
-  const acres = quoteAcres(result, q);
+  const acres = acresForQuote(mode, result, sod, q);
   const ac = (n: number) => formatAcres(n, lang);
+  const mapped = mode === "golf" && result !== null && !result.boundaryOnly;
+  const satellite = mode === "golf" && result?.boundaryOnly && result.satellite !== null;
 
   return (
     <div className="animate-fade-up space-y-2.5 border-t border-line pt-3">
@@ -34,7 +62,7 @@ export default function QuoteSection({
         {t.quoteTitle}
       </h3>
 
-      {!result.boundaryOnly && (
+      {mapped && result && (
         <>
           <div className="flex flex-wrap gap-1.5">
             {QUOTE_CATEGORIES.map((c) => (
@@ -60,21 +88,9 @@ export default function QuoteSection({
       )}
 
       <div className="grid grid-cols-2 gap-2">
-        {!result.boundaryOnly && (
-          <label className="space-y-1">
-            <span className="block text-xs font-semibold text-ink-2">{t.roughPct}</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={100}
-              step={5}
-              value={q.roughPct}
-              onChange={(e) => setQuoteSettings({ roughPct: Number(e.target.value) || 0 })}
-              className={`${ui.input} py-1.5 text-sm`}
-            />
-          </label>
-        )}
+        {mapped && <PctInput label={t.roughPct} field="roughPct" q={q} />}
+        {satellite && <PctInput label={t.grassPct} field="grassPct" q={q} />}
+        {mode === "sod" && <PctInput label={t.sodPct} field="sodPct" q={q} />}
         <label className="space-y-1">
           <span className="block text-xs font-semibold text-ink-2">{t.override}</span>
           <input
@@ -92,8 +108,10 @@ export default function QuoteSection({
           />
         </label>
       </div>
-      {!result.boundaryOnly && q.include.rough && <p className="text-[11px] text-faint">{t.roughPctHint}</p>}
-      {result.boundaryOnly && acres === null && (
+      {mapped && q.include.rough && <p className="text-[11px] text-faint">{t.roughPctHint}</p>}
+      {satellite && <p className="text-[11px] text-faint">{t.grassPctHint}</p>}
+      {mode === "sod" && <p className="text-[11px] text-faint">{t.sodPctHint}</p>}
+      {mode === "golf" && result?.boundaryOnly && !result.satellite && acres === null && (
         <Notice tone="warn">{t.needsOverride}</Notice>
       )}
 

@@ -15,6 +15,8 @@ export const TURF_COLORS = {
   green: "#2dd4bf",
   tee: "#fbbf24",
   course: "#facc15",
+  /** Satellite grass inside an outline, and sod fields. */
+  grass: "#4ade80",
 } as const;
 
 type Category =
@@ -233,5 +235,46 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
     totalTurfAcres,
     found,
     boundaryOnly,
+    outlineTraced: false,
+    satellite: null,
+  };
+}
+
+/** The course outline polygons in a measurement (what the satellite count runs inside). */
+export function courseOutline(m: CourseMeasurement): (Polygon | MultiPolygon)[] {
+  return m.geojson.features
+    .filter((f) => f.properties?._category === "course")
+    .map(toAreaFeature)
+    .filter((f): f is Feature => f !== null)
+    .map((f) => f.geometry as Polygon | MultiPolygon);
+}
+
+/**
+ * A measurement for a course outline traced by hand (the course isn't in
+ * OpenStreetMap): the outline only, like a boundary-only course, until the
+ * satellite count fills in the grass.
+ */
+export function tracedOutlineMeasurement(outline: Polygon): CourseMeasurement {
+  const courseAcres = area(outline) * SQ_METERS_TO_ACRES;
+  const zero = { acres: 0, count: 0 };
+  return {
+    geojson: {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", geometry: outline, properties: { _category: "course" } }],
+    },
+    fairway: zero,
+    green: zero,
+    tee: zero,
+    rough: zero,
+    roughEstimated: false,
+    courseAcres,
+    drivingRangeAcres: 0,
+    treesAcres: 0,
+    builtAcres: 0,
+    totalTurfAcres: 0,
+    found: true,
+    boundaryOnly: true,
+    outlineTraced: true,
+    satellite: null,
   };
 }

@@ -20,6 +20,8 @@ interface SearchBoxProps {
   onSelect: (place: PlaceResult) => void;
   /** Proximity bias for suggestions (usually the current map center). */
   getBias: () => { lat: number; lon: number } | null;
+  /** Replaces the default "Search a golf course or address". */
+  placeholder?: string;
 }
 
 const PHOTON_URL = "https://photon.komoot.io/api/";
@@ -87,7 +89,7 @@ function parsePhoton(data: unknown): PlaceResult[] {
   return results;
 }
 
-export default function SearchBox({ lang, onSelect, getBias }: SearchBoxProps) {
+export default function SearchBox({ lang, onSelect, getBias, placeholder }: SearchBoxProps) {
   const t = UI[lang];
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<PlaceResult[]>([]);
@@ -185,9 +187,9 @@ export default function SearchBox({ lang, onSelect, getBias }: SearchBoxProps) {
             onBlur={() => {
               blurTimer.current = setTimeout(() => setOpen(false), 150);
             }}
-            placeholder={t.searchPlaceholder}
+            placeholder={placeholder ?? t.searchPlaceholder}
             className="w-full bg-transparent text-sm text-ink placeholder:text-faint focus:outline-none"
-            aria-label={t.searchPlaceholder}
+            aria-label={placeholder ?? t.searchPlaceholder}
             autoComplete="off"
           />
           {isLoading && (

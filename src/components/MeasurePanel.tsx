@@ -2,38 +2,90 @@
 
 import { TURF_COLORS } from "@/lib/area";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
-import type { CourseMeasurement } from "@/lib/types";
-import type { MeasureError } from "./GolfCourseCalculator";
+import type { AcreageMode } from "@/lib/quote";
+import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
+import type { MeasureError, SatelliteError, TraceKind } from "./GolfCourseCalculator";
 import QuoteSection from "./QuoteSection";
 import { Icon } from "./icons";
 import { Notice, Pop, ui } from "./ui";
 
 interface MeasurePanelProps {
   lang: Lang;
+  mode: AcreageMode;
   result: CourseMeasurement | null;
+  sod: SodMeasurement | null;
   loading: boolean;
   error: MeasureError | null;
+  satLoading: boolean;
+  satError: SatelliteError | null;
   selecting: boolean;
   awaitingSecondCorner: boolean;
+  tracing: TraceKind | null;
+  tracePointCount: number;
+  onModeChange: (mode: AcreageMode) => void;
   onMeasure: () => void;
   onStartSelect: () => void;
   onCancelSelect: () => void;
+  onStartTrace: (kind: TraceKind) => void;
+  onUndoPoint: () => void;
+  onFinishTrace: () => void;
+  onCancelTrace: () => void;
   onClear: () => void;
   getShareUrl: () => string;
 }
 
 const CATEGORIES = ["fairway", "rough", "green", "tee"] as const;
+const MODES: { id: AcreageMode; icon: "flag" | "sprout" }[] = [
+  { id: "golf", icon: "flag" },
+  { id: "sod", icon: "sprout" },
+];
+
+/** One figure in a four-up row: value on top, label (with an optional swatch) below. */
+function Stat({ value, label, swatch }: { value: string; label: string; swatch?: string }) {
+  return (
+    <div className="text-center">
+      <div className="text-base font-bold tabular-nums text-ink">
+        <Pop value={value} />
+      </div>
+      <div className="flex items-center justify-center gap-1 text-[11px] text-muted">
+        {swatch && <span className="inline-block h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: swatch }} />}
+        {label}
+      </div>
+    </div>
+  );
+}
+
+/** The highlighted total under the figures. */
+function Total({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-accent-soft px-3 py-2">
+      <span className="text-sm font-medium text-accent-ink">{label}</span>
+      <Pop value={value} className="text-lg font-bold tabular-nums text-accent-ink" />
+    </div>
+  );
+}
 
 export default function MeasurePanel({
   lang,
+  mode,
   result,
+  sod,
   loading,
   error,
+  satLoading,
+  satError,
   selecting,
   awaitingSecondCorner,
+  tracing,
+  tracePointCount,
+  onModeChange,
   onMeasure,
   onStartSelect,
   onCancelSelect,
+  onStartTrace,
+  onUndoPoint,
+  onFinishTrace,
+  onCancelTrace,
   onClear,
   getShareUrl,
 }: MeasurePanelProps) {
@@ -44,6 +96,15 @@ export default function MeasurePanel({
       ? t.measureError.http(error.status ?? 0)
       : t.measureError[error.kind]
     : null;
+  const sat = result?.satellite ?? null;
+  const outlineOnly = result?.boundaryOnly ?? false;
+  const detected = sod?.fields.filter((f) => !f.traced) ?? [];
+  const traced = sod?.fields.filter((f) => f.traced) ?? [];
+  const leftOut = sod?.fields.filter((f) => !f.included) ?? [];
+  const sumAcres = (fields: { acres: number }[]) => fields.reduce((s, f) => s + f.acres, 0);
+  // Tracing an outline is offered when OSM has no course here, only its outline,
+  // or couldn't be reached (the satellite count doesn't need it).
+  const offerOutline = mode === "golf" && ((!!result && (!result.found || outlineOnly)) || error !== null);
 
   return (
     <div
@@ -53,10 +114,10 @@ export default function MeasurePanel({
       <div className="pointer-events-auto max-h-[70dvh] w-full max-w-md animate-fade-up space-y-3 overflow-y-auto rounded-2xl bg-surface/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur dark:ring-white/10">
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-bold text-ink">
-            <Icon name="flag" className="h-[18px] w-[18px] text-accent" />
-            {t.panelTitle}
+            <Icon name={mode === "sod" ? "sprout" : "flag"} className="h-[18px] w-[18px] text-accent" />
+            {mode === "sod" ? t.sodPanelTitle : t.panelTitle}
           </h2>
-          {result && (
+          {(result || sod) && (
             <button
               onClick={onClear}
               className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-faint transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
@@ -67,7 +128,44 @@ export default function MeasurePanel({
           )}
         </div>
 
-        {selecting ? (
+        <div role="group" aria-label={t.modeGroup} className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-surface-2 p-1">
+          {MODES.map(({ id, icon }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={mode === id}
+              onClick={() => onModeChange(id)}
+              className={`inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md text-xs font-semibold transition-all duration-200 active:scale-[0.98] ${
+                mode === id ? "bg-brand text-white shadow-sm" : "text-muted hover:text-ink"
+              }`}
+            >
+              <Icon name={icon} className="h-3.5 w-3.5" />
+              {t.modes[id]}
+            </button>
+          ))}
+        </div>
+
+        {tracing ? (
+          <div className="space-y-2">
+            <Notice tone="info">
+              {t.traceHint} ({t.tracePoints(tracePointCount)})
+            </Notice>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={onFinishTrace} disabled={tracePointCount < 3} className={`${ui.btnPrimary} grow`}>
+                <Icon name="check" />
+                {t.done}
+              </button>
+              <button onClick={onUndoPoint} disabled={tracePointCount === 0} className={ui.btnSecondary}>
+                <Icon name="undo" />
+                {t.undoPoint}
+              </button>
+              <button onClick={onCancelTrace} className={ui.btnSecondary}>
+                <Icon name="close" />
+                {t.cancel}
+              </button>
+            </div>
+          </div>
+        ) : selecting ? (
           <div className="space-y-2">
             <Notice tone="info">{awaitingSecondCorner ? t.tapSecond : t.tapFirst}</Notice>
             <button
@@ -89,9 +187,9 @@ export default function MeasurePanel({
               {loading ? (
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
               ) : (
-                <Icon name="ruler" />
+                <Icon name={mode === "sod" ? "sprout" : "ruler"} />
               )}
-              {loading ? t.measuring : t.measure}
+              {loading ? t.measuring : mode === "sod" ? t.findSod : t.measure}
             </button>
             <button
               onClick={onStartSelect}
@@ -101,6 +199,16 @@ export default function MeasurePanel({
               <Icon name="select" />
               {t.selectArea}
             </button>
+            {(mode === "sod" || offerOutline) && (
+              <button
+                onClick={() => onStartTrace(mode === "sod" ? "field" : "outline")}
+                disabled={loading}
+                className={`${ui.btnSecondary} grow whitespace-nowrap`}
+              >
+                <Icon name="pen" />
+                {mode === "sod" ? t.traceField : t.traceOutline}
+              </button>
+            )}
           </div>
         )}
 
@@ -108,80 +216,128 @@ export default function MeasurePanel({
           <Notice tone="error">{errorText}</Notice>
         )}
 
-        {result && !result.found && !error && (
-          <Notice tone="warn">{t.notFound}</Notice>
-        )}
+        {/* While a tool takes taps, the results fold away so the map stays visible. */}
+        {tracing || selecting ? null : mode === "golf" ? (
+          <>
+            {result && !result.found && !error && (
+              <Notice tone="warn">{t.notFound}</Notice>
+            )}
 
-        {result?.boundaryOnly && !error && (
-          <Notice tone="warn">{t.boundaryOnly}</Notice>
-        )}
+            {outlineOnly && !error && (
+              <Notice tone={result?.outlineTraced ? "info" : "warn"}>
+                {result?.outlineTraced ? t.outlineTraced : t.boundaryOnly}
+              </Notice>
+            )}
+            {satLoading && <Notice tone="info">{t.satLoading}</Notice>}
+            {satError && <Notice tone="error">{satError === "tooLarge" ? t.satTooLarge : t.satError}</Notice>}
 
-        {/* Breakdown */}
-        <div className="grid grid-cols-4 gap-1.5 border-t border-line pt-3">
-          {CATEGORIES.map((key) => {
-            const stat = result ? result[key] : { acres: 0, count: 0 };
-            const estimated = key === "rough" && result?.roughEstimated;
-            return (
-              <div key={key} className="text-center">
-                <div className="text-base font-bold tabular-nums text-ink">
-                  <Pop value={ac(stat.acres)} />
+            {outlineOnly ? (
+              <>
+                <div className="grid grid-cols-4 gap-1.5 border-t border-line pt-3">
+                  <Stat value={ac(sat?.grassAcres ?? 0)} label={t.satGrass} swatch={TURF_COLORS.grass} />
+                  <Stat value={ac(sat?.treesAcres ?? 0)} label={t.satTrees} />
+                  <Stat value={ac(sat?.builtAcres ?? 0)} label={t.satBuilt} />
+                  <Stat value={ac(sat?.waterAcres ?? 0)} label={t.satWater} />
                 </div>
-                <div className="flex items-center justify-center gap-1 text-[11px] text-muted">
-                  <span className="inline-block h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: TURF_COLORS[key] }} />
-                  {t.categories[key]}
-                  {estimated ? "*" : stat.count > 0 ? ` (${stat.count})` : ""}
+                <Total
+                  label={sat ? t.satTotal : t.courseArea}
+                  value={`${ac(sat ? sat.grassAcres : (result?.courseAcres ?? 0))} ac`}
+                />
+                {sat && (
+                  <div className="space-y-1 text-[11px]">
+                    <p className="text-muted">
+                      {t.courseBoundary}: {ac(result?.courseAcres ?? 0)} ac
+                    </p>
+                    <p className="text-faint">{t.satNote(sat.year)}</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Breakdown */}
+                <div className="grid grid-cols-4 gap-1.5 border-t border-line pt-3">
+                  {CATEGORIES.map((key) => {
+                    const stat = result ? result[key] : { acres: 0, count: 0 };
+                    const estimated = key === "rough" && result?.roughEstimated;
+                    return (
+                      <Stat
+                        key={key}
+                        value={ac(stat.acres)}
+                        swatch={TURF_COLORS[key]}
+                        label={`${t.categories[key]}${estimated ? "*" : stat.count > 0 ? ` (${stat.count})` : ""}`}
+                      />
+                    );
+                  })}
                 </div>
-              </div>
-            );
-          })}
-        </div>
 
-        <div className="flex items-center justify-between rounded-lg bg-accent-soft px-3 py-2">
-          <span className="text-sm font-medium text-accent-ink">
-            {result?.boundaryOnly ? t.courseArea : t.totalTurf}
-          </span>
-          <Pop
-            value={`${ac(result?.boundaryOnly ? result.courseAcres : (result?.totalTurfAcres ?? 0))} ac`}
-            className="text-lg font-bold tabular-nums text-accent-ink"
-          />
-        </div>
+                <Total label={t.totalTurf} value={`${ac(result?.totalTurfAcres ?? 0)} ac`} />
 
-        {result &&
-          (result.courseAcres > 0 ||
-            result.drivingRangeAcres > 0 ||
-            result.treesAcres > 0 ||
-            result.builtAcres > 0) && (
-            <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-[11px] text-muted">
-              {result.courseAcres > 0 && (
-                <span>
-                  {t.courseBoundary}: {ac(result.courseAcres)} ac
-                </span>
-              )}
-              {result.drivingRangeAcres > 0 && (
-                <span>
-                  {t.drivingRange}: {ac(result.drivingRangeAcres)} ac
-                </span>
-              )}
-              {result.roughEstimated && result.treesAcres > 0 && (
-                <span>
-                  {t.treesRemoved}: {ac(result.treesAcres)} ac
-                </span>
-              )}
-              {result.roughEstimated && result.builtAcres > 0 && (
-                <span>
-                  {t.builtRemoved}: {ac(result.builtAcres)} ac
-                </span>
-              )}
+                {result &&
+                  (result.courseAcres > 0 ||
+                    result.drivingRangeAcres > 0 ||
+                    result.treesAcres > 0 ||
+                    result.builtAcres > 0) && (
+                    <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-[11px] text-muted">
+                      {result.courseAcres > 0 && (
+                        <span>
+                          {t.courseBoundary}: {ac(result.courseAcres)} ac
+                        </span>
+                      )}
+                      {result.drivingRangeAcres > 0 && (
+                        <span>
+                          {t.drivingRange}: {ac(result.drivingRangeAcres)} ac
+                        </span>
+                      )}
+                      {result.roughEstimated && result.treesAcres > 0 && (
+                        <span>
+                          {t.treesRemoved}: {ac(result.treesAcres)} ac
+                        </span>
+                      )}
+                      {result.roughEstimated && result.builtAcres > 0 && (
+                        <span>
+                          {t.builtRemoved}: {ac(result.builtAcres)} ac
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                {result?.roughEstimated && <p className="text-[11px] text-faint">{t.roughNote}</p>}
+              </>
+            )}
+
+            {result && (result.found || result.boundaryOnly) && !error && (
+              <QuoteSection lang={lang} mode="golf" result={result} sod={null} getShareUrl={getShareUrl} />
+            )}
+          </>
+        ) : (
+          <>
+            {sod?.year != null && detected.length === 0 && !error && <Notice tone="warn">{t.sodNone(sod.year)}</Notice>}
+
+            <div className="grid grid-cols-3 gap-1.5 border-t border-line pt-3">
+              <Stat value={String(sod?.fields.length ?? 0)} label={t.sodFields} />
+              <Stat value={ac(sumAcres(detected))} label={`${t.sodDetected} (ac)`} swatch={TURF_COLORS.grass} />
+              <Stat value={ac(sumAcres(traced))} label={`${t.sodTraced} (ac)`} swatch={TURF_COLORS.course} />
             </div>
-          )}
 
-        {result?.roughEstimated && <p className="text-[11px] text-faint">{t.roughNote}</p>}
+            <Total label={t.sodTotal} value={`${ac(sumAcres(sod?.fields.filter((f) => f.included) ?? []))} ac`} />
 
-        {result && (result.found || result.boundaryOnly) && !error && (
-          <QuoteSection lang={lang} result={result} getShareUrl={getShareUrl} />
+            {sod && sod.fields.length > 0 && (
+              <div className="space-y-1 text-[11px]">
+                {leftOut.length > 0 && <p className="text-muted">{t.sodLeftOut(leftOut.length, ac(sumAcres(leftOut)))}</p>}
+                <p className="text-muted">{t.sodTapHint}</p>
+                {sod.year != null && detected.length > 0 && <p className="text-faint">{t.sodSource(sod.year)}</p>}
+              </div>
+            )}
+
+            {sod && !error && <QuoteSection lang={lang} mode="sod" result={null} sod={sod} getShareUrl={getShareUrl} />}
+          </>
         )}
 
-        <p className="text-center text-[10px] text-faint">{t.attribution}</p>
+        <p className="text-center text-[10px] text-faint">
+          {t.attribution}
+          {mode === "golf" && sat && <> · {t.attributionWorldCover}</>}
+          {mode === "sod" && sod?.year != null && <> · {t.attributionAci}</>}
+        </p>
       </div>
     </div>
   );

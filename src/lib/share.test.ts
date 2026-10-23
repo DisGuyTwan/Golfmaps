@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildShareUrl, decodeView, encodeView, prefixed, readParams } from "./share";
+import { buildShareUrl, decodePolyline, decodeView, encodePolyline, encodeView, prefixed, readParams } from "./share";
 import { bboxParam, parseBBoxParam } from "./overpass";
 
 describe("share links", () => {
@@ -33,5 +33,27 @@ describe("cache-route bbox parameter", () => {
     expect(parseBBoxParam("46.2,-72.5,46.1,-72.4")).toBeNull();
     expect(parseBBoxParam("46,-73,47,-72")).toBeNull();
     expect(parseBBoxParam(null)).toBeNull();
+  });
+});
+
+describe("polylines", () => {
+  it("matches Google's reference encoding", () => {
+    const pts: [number, number][] = [[38.5, -120.2], [40.7, -120.95], [43.252, -126.453]];
+    expect(encodePolyline(pts)).toBe("_p~iF~ps|U_ulLnnqC_mqNvxq`@");
+    expect(decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@")).toEqual(pts);
+  });
+  it("round-trips a traced field to about a metre, with no comma", () => {
+    const pts: [number, number][] = [[46.343211, -72.542811], [46.34401, -72.54], [46.3429, -72.5391]];
+    const enc = encodePolyline(pts);
+    expect(enc).not.toContain(",");
+    decodePolyline(enc)!.forEach(([lat, lon], k) => {
+      expect(lat).toBeCloseTo(pts[k][0], 5);
+      expect(lon).toBeCloseTo(pts[k][1], 5);
+    });
+  });
+  it("rejects malformed input", () => {
+    expect(decodePolyline("_p~iF~ps|U_")).toBeNull();
+    expect(decodePolyline("a b")).toBeNull();
+    expect(decodePolyline("")).toEqual([]);
   });
 });

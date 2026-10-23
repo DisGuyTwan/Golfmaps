@@ -4,12 +4,18 @@ Live at <https://calculator.prodig-e.com>.
 
 A completely free web app for quoting robotic mower jobs. It has three tabs:
 **Acreage**, **Incentives** and **ROI**. Search for a course (or pan to it), and it measures the turf acreage from OpenStreetMap — broken down by
-fairway, green, tee and rough, net of trees, buildings and parking.
+fairway, green, tee and rough, net of trees, buildings and parking. When a
+course isn't mapped in detail, it counts the grass inside its outline from
+satellite land cover instead (or inside an outline you trace). Switch the
+Acreage tab to **Sod farm** and it finds a sod producer's fields on Agriculture
+Canada's yearly crop map, which you can edit by tapping fields out or tracing
+new ones.
 
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite
-tiles, the public Overpass API, Photon for search and Statistics Canada for the
-gas price. Three small Vercel functions cache course lookups and the gas price
-and collect client errors in the runtime logs.
+tiles, the public Overpass API, Photon for search, ESA WorldCover and
+Agriculture Canada's Annual Crop Inventory for land cover, and Statistics Canada
+for the gas price. Four small Vercel functions cache course lookups, land cover
+and the gas price and collect client errors in the runtime logs.
 
 The tabs work together: measure a course, choose what's actually mowed, and
 **Send to ROI** sizes the zero-turn crew and the Voyager fleet for those acres;
@@ -77,8 +83,52 @@ least often, so the app is deliberately careful about it:
   driving range, water, bunkers, trees and buildings. The panel labels this
   figure as an estimate.
 - If a course has **only a boundary** mapped and no fairways/greens/tees at all,
-  it reports that instead of estimating. "Boundary minus nothing" would claim the
-  entire property is rough, which would quietly inflate a quote.
+  it never uses "boundary minus nothing" (that would claim the entire property
+  is rough and quietly inflate a quote). It counts the **satellite grass inside
+  the outline** instead: see below.
+
+### Courses that aren't mapped in detail
+
+Many courses have only their outline in OpenStreetMap, and some aren't there at
+all. For those, the app reads [ESA WorldCover](https://esa-worldcover.org/)
+(10 m satellite land cover, 2021) inside the outline and counts only the
+**grassland** cells as turf: trees, shrubs, buildings, roads, water and the odd
+cropland pixel stay out, so the estimate errs low. The counted grass is painted
+green over the satellite image so you can see what was counted, and the panel
+shows grass, trees, built and water separately. If the course isn't in OSM,
+**Trace the course outline** (tap its corners on the satellite image) and the
+same count runs inside your outline.
+
+For the quote, satellite grass is counted at **80%** by default ("Grass mowed by
+robot"): it also holds greens, tees and native areas, and 80% lands near what
+the category defaults give on a fully mapped course. The share and a manual
+override stay editable.
+
+WorldCover is read through `/api/landcover?src=worldcover` (the bucket sends no
+CORS headers), which stitches the 3° tiles and keeps each window on the CDN for
+30 days (`src/lib/landcover-server.ts`); the counting is pure and tested
+(`src/lib/landcover.ts`).
+
+## Sod farms
+
+The **Golf course | Sod farm** switch at the top of the Acreage panel turns it
+into a sod field measurer:
+
+1. Search the farm or its address (it frames the area and searches right away),
+   or pan to it and tap **Find sod fields in view** (or **Select area**).
+2. The app reads Agriculture and Agri-Food Canada's
+   [Annual Crop Inventory](https://open.canada.ca/data/en/dataset/ba2645d5-4458-414d-b196-6303ac06c1c9)
+   (newest year first: 2025, then 2024), which has its own **Sod** class, through
+   `/api/landcover?src=aci`. It cuts the sod pixels into fields, fills small
+   misread gaps inside a field and drops specks under 1 acre. Its 30 m pixels
+   put field edges within about 15 m.
+3. **Tap a field** to leave it out of the quote (it turns grey and dashed), tap
+   again to put it back. **Trace a field** adds one the map missed; traced
+   fields are measured exactly.
+4. **Acres for the quote** counts the fields left in at **90%** by default ("Sod
+   being mowed"): fields just harvested or reseeded aren't mowed. Then Send to
+   ROI, the PDF report and Copy link work as they do for a course (the link
+   keeps traced fields and the fields left out).
 
 ## Incentives tab
 
@@ -125,6 +175,8 @@ KR804 38 kWh) and need refreshing over time.
   OpenStreetMap street tiles selectable from the layer control
 - The browser's built-in `fetch` for Overpass and Photon (no HTTP library)
 - **osmtogeojson** + **@turf/area** / **@turf/intersect** / **@turf/helpers**
+- **geotiff** (server only) to read WorldCover and the crop inventory, and
+  **d3-contour** to outline sod fields
 
 ## Getting started
 
@@ -152,7 +204,11 @@ Standard Next.js app, no extra configuration:
 ## Notes & limitations
 
 - Results are only as good as OpenStreetMap. A course whose turf isn't mapped
-  comes back boundary-only (the app says so) or empty.
+  comes back boundary-only (the app says so, then counts satellite grass) or
+  empty (trace its outline).
+- Satellite land cover is coarse next to a survey: WorldCover cells are 10 m
+  (grass under scattered trees reads as trees) and describes 2021; crop
+  inventory cells are 30 m and a year behind. Spot-check against the imagery.
 - Estimated rough inherits every gap in the underlying data — treat it as a
   starting point for a quote, not a survey.
 - The public Overpass API is rate-limited and occasionally busy. The app fails

@@ -5,6 +5,8 @@ import {
   MapContainer,
   TileLayer,
   GeoJSON,
+  ImageOverlay,
+  Polyline,
   Rectangle,
   CircleMarker,
   LayersControl,
@@ -31,6 +33,10 @@ const CATEGORY_STYLE: Record<string, L.PathOptions> = {
   fairway: { color: "#14532d", weight: 2, fillColor: TURF_COLORS.fairway, fillOpacity: 0.5 },
   tee: { color: "#14532d", weight: 1, fillColor: TURF_COLORS.tee, fillOpacity: 0.55 },
   green: { color: "#065f46", weight: 1, fillColor: TURF_COLORS.green, fillOpacity: 0.65 },
+  // Sod fields: counted, traced by hand (yellow edge), or tapped out of the quote.
+  sod: { color: "#14532d", weight: 1.5, fillColor: TURF_COLORS.grass, fillOpacity: 0.45 },
+  sod_traced: { color: TURF_COLORS.course, weight: 2.5, fillColor: TURF_COLORS.grass, fillOpacity: 0.45 },
+  sod_off: { color: "#e5e7eb", weight: 1.5, dashArray: "4 4", fillColor: "#6b7280", fillOpacity: 0.15 },
 };
 
 const DEFAULT_STYLE = CATEGORY_STYLE.fairway;
@@ -42,11 +48,21 @@ function styleFeature(feature?: Feature): L.PathOptions {
   return { ...base, interactive: false };
 }
 
+/** A picture laid over the map, e.g. the satellite grass counted inside an outline. */
+export interface MapOverlay {
+  url: string;
+  bounds: [[number, number], [number, number]];
+}
+
 export interface GolfMapProps {
   lang: Lang;
   geojson: FeatureCollection | null;
-  selecting: boolean;
+  /** Taps are for the tool (scan box or tracing): crosshair, no double-tap zoom. */
+  capturing: boolean;
   firstCorner: [number, number] | null;
+  /** Points of the shape being traced, [lat, lon]; null when not tracing. */
+  tracePoints: [number, number][] | null;
+  overlay: MapOverlay | null;
   /** Drawn scan box as [south, west, north, east], or null. */
   scanBox: [number, number, number, number] | null;
   onMapClick: (latlng: [number, number]) => void;
@@ -78,23 +94,27 @@ function MapInit({ onReady, locate }: { onReady: (map: L.Map) => void; locate: b
   return null;
 }
 
-/** Captures taps while selecting a scan box; shows a crosshair cursor. */
-function SelectCapture({
-  selecting,
+/**
+ * Passes every tap up (the calculator decides what it means: a scan box
+ * corner, a traced point, a sod field to toggle). While a tool is capturing,
+ * shows a crosshair and turns off double-tap zoom.
+ */
+function TapCapture({
+  capturing,
   onMapClick,
 }: {
-  selecting: boolean;
+  capturing: boolean;
   onMapClick: (latlng: [number, number]) => void;
 }) {
   const map = useMapEvents({
     click(event) {
-      if (selecting) onMapClick([event.latlng.lat, event.latlng.lng]);
+      onMapClick([event.latlng.lat, event.latlng.lng]);
     },
   });
 
   useEffect(() => {
     const container = map.getContainer();
-    if (selecting) {
+    if (capturing) {
       map.doubleClickZoom.disable();
       container.style.cursor = "crosshair";
     } else {
@@ -104,7 +124,7 @@ function SelectCapture({
     return () => {
       container.style.cursor = "";
     };
-  }, [selecting, map]);
+  }, [capturing, map]);
 
   return null;
 }
@@ -112,8 +132,10 @@ function SelectCapture({
 export default function GolfMap({
   lang,
   geojson,
-  selecting,
+  capturing,
   firstCorner,
+  tracePoints,
+  overlay,
   scanBox,
   onMapClick,
   onMapReady,
@@ -165,7 +187,9 @@ export default function GolfMap({
       </LayersControl>
 
       <MapInit onReady={onMapReady} locate={!linkedView} />
-      <SelectCapture selecting={selecting} onMapClick={onMapClick} />
+      <TapCapture capturing={capturing} onMapClick={onMapClick} />
+
+      {overlay && <ImageOverlay url={overlay.url} bounds={overlay.bounds} interactive={false} />}
 
       {geojson && geojson.features.length > 0 && (
         <GeoJSON
@@ -189,6 +213,30 @@ export default function GolfMap({
             interactive: false,
           }}
         />
+      )}
+
+      {tracePoints && tracePoints.length > 0 && (
+        <>
+          <Polyline
+            positions={tracePoints}
+            pathOptions={{ color: "#ffffff", weight: 2.5, dashArray: "6 5", interactive: false }}
+          />
+          {tracePoints.map((point, i) => (
+            <CircleMarker
+              key={i}
+              center={point}
+              // The first point is bigger: tapping it closes the shape.
+              radius={i === 0 ? 8 : 5}
+              pathOptions={{
+                color: "#ffffff",
+                weight: 2,
+                fillColor: i === 0 ? TURF_COLORS.course : "#2563eb",
+                fillOpacity: 1,
+                interactive: false,
+              }}
+            />
+          ))}
+        </>
       )}
 
       {firstCorner && (

@@ -5,15 +5,18 @@ names the mower product (Kress Voyager, KR800/KR804); don't use it as the
 app's brand.
 
 Next.js 16 App Router + React 19 + TypeScript + Tailwind. Measures golf course
-turf acreage from OpenStreetMap for robotic mower quoting, plus an
+turf acreage from OpenStreetMap (or satellite land cover when a course isn't
+mapped in detail) and a sod farm's fields from Agriculture Canada's crop map,
+for robotic mower quoting, plus an
 "Incentives" tab that estimates grant/tax savings on robotic mowers and battery
 tools (Quebec, Ontario, federal) and an "ROI" tab comparing a Kress
 Voyager with a zero-turn crew. Every tab is in English (default) and Quebec
 French, with light and dark themes. The tabs are connected (measured acres →
 ROI sizing; the Incentives profile → ROI's net investment) and every tab has a
-share link and a client PDF. No API keys and no database: three small route
-handlers (Overpass cache, gas price, client error log) run on Vercel; everything
-else goes straight from the browser to public APIs (built-in `fetch`).
+share link and a client PDF. No API keys and no database: four small route
+handlers (Overpass cache, land cover, gas price, client error log) run on
+Vercel; everything else goes straight from the browser to public APIs
+(built-in `fetch`).
 
 ## Layout
 
@@ -22,6 +25,8 @@ src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
                   not-found.tsx, globals.css (theme color variables), boot.css
   api/overpass/   cached Overpass lookup (CDN 1 day, hedged mirror requests);
                   the browser falls back to calling the mirrors itself
+  api/landcover/  satellite land cover as a small class grid (CDN 30 days):
+                  ESA WorldCover (src=worldcover) or AAFC crop inventory (src=aci)
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
 src/components/
@@ -32,11 +37,13 @@ src/components/
                              after hydration; styles and timeline in app/boot.css)
   AppTabs.tsx                tab bar (Acreage | Incentives | ROI) + FR/EN and
                              light/dark buttons; tab in the URL hash
-  GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure
+  GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure, the
+                             satellite count, sod detection and tracing
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)
-  MeasurePanel.tsx           results panel + legend
-  QuoteSection.tsx           acres for the quote: categories, % rough, override,
-                             Send to ROI, PDF report, Copy link
+  MeasurePanel.tsx           results panel + legend, Golf course | Sod farm switch
+  QuoteSection.tsx           acres for the quote: categories, % rough (or %
+                             satellite grass, or % sod), override, Send to ROI,
+                             PDF report, Copy link
   AcreageReport.tsx          print-only Acreage PDF (replaces the map in print)
   SearchBox.tsx              Photon geocoder autocomplete
   IncentivesTab.tsx          incentive checker UI (client-only)
@@ -44,13 +51,17 @@ src/components/
 src/lib/
   overpass.ts   builds the Overpass QL query; cache route first, then 3 mirrors
   area.ts       OSM → GeoJSON → categorize → clip → acres  (the core logic)
-  types.ts      BBox, CourseMeasurement
+  landcover.ts  land cover grids: grass inside an outline, sod fields, traced
+                shapes (pure, tested)
+  landcover-server.ts  WorldCover COG reader + crop inventory exportImage (route only)
+  types.ts      BBox, CourseMeasurement, SatelliteTurf, SodField, SodMeasurement
   incentives.ts program rules, FR/EN copy and savings math (pure, tested)
   roi.ts        Voyager ROI model sized from acreage, formatting (pure, tested)
   roi-copy.ts   ROI tab copy, FR and EN, incl. "as of" source for each default
   quote.ts      measurement → acres for the quote, share params (pure, tested)
   quote-store.ts  client store shared by the tabs (useSyncExternalStore)
-  share.ts      share-link helpers (pure, tested); keys r_ / i_ / q_ / v, m, b, n
+  share.ts      share-link helpers + polylines (pure, tested); keys r_ / i_ / q_ /
+                v, m, b, n, a, o, sf, sx
   gas.ts        StatCan gas price parsing (pure, tested)
   report-error.ts  sendBeacon to /api/log
   tabs.ts       goToTab() for in-app navigation
@@ -69,7 +80,23 @@ src/types/      ambient module declarations for untyped deps
 - **Rough is deliberately conservative.** When rough isn't mapped, it's estimated
   from the boundary minus everything else; when a course has *only* a boundary
   and no detail, it reports `boundaryOnly` rather than estimating. Don't "fix"
-  that into always producing a number — it would silently inflate quotes.
+  that into "boundary minus nothing" — it would silently inflate quotes.
+- **Outline-only courses count satellite grass instead.** For `boundaryOnly`
+  (or an outline traced by hand, `outlineTraced`), the calculator reads ESA
+  WorldCover inside the outline and only class 30 (grassland) counts as turf
+  (`satelliteTurf` in `landcover.ts`); the quote takes `grassPct` of it (80%
+  default) and shows it labeled as a satellite count with its year. If that
+  fails, the quote still needs an override. WorldCover is 2021 v200 on AWS
+  with no CORS, so it goes through `/api/landcover`.
+- **Sod farms are a mode of the Acreage tab** (`mode` in quote-store, `a=sod`
+  in links). Fields come from AAFC's Annual Crop Inventory, class 192 (Sod),
+  via ArcGIS `exportImage` resampled to a 15 m lat/lon grid; `ACI_YEARS` in
+  `landcover-server.ts` lists years newest first (add the next one when AAFC
+  publishes it, usually the following spring). `findSodFields` fills enclosed
+  gaps under 1 ac and drops specks under 1 ac; acres come from the cells, the
+  outline (d3-contour) is for display. Tapping a field toggles `included`;
+  traced fields are measured with turf. The quote takes `sodPct` (90% default)
+  of the included fields. Switching modes clears the results, name and override.
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in
@@ -102,7 +129,9 @@ src/types/      ambient module declarations for untyped deps
   separately; only "kept" feeds the ROI tab.
 - **Measured turf is not quoted turf.** `quote.ts` counts only chosen categories
   (greens/tees off by default), a share of the rough (80% default) or a manual
-  override, and refuses to quote a boundary-only course without an override.
+  override, and never quotes a boundary-only course from its outline: only its
+  satellite grass count, else an override. `acresForQuote` picks the golf or sod
+  basis for the ROI tab and the PDF.
 - **Language and theme are app-wide.** Read them with `useLang()` /
   `useTheme()` from `src/lib/preferences.ts`; never keep per-tab copies. English
   is the default; the server always renders English/light and the boot script in
@@ -133,11 +162,15 @@ src/types/      ambient module declarations for untyped deps
   `globals.css` that swap in dark mode, so one class covers both themes. Dark
   values sit under `@media screen`, so printing stays light.
 - **Print / PDF is a client deliverable.** Acreage prints `AcreageReport`
-  (1 page), Incentives the profile and results (about 2 pages, form hidden),
+  (1 page; mapped course, satellite count or sod farm), Incentives the profile and results (about 2 pages, form hidden),
   ROI one Letter page (printed at 80%, inputs as "label … value", sources full
   width). Check page counts with print emulation after layout changes.
 - **Share links** put a tab's inputs in the query string (`share.ts`); tabs read
   them once on load. Keep new inputs in the link, with the tab's prefix.
+  Traced shapes travel as encoded polylines (5 decimals), and traced points are
+  rounded to the same precision when the trace ends so a reopened link
+  measures the same shape. Detected sod fields left out are stored as a point
+  inside each (`sx`), not by index.
 - **React 19 rules apply**: no reading/writing refs during render and no
   synchronous setState in effect bodies (the lint config enforces both).
 
@@ -148,5 +181,5 @@ npm install
 npm run dev      # http://localhost:3000
 npm run build    # type check + production build
 npm run lint
-npm test         # vitest: acreage pipeline, quote, incentives, ROI model, share links
+npm test         # vitest: acreage pipeline, land cover, quote, incentives, ROI model, share links
 ```

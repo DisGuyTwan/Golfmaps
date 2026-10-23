@@ -3,6 +3,10 @@
  * reopened or sent to a client, e.g. /?r_area=60&r_mowsPerWeek=2#roi.
  * Keys are prefixed per tab (r_ ROI, i_ Incentives, q_ and v Acreage) so one
  * link never collides with another tab's inputs. Pure, so it is tested.
+ *
+ * Acreage keys: v view, m measure on open, b scan box, n name, a=sod for a sod
+ * farm, o a traced course outline, sf traced sod fields, sx detected sod
+ * fields left out (a point inside each). Shapes travel as encoded polylines.
  */
 
 export type ParamValue = string | number | boolean | null | undefined;
@@ -47,4 +51,63 @@ export function decodeView(value: string | null): { lat: number; lon: number; zo
   if (![lat, lon, zoom].every(Number.isFinite)) return null;
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180 || zoom < 1 || zoom > 20) return null;
   return { lat, lon, zoom };
+}
+
+/**
+ * [lat, lon] points as an encoded polyline (Google's format, 5 decimals ≈ 1 m),
+ * the compact way to put a traced shape in a link. Its characters (? to ~)
+ * never include a comma, so several polylines can be joined with ",".
+ */
+export function encodePolyline(points: [number, number][]): string {
+  let out = "";
+  let prevLat = 0;
+  let prevLon = 0;
+  const push = (delta: number) => {
+    let v = delta < 0 ? ~(delta << 1) : delta << 1;
+    while (v >= 0x20) {
+      out += String.fromCharCode((0x20 | (v & 0x1f)) + 63);
+      v >>= 5;
+    }
+    out += String.fromCharCode(v + 63);
+  };
+  for (const [lat, lon] of points) {
+    const la = Math.round(lat * 1e5);
+    const lo = Math.round(lon * 1e5);
+    push(la - prevLat);
+    push(lo - prevLon);
+    prevLat = la;
+    prevLon = lo;
+  }
+  return out;
+}
+
+/** Points from an encoded polyline; null when it is malformed or out of range. */
+export function decodePolyline(value: string): [number, number][] | null {
+  const points: [number, number][] = [];
+  let i = 0;
+  let lat = 0;
+  let lon = 0;
+  const next = (): number | null => {
+    let result = 0;
+    let shift = 0;
+    for (;;) {
+      if (i >= value.length || shift > 30) return null;
+      const b = value.charCodeAt(i++) - 63;
+      if (b < 0 || b > 63) return null;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+      if (b < 0x20) break;
+    }
+    return result & 1 ? ~(result >> 1) : result >> 1;
+  };
+  while (i < value.length) {
+    const dLat = next();
+    const dLon = next();
+    if (dLat === null || dLon === null) return null;
+    lat += dLat;
+    lon += dLon;
+    if (Math.abs(lat) > 9e6 || Math.abs(lon) > 18e6) return null;
+    points.push([lat / 1e5, lon / 1e5]);
+  }
+  return points;
 }

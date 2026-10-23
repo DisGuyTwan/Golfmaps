@@ -7,8 +7,15 @@
  * with reel mowers, and estimated rough still includes cart paths, unmapped
  * trees and native areas that are never mowed. So the quote counts only the
  * chosen categories, takes a share of the rough, and can be overridden by hand.
+ *
+ * Two more bases, each with its own share: a course with no mapped turf
+ * (outline only, or traced) counts the satellite grass inside its outline,
+ * and a sod farm counts the fields left in, less those being harvested.
  */
-import type { CourseMeasurement } from "./types";
+import type { CourseMeasurement, SatelliteTurf, SodMeasurement } from "./types";
+
+/** What the Acreage tab measures: a golf course or a sod farm. */
+export type AcreageMode = "golf" | "sod";
 
 export type QuoteCategory = "fairway" | "rough" | "green" | "tee" | "range";
 export const QUOTE_CATEGORIES: QuoteCategory[] = ["fairway", "rough", "green", "tee", "range"];
@@ -19,13 +26,25 @@ export interface QuoteSettings {
   roughPct: number;
   /** Acres typed in by hand; replaces the computed total when set. */
   override: number | null;
+  /**
+   * Share of the satellite grass inside an outline that robots mow (0 to
+   * 100). It holds greens, tees and unmowed native grass too; 80% lands near
+   * what the category defaults give on a fully mapped course.
+   */
+  grassPct: number;
+  /** Share of the sod fields being mowed at a time (0 to 100): fields just harvested or reseeded aren't. */
+  sodPct: number;
 }
 
 export const DEFAULT_QUOTE: QuoteSettings = {
   include: { fairway: true, rough: true, green: false, tee: false, range: true },
   roughPct: 80,
   override: null,
+  grassPct: 80,
+  sodPct: 90,
 };
+
+const share = (pct: number) => Math.min(100, Math.max(0, pct)) / 100;
 
 export function categoryAcres(m: CourseMeasurement, c: QuoteCategory): number {
   return c === "range" ? m.drivingRangeAcres : m[c].acres;
@@ -33,7 +52,7 @@ export function categoryAcres(m: CourseMeasurement, c: QuoteCategory): number {
 
 /** Acres counted for each included category, with the rough share applied. */
 export function quoteBreakdown(m: CourseMeasurement, q: QuoteSettings): Record<QuoteCategory, number> {
-  const pct = Math.min(100, Math.max(0, q.roughPct)) / 100;
+  const pct = share(q.roughPct);
   const out = {} as Record<QuoteCategory, number>;
   for (const c of QUOTE_CATEGORIES) {
     const acres = q.include[c] ? categoryAcres(m, c) : 0;
@@ -42,24 +61,60 @@ export function quoteBreakdown(m: CourseMeasurement, q: QuoteSettings): Record<Q
   return out;
 }
 
+/** Satellite grass counted for the quote, with the mowed share applied. */
+export function satelliteAcres(s: SatelliteTurf, q: QuoteSettings): number {
+  return s.grassAcres * share(q.grassPct);
+}
+
 /**
  * Acres for the quote: the manual override when set, else the included
- * categories. null when there is nothing to quote yet. A boundary-only course
- * has no breakdown, so it needs an override (its outline would inflate it).
+ * categories. null when there is nothing to quote yet. A course with only an
+ * outline has no breakdown: it counts the satellite grass inside the outline
+ * when that ran, and otherwise needs an override (the outline would inflate it).
  */
 export function quoteAcres(m: CourseMeasurement | null, q: QuoteSettings): number | null {
   if (q.override !== null && q.override > 0) return q.override;
-  if (!m || !m.found || m.boundaryOnly) return null;
-  const total = Object.values(quoteBreakdown(m, q)).reduce((a, b) => a + b, 0);
+  if (!m || !m.found) return null;
+  const total = m.boundaryOnly
+    ? m.satellite
+      ? satelliteAcres(m.satellite, q)
+      : 0
+    : Object.values(quoteBreakdown(m, q)).reduce((a, b) => a + b, 0);
   return total > 0 ? total : null;
 }
 
-/** Share-link parameters (q_inc, q_pct, q_ovr) for the settings. */
-export function encodeQuote(q: QuoteSettings): Record<string, string> {
-  const params: Record<string, string> = {
-    q_inc: QUOTE_CATEGORIES.filter((c) => q.include[c]).join(","),
-    q_pct: String(q.roughPct),
-  };
+/** Acres of the sod fields left in the quote (before the mowed share). */
+export function sodFieldAcres(sod: SodMeasurement | null): number {
+  return (sod?.fields ?? []).reduce((sum, f) => sum + (f.included ? f.acres : 0), 0);
+}
+
+/** Acres for a sod farm's quote: the override, else the fields left in at the mowed share. */
+export function sodQuoteAcres(sod: SodMeasurement | null, q: QuoteSettings): number | null {
+  if (q.override !== null && q.override > 0) return q.override;
+  const total = sodFieldAcres(sod) * share(q.sodPct);
+  return total > 0 ? total : null;
+}
+
+/** The quoted acres for whichever kind of property the Acreage tab is on. */
+export function acresForQuote(
+  mode: AcreageMode,
+  m: CourseMeasurement | null,
+  sod: SodMeasurement | null,
+  q: QuoteSettings,
+): number | null {
+  return mode === "sod" ? sodQuoteAcres(sod, q) : quoteAcres(m, q);
+}
+
+/** Share-link parameters for the settings: q_inc, q_pct, q_gpct for a course, q_spct for sod, q_ovr. */
+export function encodeQuote(q: QuoteSettings, mode: AcreageMode = "golf"): Record<string, string> {
+  const params: Record<string, string> =
+    mode === "sod"
+      ? { q_spct: String(q.sodPct) }
+      : {
+          q_inc: QUOTE_CATEGORIES.filter((c) => q.include[c]).join(","),
+          q_pct: String(q.roughPct),
+          q_gpct: String(q.grassPct),
+        };
   if (q.override !== null) params.q_ovr = String(q.override);
   return params;
 }
@@ -71,8 +126,13 @@ export function decodeQuote(params: URLSearchParams): QuoteSettings {
     const chosen = new Set(inc.split(","));
     for (const c of QUOTE_CATEGORIES) q.include[c] = chosen.has(c);
   }
-  const pct = Number(params.get("q_pct"));
-  if (params.has("q_pct") && Number.isFinite(pct)) q.roughPct = Math.min(100, Math.max(0, pct));
+  const pct = (key: string): number | null => {
+    const n = Number(params.get(key));
+    return params.has(key) && Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null;
+  };
+  q.roughPct = pct("q_pct") ?? q.roughPct;
+  q.grassPct = pct("q_gpct") ?? q.grassPct;
+  q.sodPct = pct("q_spct") ?? q.sodPct;
   const ovr = Number(params.get("q_ovr"));
   if (params.has("q_ovr") && Number.isFinite(ovr) && ovr > 0) q.override = ovr;
   return q;
