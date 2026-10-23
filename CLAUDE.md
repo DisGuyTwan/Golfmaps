@@ -123,6 +123,9 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   footprints there aren't reachable), so the panel says when the lot has no
   building and the rep traces it out. `lawnTotals` counts every removal once.
   Trees aren't removed. A cadastre lot is framed above the results panel.
+  Streets are cadastre lots too and a geocoded address can land on the road,
+  so `lotLooksOdd` (over 5,000 m², or a strip with compactness under 0.2)
+  warns the rep to tap the house itself.
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in

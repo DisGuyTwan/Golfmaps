@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import area from "@turf/area";
 import type { Polygon } from "geojson";
-import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, lotBBox, mappedOnLot, type LawnMeasurement } from "./lawn";
+import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, lotBBox, lotLooksOdd, mappedOnLot, type LawnMeasurement } from "./lawn";
 
 /*
  * A residential lot near Boucherville, built in metres: a 30 × 40 m lot with a
@@ -104,5 +104,34 @@ describe("helpers", () => {
     const b = lotBBox(lot, 0.001);
     expect(b.south).toBeCloseTo(LAT - 0.001, 9);
     expect(b.east).toBeCloseTo(LON + dLon(30) + 0.001, 9);
+  });
+});
+
+describe("lotLooksOdd", () => {
+  it("accepts ordinary house lots, including an L-shaped one", () => {
+    expect(lotLooksOdd(lot)).toBe(false);
+    const ell: Polygon = {
+      type: "Polygon",
+      coordinates: [rect(0, 0, 30, 10).coordinates[0].slice(0, 2).concat([
+        [LON + dLon(30), LAT + dLat(10)], [LON + dLon(10), LAT + dLat(10)], [LON + dLon(10), LAT + dLat(30)], [LON, LAT + dLat(30)], [LON, LAT],
+      ])],
+    };
+    expect(lotLooksOdd(ell)).toBe(false);
+  });
+  it("accepts a real Boucherville house lot from the cadastre (lot 2 278 398)", () => {
+    const real: Polygon = {
+      type: "Polygon",
+      coordinates: [[
+        [-73.444191981464, 45.58562409531114], [-73.44450320998071, 45.585795039865346], [-73.4446591081067, 45.58567859549235],
+        [-73.44469378128005, 45.5856526958108], [-73.44436067429459, 45.58546972667128], [-73.44435496729758, 45.58547490385923],
+        [-73.444191981464, 45.58562409531114],
+      ]],
+    };
+    expect(lotLooksOdd(real)).toBe(false);
+    expect(sqft(real)).toBeCloseTo(7413, -1);
+  });
+  it("flags a street-like strip and a lot too big for one house", () => {
+    expect(lotLooksOdd(rect(0, 0, 400, 15))).toBe(true);
+    expect(lotLooksOdd(rect(0, 0, 80, 80))).toBe(true);
   });
 });

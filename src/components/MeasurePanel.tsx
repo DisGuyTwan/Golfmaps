@@ -3,7 +3,7 @@
 import { TURF_COLORS } from "@/lib/area";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { estimatedTurf } from "@/lib/landcover";
-import { formatSqft, type LawnMeasurement, type LawnTotals } from "@/lib/lawn";
+import { formatSqft, lotLooksOdd, type LawnMeasurement, type LawnTotals } from "@/lib/lawn";
 import type { AcreageMode } from "@/lib/quote";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import type { MeasureError, SatelliteError, TraceKind } from "./GolfCourseCalculator";
@@ -272,6 +272,9 @@ export default function MeasurePanel({
         {tracing || selecting || picking ? null : mode === "lawn" ? (
           <>
             {loading && <Notice tone="info">{t.lawnLoading}</Notice>}
+            {lawn?.lotSource === "cadastre" && lotLooksOdd(lawn.lot) && lawnTotals && (
+              <Notice tone="warn">{t.lawnOddLot(sq(lawnTotals.lotSqft))}</Notice>
+            )}
             {lawn?.mappedFailed && <Notice tone="warn">{t.lawnBuildingsFailed}</Notice>}
             {lawnNoBuilding && <Notice tone="warn">{t.lawnNoBuilding}</Notice>}
 

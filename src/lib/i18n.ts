@@ -104,6 +104,8 @@ const en = {
   lawnRemoveHint:
     "Remove an area traces out a driveway, patio, garden bed or a house that isn’t mapped. Tap a traced area to put it back.",
   lawnTreesNote: "Lawn under trees counts as lawn.",
+  lawnOddLot: (size: string) =>
+    `This lot (${size}) looks too big or too narrow for one house: it may be the street. Tap the house itself with Select a lot, or trace the lot.`,
   lawnQuoteTitle: "Lawn for the quote",
   lawnOverride: "Manual override (sq ft)",
   lawnQuoteTotal: "Lawn for quote",
@@ -276,6 +278,8 @@ const fr: UiStrings = {
   lawnRemoveHint:
     "Retirer une zone sert à tracer une entrée, un patio, une plate-bande ou une maison non cartographiée. Touchez une zone tracée pour la remettre.",
   lawnTreesNote: "La pelouse sous les arbres compte comme pelouse.",
+  lawnOddLot: (size: string) =>
+    `Ce lot (${size}) semble trop grand ou trop étroit pour une maison : c’est peut-être la rue. Touchez la maison elle-même avec Choisir un terrain, ou tracez le terrain.`,
   lawnQuoteTitle: "Pelouse pour la soumission",
   lawnOverride: "Valeur saisie à la main (pi²)",
   lawnQuoteTotal: "Pelouse pour la soumission",

@@ -114,6 +114,32 @@ export function lawnTotals(m: LawnMeasurement): LawnTotals {
   }
 }
 
+/** Lots bigger than this (≈ 54,000 sq ft) are rarely a single house. */
+const ODD_LOT_M2 = 5000;
+/** Below this compactness (4πA/P², 1 for a circle) a lot is a strip, like a street. */
+const ODD_LOT_COMPACTNESS = 0.2;
+
+/**
+ * True when the lot doesn't look like a house lot: very large, or a long
+ * strip. The cadastre gives streets lot numbers too, and a geocoded address
+ * can land on the road; the rep is then told to tap the house itself.
+ */
+export function lotLooksOdd(lot: Polygon | MultiPolygon): boolean {
+  const m2 = area({ type: "Feature", geometry: lot, properties: {} });
+  if (m2 > ODD_LOT_M2) return true;
+  // Perimeter on a local flat projection: plenty for a lot-sized shape.
+  const rings = lot.type === "Polygon" ? [lot.coordinates[0]] : lot.coordinates.map((p) => p[0]);
+  const k = 111_320;
+  const cos = Math.cos((rings[0][0][1] * Math.PI) / 180);
+  let perimeter = 0;
+  for (const ring of rings) {
+    for (let i = 1; i < ring.length; i++) {
+      perimeter += Math.hypot((ring[i][0] - ring[i - 1][0]) * k * cos, (ring[i][1] - ring[i - 1][1]) * k);
+    }
+  }
+  return perimeter > 0 && (4 * Math.PI * m2) / (perimeter * perimeter) < ODD_LOT_COMPACTNESS;
+}
+
 /** The lot's bounding box grown by `marginDeg`, for the Overpass lookup. */
 export function lotBBox(lot: Polygon | MultiPolygon, marginDeg = 0.0002): BBox {
   const rings = lot.type === "Polygon" ? [lot.coordinates[0]] : lot.coordinates.map((p) => p[0]);
