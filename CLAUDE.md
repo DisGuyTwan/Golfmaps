@@ -69,6 +69,8 @@ src/lib/
   preferences.ts       useLang / useTheme / setLang / setTheme (client)
   preferences-boot.ts  storage keys + inline script that applies them pre-paint
 src/types/      ambient module declarations for untyped deps
+scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
+                fully mapped OSM courses (Python: pyarrow, shapely, rasterio)
 ```
 
 ## Things to know
@@ -80,14 +82,22 @@ src/types/      ambient module declarations for untyped deps
 - **Rough is deliberately conservative.** When rough isn't mapped, it's estimated
   from the boundary minus everything else; when a course has *only* a boundary
   and no detail, it reports `boundaryOnly` rather than estimating. Don't "fix"
-  that into "boundary minus nothing" — it would silently inflate quotes.
+  that into "boundary minus nothing" — it would silently inflate quotes. Mapped
+  rough is counted net of what's drawn over it (`netAcres`: fairways, greens,
+  tees, bunkers, water, woods, buildings), since mappers often draw rough under
+  everything and the plain sum overcounted rough by 50%.
 - **Outline-only courses count satellite grass instead.** For `boundaryOnly`
   (or an outline traced by hand, `outlineTraced`), the calculator reads ESA
-  WorldCover inside the outline and only class 30 (grassland) counts as turf
-  (`satelliteTurf` in `landcover.ts`); the quote takes `grassPct` of it (80%
-  default) and shows it labeled as a satellite count with its year. If that
-  fails, the quote still needs an override. WorldCover is 2021 v200 on AWS
-  with no CORS, so it goes through `/api/landcover`.
+  WorldCover inside the outline (`satelliteTurf` in `landcover.ts`); class 30
+  (grassland) is the grass seen, and `estimatedTurf` takes `TURF_PER_GRASS`
+  (0.59) of it, with `TURF_RANGE` (0.79–1.26×) as the likely range. Those are
+  calibrated on the 45 fully mapped OSM courses in ON/QC/nearby states
+  (`scripts/calibrate-satellite-turf.py`, left-one-out median error 16%); raw
+  grass overstated turf by 60%+. Don't quote raw grass again. The quote takes
+  `grassPct` (80% default) of the estimated turf. If WorldCover fails, the
+  quote still needs an override. WorldCover is 2021 v200 on AWS with no CORS,
+  so it goes through `/api/landcover`. Tested and not worth it: Meta's 1 m
+  canopy height, Sentinel-2 seasonal NDVI and hole counts didn't beat this.
 - **Sod farms are a mode of the Acreage tab** (`mode` in quote-store, `a=sod`
   in links). Fields come from AAFC's Annual Crop Inventory, class 192 (Sod),
   via ArcGIS `exportImage` resampled to a 15 m lat/lon grid; `ACI_YEARS` in

@@ -37,8 +37,8 @@ const en = {
   notFound:
     "No golf course found in view. Search a course above, or pan/zoom so the course fills the screen, then measure again. If the course isn’t in OpenStreetMap, trace its outline.",
   boundaryOnly:
-    "Only this course’s outline is mapped in OpenStreetMap, not its fairways, greens and tees. The turf is counted from satellite land cover inside the outline instead.",
-  outlineTraced: "Course outline traced by hand. The turf is counted from satellite land cover inside it.",
+    "Only this course’s outline is mapped in OpenStreetMap, not its fairways, greens and tees. The turf is estimated from satellite land cover inside the outline instead.",
+  outlineTraced: "Course outline traced by hand. The turf is estimated from satellite land cover inside it.",
   traceOutline: "Trace the course outline",
   traceField: "Trace a field",
   traceHint: "Tap each corner on the satellite image. Tap the first point again, or Done, to close the shape.",
@@ -50,14 +50,16 @@ const en = {
   satTrees: "Trees",
   satBuilt: "Built",
   satWater: "Water",
-  satTotal: "Grass inside the outline",
+  satTotal: "Estimated turf",
+  satSeen: "Grass seen by satellite",
+  satRange: (low: string, high: string) => `Likely between ${low} and ${high} ac`,
   satLoading: "Counting grass from satellite land cover…",
   satError: "Couldn’t load satellite land cover. Try measuring again, or enter the mowed acreage by hand.",
   satTooLarge: "This outline is too large for the satellite count. Enter the mowed acreage by hand.",
   satNote: (year: number) =>
-    `Counted from ESA WorldCover ${year} (10 m satellite land cover). Only grassland counts as turf: trees, buildings, roads and water are left out, so mowed grass under scattered trees isn’t counted.`,
-  grassPct: "Grass mowed by robot (%)",
-  grassPctHint: "Satellite grass also holds greens, tees and native areas that robots don’t mow.",
+    `Grass seen in ESA WorldCover ${year} (10 m satellite land cover), with trees, buildings, roads and water left out. It also takes in hay, meadows and native areas: on 45 fully mapped courses in Ontario, Quebec and nearby states, maintained turf was 59% of it, and most fell within the range shown.`,
+  grassPct: "Turf mowed by robot (%)",
+  grassPctHint: "Estimated turf still holds greens, tees and some rough that robots don’t mow.",
 
   findSod: "Find sod fields in view",
   sodSearchPlaceholder: "Search a sod farm or address",
@@ -109,7 +111,7 @@ const en = {
   reportOverride: (ac: string) => `Manual override: ${ac} ac replaces the measured total.`,
   reportEmpty: "Measure a course on the Acreage tab first.",
   unnamedCourse: "Area measured on the map",
-  reportGrassAt: (pct: number) => `Satellite grass counted at ${pct}%.`,
+  reportGrassAt: (pct: number) => `Estimated turf counted at ${pct}%.`,
   reportSodTitle: "Sod field acreage report",
   reportSodLede:
     "Sod fields from Agriculture Canada’s crop map and traced on satellite imagery, and the acreage the robotic mowing quote is built on.",
@@ -172,8 +174,8 @@ const fr: UiStrings = {
   notFound:
     "Aucun terrain de golf trouvé dans la vue. Cherchez un terrain ci-dessus, ou déplacez la carte pour que le terrain remplisse l’écran, puis mesurez de nouveau. Si le terrain n’est pas dans OpenStreetMap, tracez son contour.",
   boundaryOnly:
-    "Seul le contour de ce terrain est cartographié dans OpenStreetMap, pas ses allées, verts et départs. Le gazon est plutôt compté à partir de la couverture du sol par satellite à l’intérieur du contour.",
-  outlineTraced: "Contour du terrain tracé à la main. Le gazon est compté à partir de la couverture du sol par satellite à l’intérieur.",
+    "Seul le contour de ce terrain est cartographié dans OpenStreetMap, pas ses allées, verts et départs. Le gazon est plutôt estimé à partir de la couverture du sol par satellite à l’intérieur du contour.",
+  outlineTraced: "Contour du terrain tracé à la main. Le gazon est estimé à partir de la couverture du sol par satellite à l’intérieur.",
   traceOutline: "Tracer le contour du terrain",
   traceField: "Tracer un champ",
   traceHint: "Touchez chaque coin sur l’image satellite. Touchez de nouveau le premier point, ou Terminé, pour fermer la forme.",
@@ -185,15 +187,17 @@ const fr: UiStrings = {
   satTrees: "Arbres",
   satBuilt: "Bâti",
   satWater: "Eau",
-  satTotal: "Gazon à l’intérieur du contour",
+  satTotal: "Gazon entretenu estimé",
+  satSeen: "Gazon vu par satellite",
+  satRange: (low: string, high: string) => `Probablement entre ${low} et ${high} ac`,
   satLoading: "Comptage du gazon à partir de la couverture du sol par satellite…",
   satError:
     "Impossible de charger la couverture du sol par satellite. Mesurez de nouveau, ou entrez la superficie tondue à la main.",
   satTooLarge: "Ce contour est trop grand pour le comptage par satellite. Entrez la superficie tondue à la main.",
   satNote: (year: number) =>
-    `Compté à partir d’ESA WorldCover ${year} (couverture du sol par satellite, 10 m). Seules les prairies comptent comme gazon : les arbres, bâtiments, routes et plans d’eau sont exclus, donc le gazon tondu sous des arbres épars n’est pas compté.`,
+    `Gazon vu dans ESA WorldCover ${year} (couverture du sol par satellite, 10 m), sans les arbres, bâtiments, routes et plans d’eau. Il inclut aussi du foin, des prés et des zones naturelles : sur 45 terrains entièrement cartographiés en Ontario, au Québec et dans les États voisins, le gazon entretenu en représentait 59 %, et la plupart se situaient dans la fourchette indiquée.`,
   grassPct: "Gazon tondu par robot (%)",
-  grassPctHint: "Le gazon vu par satellite inclut aussi les verts, les départs et les zones naturelles que les robots ne tondent pas.",
+  grassPctHint: "Le gazon entretenu estimé inclut encore les verts, les départs et une partie de l’herbe longue que les robots ne tondent pas.",
 
   findSod: "Trouver les champs de gazon affichés",
   sodSearchPlaceholder: "Chercher une gazonnière ou une adresse",
@@ -245,7 +249,7 @@ const fr: UiStrings = {
   reportOverride: (ac: string) => `Valeur saisie à la main : ${ac} ac remplace le total mesuré.`,
   reportEmpty: "Mesurez d’abord un terrain dans l’onglet Superficie.",
   unnamedCourse: "Zone mesurée sur la carte",
-  reportGrassAt: (pct: number) => `Gazon vu par satellite compté à ${pct} %.`,
+  reportGrassAt: (pct: number) => `Gazon entretenu estimé compté à ${pct} %.`,
   reportSodTitle: "Rapport de superficie des champs de gazon",
   reportSodLede:
     "Champs de gazon tirés de la carte des cultures d’Agriculture Canada et tracés sur l’imagerie satellite, et superficie retenue pour la soumission de tonte robotisée.",

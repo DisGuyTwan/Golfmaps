@@ -1,5 +1,7 @@
 import area from "@turf/area";
+import difference from "@turf/difference";
 import intersect from "@turf/intersect";
+import union from "@turf/union";
 import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import osmtogeojson from "osmtogeojson";
 import type { Feature, Polygon, MultiPolygon, Position } from "geojson";
@@ -116,6 +118,49 @@ function clippedAcresInsideCourse(
   return acres;
 }
 
+/** [west, south, east, north] of a polygon feature. */
+function featureBBox(feature: Feature): [number, number, number, number] {
+  const g = feature.geometry as Polygon | MultiPolygon;
+  const rings = g.type === "Polygon" ? g.coordinates : g.coordinates.flat();
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const ring of rings) {
+    for (const [x, y] of ring) {
+      w = Math.min(w, x); e = Math.max(e, x);
+      s = Math.min(s, y); n = Math.max(n, y);
+    }
+  }
+  return [w, s, e, n];
+}
+
+/**
+ * Area of the `base` polygons merged (overlaps count once) minus whatever of
+ * `minus` lies on them, in acres. Mappers often draw rough as large polygons
+ * under the fairways, greens, bunkers and ponds; summed as-is, that counts
+ * those areas twice (by 50% over 280 Ontario/Quebec courses). Falls back to
+ * the plain sum if the geometry can't be processed.
+ */
+export function netAcres(base: Feature[], minus: Feature[]): number {
+  if (base.length === 0) return 0;
+  const plain = base.reduce((sum, f) => sum + area(f) * SQ_METERS_TO_ACRES, 0);
+  try {
+    const merged =
+      base.length > 1 ? union(featureCollection(base as Feature<Polygon | MultiPolygon>[])) : base[0];
+    if (!merged) return plain;
+    // Only what can overlap: a city's worth of buildings shouldn't slow this down.
+    const [w, s, e, n] = featureBBox(merged);
+    const near = minus.filter((f) => {
+      const [fw, fs, fe, fn] = featureBBox(f);
+      return fw <= e && fe >= w && fs <= n && fn >= s;
+    });
+    const net = near.length
+      ? difference(featureCollection([merged, ...near] as Feature<Polygon | MultiPolygon>[]))
+      : merged;
+    return net ? area(net) * SQ_METERS_TO_ACRES : 0;
+  } catch {
+    return plain;
+  }
+}
+
 /**
  * Converts a raw Overpass JSON response into a course measurement, estimating
  * rough from the course boundary when it isn't explicitly mapped.
@@ -147,6 +192,9 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
   const courseFeatures: Feature[] = [];
   const woodFeatures: Feature[] = [];
   const builtFeatures: Feature[] = [];
+  const roughFeatures: Feature[] = [];
+  /** Everything that can sit on top of mapped rough. */
+  const overRough: Feature[] = [];
 
   for (const feature of geojson.features) {
     const areaFeature = toAreaFeature(feature);
@@ -161,6 +209,8 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
     if (category === "course") courseFeatures.push(areaFeature);
     if (category === "wood") woodFeatures.push(areaFeature);
     if (category === "built") builtFeatures.push(areaFeature);
+    if (category === "rough") roughFeatures.push(areaFeature);
+    else if (category !== "course") overRough.push(areaFeature);
 
     if (category in RENDER_ORDER) {
       renderFeatures.push({
@@ -186,13 +236,14 @@ export function processOverpassData(overpassJson: unknown): CourseMeasurement {
       (RENDER_ORDER[(b.properties?._category as string) ?? ""] ?? 9),
   );
 
-  // Rough: use mapped polygons if present, otherwise estimate from the course
-  // boundary minus everything that isn't rough.
+  // Rough: use mapped polygons if present (net of fairways, greens, tees,
+  // bunkers, water, woods and buildings drawn over them), otherwise estimate
+  // from the course boundary minus everything that isn't rough.
   // Only estimate rough when there is detailed turf mapped to subtract from the
   // boundary. Otherwise "course minus nothing" would report the whole property
   // as rough, which is misleading.
   const hasDetail = counts.fairway > 0 || counts.green > 0 || counts.tee > 0;
-  const roughMapped = acres.rough;
+  const roughMapped = netAcres(roughFeatures, overRough);
   const roughEstimate = Math.max(
     0,
     acres.course -

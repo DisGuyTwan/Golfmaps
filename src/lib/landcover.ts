@@ -112,10 +112,30 @@ export function classAcres(grid: LandGrid, mask: Uint8Array): Map<number, number
 }
 
 /**
+ * Satellite grass is not all turf: WorldCover's "grassland" also takes in hay,
+ * meadows, native and buffer areas inside the property. Calibrated on the 45
+ * courses in Ontario, Quebec and the neighbouring states whose turf is fully
+ * mapped in OpenStreetMap (fairways, greens, tees, rough, range; Overture
+ * release 2026-10-21): maintained turf was a median 59% of the grass inside
+ * the outline (left-one-out median error 16%), and for the middle 60% of
+ * courses the mapped turf fell between 0.79 and 1.26 times that estimate.
+ * Same order as GCSAA's 2021 median of 95 acres of maintained turf per 18
+ * holes. scripts/calibrate-satellite-turf.py recomputes both.
+ */
+export const TURF_PER_GRASS = 0.59;
+export const TURF_RANGE: readonly [number, number] = [0.79, 1.26];
+
+/** Maintained turf estimated from the satellite grass, with its likely range. */
+export function estimatedTurf(s: SatelliteTurf): { acres: number; low: number; high: number } {
+  const acres = s.grassAcres * TURF_PER_GRASS;
+  return { acres, low: acres * TURF_RANGE[0], high: acres * TURF_RANGE[1] };
+}
+
+/**
  * What covers the inside of a course outline, from WorldCover. Only
- * "grassland" counts as turf: managed lawns land there, while trees, shrubs,
- * buildings, water and the odd cropland pixel stay out, so the estimate errs
- * low rather than quoting the whole property.
+ * "grassland" can be turf: managed lawns land there, while trees, shrubs,
+ * buildings, water and the odd cropland pixel stay out. `estimatedTurf` then
+ * takes the share of that grass that is maintained turf.
  */
 export function satelliteTurf(grid: LandGrid, outline: (Polygon | MultiPolygon)[]): SatelliteTurf {
   const byClass = classAcres(grid, polygonMask(grid, outline));

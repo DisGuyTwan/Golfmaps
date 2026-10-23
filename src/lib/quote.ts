@@ -12,6 +12,7 @@
  * (outline only, or traced) counts the satellite grass inside its outline,
  * and a sod farm counts the fields left in, less those being harvested.
  */
+import { estimatedTurf } from "./landcover";
 import type { CourseMeasurement, SatelliteTurf, SodMeasurement } from "./types";
 
 /** What the Acreage tab measures: a golf course or a sod farm. */
@@ -27,9 +28,9 @@ export interface QuoteSettings {
   /** Acres typed in by hand; replaces the computed total when set. */
   override: number | null;
   /**
-   * Share of the satellite grass inside an outline that robots mow (0 to
-   * 100). It holds greens, tees and unmowed native grass too; 80% lands near
-   * what the category defaults give on a fully mapped course.
+   * Share of the turf estimated from satellite (outline-only courses) that
+   * robots mow (0 to 100). It still holds greens, tees and some rough; on
+   * fully mapped courses the category defaults come to 81% of the turf.
    */
   grassPct: number;
   /** Share of the sod fields being mowed at a time (0 to 100): fields just harvested or reseeded aren't. */
@@ -61,16 +62,17 @@ export function quoteBreakdown(m: CourseMeasurement, q: QuoteSettings): Record<Q
   return out;
 }
 
-/** Satellite grass counted for the quote, with the mowed share applied. */
+/** Turf estimated from satellite, counted for the quote with the mowed share applied. */
 export function satelliteAcres(s: SatelliteTurf, q: QuoteSettings): number {
-  return s.grassAcres * share(q.grassPct);
+  return estimatedTurf(s).acres * share(q.grassPct);
 }
 
 /**
  * Acres for the quote: the manual override when set, else the included
  * categories. null when there is nothing to quote yet. A course with only an
- * outline has no breakdown: it counts the satellite grass inside the outline
- * when that ran, and otherwise needs an override (the outline would inflate it).
+ * outline has no breakdown: it counts the turf estimated from the satellite
+ * grass inside the outline when that ran, and otherwise needs an override (the
+ * outline would inflate it).
  */
 export function quoteAcres(m: CourseMeasurement | null, q: QuoteSettings): number | null {
   if (q.override !== null && q.override > 0) return q.override;

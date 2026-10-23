@@ -78,7 +78,10 @@ fails, the browser calls the mirrors directly.
 Rough is the number that matters most for a mowing quote and the one OSM maps
 least often, so the app is deliberately careful about it:
 
-- If rough polygons **are** mapped, it uses them.
+- If rough polygons **are** mapped, it uses them, net of the fairways, greens,
+  tees, bunkers, water, woods and buildings drawn over them. Mappers often draw
+  rough as big polygons under everything else; summed as-is, that overcounts
+  rough by 50% across 280 Ontario/Quebec courses.
 - If they aren't, it **estimates**: course boundary minus fairways, greens, tees,
   driving range, water, bunkers, trees and buildings. The panel labels this
   figure as an estimate.
@@ -91,18 +94,26 @@ least often, so the app is deliberately careful about it:
 
 Many courses have only their outline in OpenStreetMap, and some aren't there at
 all. For those, the app reads [ESA WorldCover](https://esa-worldcover.org/)
-(10 m satellite land cover, 2021) inside the outline and counts only the
-**grassland** cells as turf: trees, shrubs, buildings, roads, water and the odd
-cropland pixel stay out, so the estimate errs low. The counted grass is painted
-green over the satellite image so you can see what was counted, and the panel
-shows grass, trees, built and water separately. If the course isn't in OSM,
-**Trace the course outline** (tap its corners on the satellite image) and the
-same count runs inside your outline.
+(10 m satellite land cover, 2021) inside the outline: the **grassland** cells
+are painted green over the satellite image, and the panel shows grass, trees,
+built and water separately. If the course isn't in OSM, **Trace the course
+outline** (tap its corners on the satellite image) and the same count runs
+inside your outline.
 
-For the quote, satellite grass is counted at **80%** by default ("Grass mowed by
-robot"): it also holds greens, tees and native areas, and 80% lands near what
-the category defaults give on a fully mapped course. The share and a manual
-override stay editable.
+Satellite grass isn't all turf: it also takes in hay, meadows, native and buffer
+areas on the property. So the app reports **estimated turf = 59% of the grass**,
+with a likely range (0.79 to 1.26 times the estimate). That factor comes from
+the 45 courses in Ontario, Quebec and the neighbouring states whose turf is
+fully mapped in OSM: estimated this way, their turf comes out within 16% of
+the mapped figure on median (left-one-out), versus a 60%+ overestimate when
+the raw grass was used. It also matches GCSAA's 2021 median of 95 acres of
+maintained turf per 18 holes (Parcours du Cerf, 36 holes: about 196 ac
+estimated vs 190 ac by the per-hole average). `scripts/calibrate-satellite-turf.py`
+recomputes the factor from the latest OSM data.
+
+For the quote, estimated turf is counted at **80%** by default ("Turf mowed by
+robot"): on fully mapped courses the category defaults come to 81% of the
+turf. The share and a manual override stay editable.
 
 WorldCover is read through `/api/landcover?src=worldcover` (the bucket sends no
 CORS headers), which stitches the 3° tiles and keeps each window on the CDN for
@@ -208,7 +219,11 @@ Standard Next.js app, no extra configuration:
   empty (trace its outline).
 - Satellite land cover is coarse next to a survey: WorldCover cells are 10 m
   (grass under scattered trees reads as trees) and describes 2021; crop
-  inventory cells are 30 m and a year behind. Spot-check against the imagery.
+  inventory cells are 30 m and a year behind. The turf estimate for an
+  outline-only course is within 16% for half of courses and within about 25%
+  for most; a course with unusual amounts of meadow or native area can fall
+  outside the range. Spot-check against the imagery, and use the override when
+  you know the real figure.
 - Estimated rough inherits every gap in the underlying data — treat it as a
   starting point for a quote, not a survey.
 - The public Overpass API is rate-limited and occasionally busy. The app fails

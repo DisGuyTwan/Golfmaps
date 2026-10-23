@@ -2,6 +2,7 @@
 
 import { TURF_COLORS } from "@/lib/area";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
+import { estimatedTurf } from "@/lib/landcover";
 import type { AcreageMode } from "@/lib/quote";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import type { MeasureError, SatelliteError, TraceKind } from "./GolfCourseCalculator";
@@ -97,6 +98,7 @@ export default function MeasurePanel({
       : t.measureError[error.kind]
     : null;
   const sat = result?.satellite ?? null;
+  const turf = sat ? estimatedTurf(sat) : null;
   const outlineOnly = result?.boundaryOnly ?? false;
   const detected = sod?.fields.filter((f) => !f.traced) ?? [];
   const traced = sod?.fields.filter((f) => f.traced) ?? [];
@@ -240,13 +242,16 @@ export default function MeasurePanel({
                   <Stat value={ac(sat?.waterAcres ?? 0)} label={t.satWater} />
                 </div>
                 <Total
-                  label={sat ? t.satTotal : t.courseArea}
-                  value={`${ac(sat ? sat.grassAcres : (result?.courseAcres ?? 0))} ac`}
+                  label={turf ? t.satTotal : t.courseArea}
+                  value={`${ac(turf ? turf.acres : (result?.courseAcres ?? 0))} ac`}
                 />
-                {sat && (
+                {sat && turf && (
                   <div className="space-y-1 text-[11px]">
-                    <p className="text-muted">
-                      {t.courseBoundary}: {ac(result?.courseAcres ?? 0)} ac
+                    <p className="flex flex-wrap justify-between gap-x-3 text-muted">
+                      <span>{t.satRange(ac(turf.low), ac(turf.high))}</span>
+                      <span>
+                        {t.courseBoundary}: {ac(result?.courseAcres ?? 0)} ac
+                      </span>
                     </p>
                     <p className="text-faint">{t.satNote(sat.year)}</p>
                   </div>

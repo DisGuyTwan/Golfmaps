@@ -1,6 +1,7 @@
 "use client";
 
 import { UI, formatAcres } from "@/lib/i18n";
+import { estimatedTurf } from "@/lib/landcover";
 import { useLang } from "@/lib/preferences";
 import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, quoteBreakdown, satelliteAcres } from "@/lib/quote";
 import { useCourseName, useMeasurement, useMode, useQuoteSettings, useSod } from "@/lib/quote-store";
@@ -68,8 +69,10 @@ export default function AcreageReport() {
       ...(leftOut.length ? [[`${t.reportFieldsLeftOut} (${leftOut.length})`, ac(sum(leftOut)), "–"]] : []),
     ] as [string, string, string][];
   } else if (sat) {
+    const est = estimatedTurf(sat);
     rows = [
-      [t.satGrass, ac(sat.grassAcres), ac(satelliteAcres(sat, q))],
+      [t.satSeen, ac(sat.grassAcres), "–"],
+      [`${t.satTotal} (${t.satRange(formatAcres(est.low, lang), formatAcres(est.high, lang)).toLowerCase()})`, ac(est.acres), ac(satelliteAcres(sat, q))],
       [t.satTrees, ac(sat.treesAcres), "–"],
       [t.satBuilt, ac(sat.builtAcres), "–"],
       [t.satWater, ac(sat.waterAcres), "–"],

@@ -97,13 +97,31 @@ describe("processOverpassData", () => {
       overpass(
         square(1, 100, 0, 0, 300, { leisure: "golf_course" }),
         square(2, 200, 0, 0, 100, { golf: "fairway" }),
-        square(3, 300, 0, 0, 60, { golf: "rough" }),
+        square(3, 300, 0.0015, 0, 60, { golf: "rough" }),
       ),
     );
 
     expect(r.roughEstimated).toBe(false);
     expect(r.rough.count).toBe(1);
     expectAcres(r.rough.acres, acresOf(60));
+  });
+
+  it("counts mapped rough net of the fairways, greens and ponds drawn over it", () => {
+    // A 200 m rough corridor drawn under a 100 m fairway, a 20 m green and a
+    // 30 m pond, plus a second rough polygon overlapping the first.
+    const r = processOverpassData(
+      overpass(
+        square(1, 100, 0, 0, 200, { golf: "rough" }),
+        square(2, 200, 0, 0, 100, { golf: "fairway" }),
+        square(3, 300, 0.0012, 0.0012, 20, { golf: "green" }),
+        square(4, 400, 0.0012, 0, 30, { natural: "water" }),
+        square(5, 500, 0, 0, 50, { golf: "rough" }),
+      ),
+    );
+
+    expect(r.rough.count).toBe(2);
+    expectAcres(r.rough.acres, acresOf(200) - acresOf(100) - acresOf(20) - acresOf(30));
+    expectAcres(r.totalTurfAcres, acresOf(200) - acresOf(30));
   });
 
   it("estimates rough as the boundary minus everything else when it isn't mapped", () => {

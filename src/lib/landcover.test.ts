@@ -7,6 +7,7 @@ import {
   cellAcres,
   classAcres,
   decodeGrid,
+  estimatedTurf,
   findSodFields,
   fitsSource,
   geometryBBox,
@@ -107,6 +108,12 @@ describe("satelliteTurf", () => {
     expect(s.waterAcres / cell).toBeCloseTo(30, 0);
     expect(s.otherAcres / cell).toBeCloseTo(1, 0);
     expect(s.year).toBe(2025);
+  });
+  it("estimates maintained turf as the calibrated share of the grass, with its range", () => {
+    const t = estimatedTurf({ grassAcres: 200 } as Parameters<typeof estimatedTurf>[0]);
+    expect(t.acres).toBeCloseTo(118, 6);
+    expect(t.low).toBeCloseTo(93.22, 6);
+    expect(t.high).toBeCloseTo(148.68, 6);
   });
   it("ignores everything outside the outline", () => {
     const g = grid(20, 20, 0.0005, WC.grass, "worldcover");
