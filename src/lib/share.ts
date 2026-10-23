@@ -4,9 +4,11 @@
  * Keys are prefixed per tab (r_ ROI, i_ Incentives, q_ and v Acreage) so one
  * link never collides with another tab's inputs. Pure, so it is tested.
  *
- * Acreage keys: v view, m measure on open, b scan box, n name, a=sod for a sod
- * farm, o a traced course outline, sf traced sod fields, sx detected sod
- * fields left out (a point inside each). Shapes travel as encoded polylines.
+ * Acreage keys: v view, m measure on open, b scan box, n name, a=sod / a=lawn
+ * for a sod farm or a residential lawn, o a traced course outline, sf traced
+ * sod fields, sx detected sod fields left out (a point inside each), lp the
+ * point a lawn's lot was picked at, lo a traced lot, lx areas traced out of a
+ * lawn. Shapes travel as encoded polylines.
  */
 
 export type ParamValue = string | number | boolean | null | undefined;

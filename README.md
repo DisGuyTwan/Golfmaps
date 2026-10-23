@@ -9,7 +9,8 @@ course isn't mapped in detail, it counts the grass inside its outline from
 satellite land cover instead (or inside an outline you trace). Switch the
 Acreage tab to **Sod farm** and it finds a sod producer's fields on Agriculture
 Canada's yearly crop map, which you can edit by tapping fields out or tracing
-new ones.
+new ones. Switch it to **Lawn**, type a residential address, and it measures the
+lawn on that lot in square feet.
 
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite
 tiles, the public Overpass API, Photon for search, ESA WorldCover and
@@ -141,6 +142,29 @@ into a sod field measurer:
    ROI, the PDF report and Copy link work as they do for a course (the link
    keeps traced fields and the fields left out).
 
+## Residential lawns
+
+The **Lawn** switch measures a residential lawn in **square feet**:
+
+1. Search the address (or tap **Select a lot**, then tap the property). In
+   Quebec, the app looks up the lot under that point in the provincial cadastre
+   (cadastre allégé, through `/api/parcel`) and frames it on the map. Outside
+   Quebec (Ontario has no open lot data), **Trace the lot** instead.
+2. Buildings, pools and mapped paving on the lot come from OpenStreetMap and
+   are taken out automatically (only the part on the lot). OSM has most houses
+   in Laval, Gatineau, Sherbrooke, Ottawa, Barrie and Kingston, but few in
+   Boucherville, Trois-Rivières or Saint-Jean-sur-Richelieu; the panel says so
+   when the lot has no building.
+3. **Remove an area** traces out the driveway, patio, garden beds, or the house
+   when OSM doesn't have it. Tap a traced area to put it back. Lawn under trees
+   counts as lawn.
+4. The lawn (lot minus everything removed, each counted once) is the quote;
+   a manual override in square feet wins. The PDF report and Copy link work as
+   elsewhere; a lawn doesn't go to the ROI tab, which compares a Voyager with a
+   commercial crew.
+
+The cadastre is indicative only (the surveyor's boundary is the official one).
+
 ## Incentives tab
 
 A second tab estimates first-year savings on robotic mowers and battery tools
@@ -188,6 +212,8 @@ KR804 38 kWh) and need refreshing over time.
 - **osmtogeojson** + **@turf/area** / **@turf/intersect** / **@turf/helpers**
 - **geotiff** (server only) to read WorldCover and the crop inventory, and
   **d3-contour** to outline sod fields
+- **@turf/union** / **@turf/difference** to count mapped rough net and to take
+  buildings and traced areas out of a lawn
 
 ## Getting started
 

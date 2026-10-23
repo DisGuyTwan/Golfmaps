@@ -3,8 +3,9 @@
 import { UI, formatAcres } from "@/lib/i18n";
 import { estimatedTurf } from "@/lib/landcover";
 import { useLang } from "@/lib/preferences";
-import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, quoteBreakdown, satelliteAcres } from "@/lib/quote";
-import { useCourseName, useMeasurement, useMode, useQuoteSettings, useSod } from "@/lib/quote-store";
+import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, lawnQuoteSqft, quoteBreakdown, satelliteAcres } from "@/lib/quote";
+import { formatSqft, lawnTotals } from "@/lib/lawn";
+import { useCourseName, useLawn, useMeasurement, useMode, useQuoteSettings, useSod } from "@/lib/quote-store";
 import type { SodField } from "@/lib/types";
 import { TabHeader, ui } from "./ui";
 
@@ -37,7 +38,8 @@ function ReportTable({ head, rows }: { head: [string, string, string]; rows: [st
  * header as the other tabs' PDFs, then the course or farm, a measured vs
  * quoted table and the assumptions behind the quoted acreage. Three shapes:
  * a mapped course (turf categories), a course counted from satellite land
- * cover (outline only, or traced), and a sod farm (its fields).
+ * cover (outline only, or traced), and a sod farm (its fields). A residential
+ * lawn has its own, in square feet (LawnReport).
  */
 export default function AcreageReport() {
   const lang = useLang();
@@ -47,6 +49,7 @@ export default function AcreageReport() {
   const sod = useSod();
   const q = useQuoteSettings();
   const courseName = useCourseName();
+  if (mode === "lawn") return <LawnReport />;
   const ac = (n: number) => `${formatAcres(n, lang)} ac`;
   const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
   const total = acresForQuote(mode, m, sod, q);
@@ -147,6 +150,79 @@ export default function AcreageReport() {
                 {t.attribution}
                 {sat && <> · {t.attributionWorldCover}</>}
                 {isSod && sod?.year != null && <> · {t.attributionAci}</>}
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The lawn PDF: the address, lot, what was taken out and the lawn left, in square feet. */
+function LawnReport() {
+  const lang = useLang();
+  const t = UI[lang];
+  const lawn = useLawn();
+  const q = useQuoteSettings();
+  const address = useCourseName();
+  const sq = (n: number) => formatSqft(n, lang);
+  const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
+  const totals = lawn ? lawnTotals(lawn) : null;
+  const quoted = lawnQuoteSqft(lawn, q);
+  const empty = !lawn && q.lawnOverride === null;
+
+  return (
+    <div className="hidden bg-white text-ink print:block">
+      <TabHeader
+        lang={lang}
+        icon="map"
+        eyebrow={`Calculator · ${date}`}
+        title={t.reportLawnTitle}
+        lede={t.reportLawnLede}
+        printTitle={`Calculator - ${t.tabs.acreage}`}
+      />
+      <div className="space-y-4 px-4 py-4">
+        {empty ? (
+          <p className="text-sm text-muted">{t.reportLawnEmpty}</p>
+        ) : (
+          <>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              <dt className="font-semibold text-ink-2">{t.reportAddress}</dt>
+              <dd>{address ?? t.unnamedLot}</dd>
+              <dt className="font-semibold text-ink-2">{t.reportDate}</dt>
+              <dd>{date}</dd>
+              {lawn && (
+                <>
+                  <dt className="font-semibold text-ink-2">{t.lawnLot}</dt>
+                  <dd>{lawn.lotNumber ? t.lawnLotNumber(lawn.lotNumber) : t.lawnLotTraced}</dd>
+                </>
+              )}
+            </dl>
+
+            {totals && (
+              <ReportTable
+                head={[t.reportCategory, t.reportMeasured, t.reportCounted]}
+                rows={[
+                  [t.lawnLot, sq(totals.lotSqft), "–"],
+                  [t.lawnBuilt, sq(totals.mappedSqft), "–"],
+                  [t.lawnTracedOut, sq(totals.tracedSqft), "–"],
+                  [t.lawnTotal, sq(totals.lawnSqft), quoted !== null ? sq(quoted) : "–"],
+                ]}
+              />
+            )}
+
+            <div className="flex items-center justify-between rounded-xl bg-brand px-5 py-3 text-white">
+              <span className="text-sm font-semibold">{t.lawnQuoteTotal}</span>
+              <span className={ui.kpi}>{quoted !== null ? sq(quoted) : "–"}</span>
+            </div>
+
+            <div className={`${ui.note} space-y-1`}>
+              <p>{t.lawnTreesNote}</p>
+              {q.lawnOverride !== null && <p>{t.reportLawnOverride(sq(q.lawnOverride))}</p>}
+              <p>
+                {t.attribution}
+                {lawn?.lotSource === "cadastre" && <> · {t.attributionCadastre}</>}
               </p>
             </div>
           </>

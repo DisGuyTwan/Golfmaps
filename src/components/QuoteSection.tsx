@@ -1,7 +1,8 @@
 "use client";
 
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
-import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, type AcreageMode, type QuoteSettings } from "@/lib/quote";
+import { formatSqft, type LawnMeasurement } from "@/lib/lawn";
+import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, lawnQuoteSqft, type AcreageMode, type QuoteSettings } from "@/lib/quote";
 import { sendAcresToRoi, setQuoteSettings, useQuoteSettings } from "@/lib/quote-store";
 import { goToTab } from "@/lib/tabs";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
@@ -28,14 +29,80 @@ function PctInput({ label, field, q }: { label: string; field: "roughPct" | "gra
 }
 
 /**
+ * A residential lawn's quote: the lawn in square feet, or a number typed by
+ * hand, then the PDF report and a share link. No ROI: that tab compares a
+ * Voyager with a commercial crew.
+ */
+function LawnQuote({ lang, lawn, getShareUrl }: { lang: Lang; lawn: LawnMeasurement | null; getShareUrl: () => string }) {
+  const t = UI[lang];
+  const q = useQuoteSettings();
+  const sqft = lawnQuoteSqft(lawn, q);
+  return (
+    <div className="animate-fade-up space-y-2.5 border-t border-line pt-3">
+      <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
+        <Icon name="calculator" className="h-4 w-4 text-accent" />
+        {t.lawnQuoteTitle}
+      </h3>
+      <label className="block space-y-1">
+        <span className="block text-xs font-semibold text-ink-2">{t.lawnOverride}</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          step={50}
+          placeholder={t.overridePlaceholder}
+          value={q.lawnOverride ?? ""}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            setQuoteSettings({ lawnOverride: e.target.value === "" || !(n > 0) ? null : n });
+          }}
+          className={`${ui.input} py-1.5 text-sm`}
+        />
+      </label>
+      <div className="flex items-center justify-between rounded-lg bg-accent-soft px-3 py-2">
+        <span className="text-sm font-medium text-accent-ink">{t.lawnQuoteTotal}</span>
+        <Pop value={sqft !== null ? formatSqft(sqft, lang) : "–"} className="text-lg font-bold tabular-nums text-accent-ink" />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => printAs(`Calculator - ${t.tabs.acreage}`)} className={`${ui.btnPrimary} flex-1`}>
+          <Icon name="file" />
+          {t.reportPdf}
+        </button>
+        <CopyLinkButton lang={lang} getUrl={getShareUrl} className={ui.btnSecondary} />
+      </div>
+    </div>
+  );
+}
+
+/**
  * Turns a measurement into the acres a quote is built on. For a mapped
  * course: which categories count and how much of the rough is really mowed.
  * For a course with only an outline: the share of the satellite grass robots
  * mow. For a sod farm: the share of the fields being mowed. A number typed by
  * hand wins over all of them. Then sends it to the ROI tab, prints the PDF
- * report or copies a share link.
+ * report or copies a share link. A residential lawn has its own, in square
+ * feet (LawnQuote).
  */
 export default function QuoteSection({
+  lang,
+  mode,
+  result,
+  sod,
+  lawn,
+  getShareUrl,
+}: {
+  lang: Lang;
+  mode: AcreageMode;
+  result: CourseMeasurement | null;
+  sod: SodMeasurement | null;
+  lawn: LawnMeasurement | null;
+  getShareUrl: () => string;
+}) {
+  if (mode === "lawn") return <LawnQuote lang={lang} lawn={lawn} getShareUrl={getShareUrl} />;
+  return <AcreQuote lang={lang} mode={mode} result={result} sod={sod} getShareUrl={getShareUrl} />;
+}
+
+function AcreQuote({
   lang,
   mode,
   result,

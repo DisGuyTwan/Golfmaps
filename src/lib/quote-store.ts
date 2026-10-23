@@ -3,13 +3,14 @@
 import { useSyncExternalStore } from "react";
 import type { IncentiveInputs } from "./incentives";
 import { DEFAULT_QUOTE, decodeQuote, type AcreageMode, type QuoteSettings } from "./quote";
+import type { LawnMeasurement } from "./lawn";
 import type { CourseMeasurement, SodMeasurement } from "./types";
 
 /**
  * What the tabs share, outside React so every tab sees the same values:
- * - the Acreage tab's mode (golf course or sod farm), its last measurement
- *   or sod fields, the property name and quote settings (read by its PDF
- *   report and the ROI tab);
+ * - the Acreage tab's mode (golf course, sod farm or residential lawn), its
+ *   last measurement, sod fields or lawn, the property name and quote
+ *   settings (read by its PDF report and the ROI tab);
  * - acres sent to the ROI tab ("Send to ROI"), with a version number so the
  *   ROI tab applies each send exactly once;
  * - the Incentives tab's profile, so the ROI tab can price grants and credits
@@ -21,6 +22,7 @@ interface QuoteStoreState {
   mode: AcreageMode;
   measurement: CourseMeasurement | null;
   sod: SodMeasurement | null;
+  lawn: LawnMeasurement | null;
   courseName: string | null;
   roiImport: { acres: number; version: number } | null;
   incentiveProfile: IncentiveInputs | null;
@@ -31,6 +33,7 @@ const SERVER_STATE: QuoteStoreState = {
   mode: "golf",
   measurement: null,
   sod: null,
+  lawn: null,
   courseName: null,
   roiImport: null,
   incentiveProfile: null,
@@ -46,7 +49,7 @@ function current(): QuoteStoreState {
     state = {
       ...SERVER_STATE,
       settings: decodeQuote(params),
-      mode: params.get("a") === "sod" ? "sod" : "golf",
+      mode: params.get("a") === "sod" ? "sod" : params.get("a") === "lawn" ? "lawn" : "golf",
       courseName: params.get("n"),
     };
   }
@@ -71,6 +74,7 @@ export const useQuoteSettings = () => useStore((s) => s.settings);
 export const useMode = () => useStore((s) => s.mode);
 export const useMeasurement = () => useStore((s) => s.measurement);
 export const useSod = () => useStore((s) => s.sod);
+export const useLawn = () => useStore((s) => s.lawn);
 export const useCourseName = () => useStore((s) => s.courseName);
 export const useRoiImport = () => useStore((s) => s.roiImport);
 export const useIncentiveProfile = () => useStore((s) => s.incentiveProfile);
@@ -92,9 +96,25 @@ export function setSod(sod: SodMeasurement | null) {
   update({ sod });
 }
 
-/** Switching between golf course and sod farm starts a new job: results, name and override are cleared. */
+/** The current lawn, for event handlers and async lookups that must not use a stale render's value. */
+export function getLawn(): LawnMeasurement | null {
+  return current().lawn;
+}
+
+export function setLawn(lawn: LawnMeasurement | null) {
+  update({ lawn });
+}
+
+/** Switching between golf course, sod farm and lawn starts a new job: results, name and overrides are cleared. */
 export function setMode(mode: AcreageMode) {
-  update({ mode, measurement: null, sod: null, courseName: null, settings: { ...current().settings, override: null } });
+  update({
+    mode,
+    measurement: null,
+    sod: null,
+    lawn: null,
+    courseName: null,
+    settings: { ...current().settings, override: null, lawnOverride: null },
+  });
 }
 
 export function setCourseName(courseName: string | null) {

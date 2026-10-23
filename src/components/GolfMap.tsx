@@ -37,6 +37,10 @@ const CATEGORY_STYLE: Record<string, L.PathOptions> = {
   sod: { color: "#14532d", weight: 1.5, fillColor: TURF_COLORS.grass, fillOpacity: 0.45 },
   sod_traced: { color: TURF_COLORS.course, weight: 2.5, fillColor: TURF_COLORS.grass, fillOpacity: 0.45 },
   sod_off: { color: "#e5e7eb", weight: 1.5, dashArray: "4 4", fillColor: "#6b7280", fillOpacity: 0.15 },
+  // Residential lawn: the lawn left, mapped buildings/pools/paving, areas traced out.
+  lawn: { color: "#14532d", weight: 1, fillColor: TURF_COLORS.grass, fillOpacity: 0.45 },
+  lawn_built: { color: "#f8fafc", weight: 1.5, fillColor: "#334155", fillOpacity: 0.55 },
+  lawn_removed: { color: "#f87171", weight: 2, dashArray: "5 4", fillColor: "#f87171", fillOpacity: 0.25 },
 };
 
 const DEFAULT_STYLE = CATEGORY_STYLE.fairway;

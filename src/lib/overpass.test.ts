@@ -42,3 +42,17 @@ describe("fetchFromMirrorsHedged", () => {
     expect(calls).toEqual([endpoints[0]]);
   });
 });
+
+describe("lawn query", () => {
+  it("asks for buildings, pools and paving instead of golf features", async () => {
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", (_url: string, init: RequestInit) => {
+      bodies.push(decodeURIComponent(String(init.body)));
+      return Promise.resolve(new Response("{}"));
+    });
+    await fetchFromMirrorsHedged(bbox, { endpoints: [endpoints[0]], kind: "lawn" });
+    expect(bodies[0]).toContain('way["building"]');
+    expect(bodies[0]).toContain('way["leisure"="swimming_pool"]');
+    expect(bodies[0]).not.toContain('"golf"');
+  });
+});

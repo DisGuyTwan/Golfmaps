@@ -21,6 +21,9 @@ const OVERPASS_ENDPOINTS = [
  * only have the `leisure=golf_course` outline mapped, so querying for fairways
  * alone returns nothing even when a course is clearly present.
  */
+/** What a lookup is for: a golf course, or the hard surfaces on a residential lot. */
+export type OverpassQuery = "golf" | "lawn";
+
 function buildFairwayQuery({ south, west, north, east }: BBox): string {
   const bbox = `${south},${west},${north},${east}`;
   return `[out:json][timeout:25];
@@ -44,6 +47,30 @@ function buildFairwayQuery({ south, west, north, east }: BBox): string {
 out body;
 >;
 out skel qt;`;
+}
+
+/**
+ * Everything on a residential lot that isn't lawn and that OpenStreetMap may
+ * have: buildings (house, garage, shed), swimming pools, parking and mapped
+ * paved areas.
+ */
+function buildLawnQuery({ south, west, north, east }: BBox): string {
+  const bbox = `${south},${west},${north},${east}`;
+  return `[out:json][timeout:25];
+(
+  way["building"](${bbox});
+  relation["building"](${bbox});
+  way["leisure"="swimming_pool"](${bbox});
+  way["amenity"="parking"](${bbox});
+  way["area:highway"](${bbox});
+);
+out body;
+>;
+out skel qt;`;
+}
+
+function buildQuery(kind: OverpassQuery, bbox: BBox): string {
+  return kind === "lawn" ? buildLawnQuery(bbox) : buildFairwayQuery(bbox);
 }
 
 /** Thrown when a mirror answers with an HTTP error (status kept for messages). */
@@ -83,8 +110,8 @@ export function parseBBoxParam(value: string | null): BBox | null {
  * returns the raw OSM JSON from the first that answers. The query is sent
  * form-encoded as `data=...` (the endpoint's documented POST format).
  */
-async function fetchFromMirrors(bbox: BBox): Promise<unknown> {
-  const body = `data=${encodeURIComponent(buildFairwayQuery(bbox))}`;
+async function fetchFromMirrors(bbox: BBox, kind: OverpassQuery): Promise<unknown> {
+  const body = `data=${encodeURIComponent(buildQuery(kind, bbox))}`;
   let lastError: unknown = new Error("No Overpass mirror was tried");
 
   for (const url of OVERPASS_ENDPOINTS) {
@@ -116,9 +143,15 @@ async function fetchFromMirrors(bbox: BBox): Promise<unknown> {
  */
 export function fetchFromMirrorsHedged(
   bbox: BBox,
-  { hedgeMs = 8000, timeoutMs = 50000, headers = {} as Record<string, string>, endpoints = OVERPASS_ENDPOINTS } = {},
+  {
+    hedgeMs = 8000,
+    timeoutMs = 50000,
+    headers = {} as Record<string, string>,
+    endpoints = OVERPASS_ENDPOINTS,
+    kind = "golf" as OverpassQuery,
+  } = {},
 ): Promise<unknown> {
-  const body = `data=${encodeURIComponent(buildFairwayQuery(bbox))}`;
+  const body = `data=${encodeURIComponent(buildQuery(kind, bbox))}`;
   const deadline = Date.now() + timeoutMs;
 
   return new Promise((resolve, reject) => {
@@ -171,14 +204,16 @@ export function fetchFromMirrorsHedged(
 }
 
 /**
- * Fetches the golf features for a scan box. Goes through this app's cache
- * route first (/api/overpass: shared CDN cache, so a course measured once is
- * instant and survives busy mirrors), then falls back to calling the mirrors
- * straight from the browser if the route is down or every mirror refused it.
+ * Fetches the golf features for a scan box (or, with kind "lawn", what isn't
+ * lawn on a residential lot). Goes through this app's cache route first
+ * (/api/overpass: shared CDN cache, so a course measured once is instant and
+ * survives busy mirrors), then falls back to calling the mirrors straight from
+ * the browser if the route is down or every mirror refused it.
  */
-export async function fetchFairways(bbox: BBox): Promise<unknown> {
+export async function fetchFairways(bbox: BBox, kind: OverpassQuery = "golf"): Promise<unknown> {
   try {
-    const response = await fetch(`/api/overpass?bbox=${bboxParam(bbox)}`, {
+    const query = kind === "golf" ? "" : `&q=${kind}`;
+    const response = await fetch(`/api/overpass?bbox=${bboxParam(bbox)}${query}`, {
       signal: AbortSignal.timeout(65000),
     });
     if (response.ok) return await response.json();
@@ -188,5 +223,5 @@ export async function fetchFairways(bbox: BBox): Promise<unknown> {
     if (err instanceof OverpassHttpError) throw err;
     // Route unreachable or timed out: fall through to the mirrors.
   }
-  return fetchFromMirrors(bbox);
+  return fetchFromMirrors(bbox, kind);
 }

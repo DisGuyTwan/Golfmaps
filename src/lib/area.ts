@@ -51,7 +51,7 @@ function isClosedRing(coords: Position[]): boolean {
 }
 
 /** Returns a polygon Feature for area calculation, or null if not fillable. */
-function toAreaFeature(feature: Feature): Feature | null {
+export function toAreaFeature(feature: Feature): Feature | null {
   const geometry = feature.geometry;
   if (!geometry) return null;
   if (geometry.type === "Polygon" || geometry.type === "MultiPolygon") {

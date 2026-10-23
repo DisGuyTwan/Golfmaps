@@ -6,17 +6,18 @@ app's brand.
 
 Next.js 16 App Router + React 19 + TypeScript + Tailwind. Measures golf course
 turf acreage from OpenStreetMap (or satellite land cover when a course isn't
-mapped in detail) and a sod farm's fields from Agriculture Canada's crop map,
-for robotic mower quoting, plus an
+mapped in detail), a sod farm's fields from Agriculture Canada's crop map and
+a residential lawn (Quebec cadastre lot minus buildings), for robotic mower
+quoting, plus an
 "Incentives" tab that estimates grant/tax savings on robotic mowers and battery
 tools (Quebec, Ontario, federal) and an "ROI" tab comparing a Kress
 Voyager with a zero-turn crew. Every tab is in English (default) and Quebec
 French, with light and dark themes. The tabs are connected (measured acres →
 ROI sizing; the Incentives profile → ROI's net investment) and every tab has a
-share link and a client PDF. No API keys and no database: four small route
-handlers (Overpass cache, land cover, gas price, client error log) run on
-Vercel; everything else goes straight from the browser to public APIs
-(built-in `fetch`).
+share link and a client PDF. No API keys and no database: five small route
+handlers (Overpass cache, land cover, Quebec cadastre lot, gas price, client
+error log) run on Vercel; everything else goes straight from the browser to
+public APIs (built-in `fetch`).
 
 ## Layout
 
@@ -27,6 +28,7 @@ src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
                   the browser falls back to calling the mirrors itself
   api/landcover/  satellite land cover as a small class grid (CDN 30 days):
                   ESA WorldCover (src=worldcover) or AAFC crop inventory (src=aci)
+  api/parcel/     the Quebec cadastre lot at a point (CDN 1 week), for lawns
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
 src/components/
@@ -40,7 +42,8 @@ src/components/
   GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure, the
                              satellite count, sod detection and tracing
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)
-  MeasurePanel.tsx           results panel + legend, Golf course | Sod farm switch
+  MeasurePanel.tsx           results panel + legend, Golf course | Sod farm | Lawn
+                             switch
   QuoteSection.tsx           acres for the quote: categories, % rough (or %
                              satellite grass, or % sod), override, Send to ROI,
                              PDF report, Copy link
@@ -54,6 +57,9 @@ src/lib/
   landcover.ts  land cover grids: grass inside an outline, sod fields, traced
                 shapes (pure, tested)
   landcover-server.ts  WorldCover COG reader + crop inventory exportImage (route only)
+  lawn.ts       residential lawn: lot − OSM buildings/pools/paving − traced areas,
+                in sq ft (pure, tested)
+  parcel.ts     Quebec cadastre lot lookup and parsing (pure parts tested)
   types.ts      BBox, CourseMeasurement, SatelliteTurf, SodField, SodMeasurement
   incentives.ts program rules, FR/EN copy and savings math (pure, tested)
   roi.ts        Voyager ROI model sized from acreage, formatting (pure, tested)
@@ -61,7 +67,7 @@ src/lib/
   quote.ts      measurement → acres for the quote, share params (pure, tested)
   quote-store.ts  client store shared by the tabs (useSyncExternalStore)
   share.ts      share-link helpers + polylines (pure, tested); keys r_ / i_ / q_ /
-                v, m, b, n, a, o, sf, sx
+                v, m, b, n, a, o, sf, sx, lp, lo, lx
   gas.ts        StatCan gas price parsing (pure, tested)
   report-error.ts  sendBeacon to /api/log
   tabs.ts       goToTab() for in-app navigation
@@ -107,6 +113,16 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   outline (d3-contour) is for display. Tapping a field toggles `included`;
   traced fields are measured with turf. The quote takes `sodPct` (90% default)
   of the included fields. Switching modes clears the results, name and override.
+- **Residential lawns are the third mode** (`a=lawn`), in **square feet only**
+  (`formatSqft`), with no ROI (`acresForQuote` returns null: the ROI tab is
+  commercial). The lot comes from the Quebec cadastre allégé at a point
+  (`/api/parcel` → the environment ministry's ArcGIS layer; indicative only, not
+  a survey), or is traced (Ontario has no open parcels). OSM buildings, pools,
+  parking and `area:highway` on the lot are removed automatically (Overpass
+  `kind: "lawn"`); OSM misses most houses in some Quebec suburbs (Microsoft
+  footprints there aren't reachable), so the panel says when the lot has no
+  building and the rep traces it out. `lawnTotals` counts every removal once.
+  Trees aren't removed. A cadastre lot is framed above the results panel.
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in

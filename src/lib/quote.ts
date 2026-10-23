@@ -13,10 +13,11 @@
  * and a sod farm counts the fields left in, less those being harvested.
  */
 import { estimatedTurf } from "./landcover";
+import { lawnTotals, type LawnMeasurement } from "./lawn";
 import type { CourseMeasurement, SatelliteTurf, SodMeasurement } from "./types";
 
-/** What the Acreage tab measures: a golf course or a sod farm. */
-export type AcreageMode = "golf" | "sod";
+/** What the Acreage tab measures: a golf course, a sod farm or a residential lawn. */
+export type AcreageMode = "golf" | "sod" | "lawn";
 
 export type QuoteCategory = "fairway" | "rough" | "green" | "tee" | "range";
 export const QUOTE_CATEGORIES: QuoteCategory[] = ["fairway", "rough", "green", "tee", "range"];
@@ -35,6 +36,8 @@ export interface QuoteSettings {
   grassPct: number;
   /** Share of the sod fields being mowed at a time (0 to 100): fields just harvested or reseeded aren't. */
   sodPct: number;
+  /** Lawn area typed in by hand for a residential lot, in square feet. */
+  lawnOverride: number | null;
 }
 
 export const DEFAULT_QUOTE: QuoteSettings = {
@@ -43,6 +46,7 @@ export const DEFAULT_QUOTE: QuoteSettings = {
   override: null,
   grassPct: 80,
   sodPct: 90,
+  lawnOverride: null,
 };
 
 const share = (pct: number) => Math.min(100, Math.max(0, pct)) / 100;
@@ -97,18 +101,31 @@ export function sodQuoteAcres(sod: SodMeasurement | null, q: QuoteSettings): num
   return total > 0 ? total : null;
 }
 
-/** The quoted acres for whichever kind of property the Acreage tab is on. */
+/**
+ * The quoted acres for whichever kind of property the Acreage tab is on. A
+ * residential lawn has none: it is quoted in square feet and doesn't go to
+ * the ROI tab (which compares a Voyager with a commercial crew).
+ */
 export function acresForQuote(
   mode: AcreageMode,
   m: CourseMeasurement | null,
   sod: SodMeasurement | null,
   q: QuoteSettings,
 ): number | null {
+  if (mode === "lawn") return null;
   return mode === "sod" ? sodQuoteAcres(sod, q) : quoteAcres(m, q);
 }
 
-/** Share-link parameters for the settings: q_inc, q_pct, q_gpct for a course, q_spct for sod, q_ovr. */
+/** Square feet of lawn for a residential quote: the override, else the lot's lawn. */
+export function lawnQuoteSqft(lawn: LawnMeasurement | null, q: QuoteSettings): number | null {
+  if (q.lawnOverride !== null && q.lawnOverride > 0) return q.lawnOverride;
+  const sqft = lawn ? lawnTotals(lawn).lawnSqft : 0;
+  return sqft > 0 ? sqft : null;
+}
+
+/** Share-link parameters: q_inc, q_pct, q_gpct for a course, q_spct for sod, q_ovr; q_lovr for a lawn. */
 export function encodeQuote(q: QuoteSettings, mode: AcreageMode = "golf"): Record<string, string> {
+  if (mode === "lawn") return q.lawnOverride !== null ? { q_lovr: String(q.lawnOverride) } : {};
   const params: Record<string, string> =
     mode === "sod"
       ? { q_spct: String(q.sodPct) }
@@ -137,5 +154,7 @@ export function decodeQuote(params: URLSearchParams): QuoteSettings {
   q.sodPct = pct("q_spct") ?? q.sodPct;
   const ovr = Number(params.get("q_ovr"));
   if (params.has("q_ovr") && Number.isFinite(ovr) && ovr > 0) q.override = ovr;
+  const lovr = Number(params.get("q_lovr"));
+  if (params.has("q_lovr") && Number.isFinite(lovr) && lovr > 0) q.lawnOverride = lovr;
   return q;
 }

@@ -7,7 +7,15 @@ import type { Lang } from "./preferences";
 
 export type { Lang };
 
-export type MeasureErrorKind = "unreachable" | "busy" | "tooLarge" | "http" | "sodUnreachable" | "sodTooLarge";
+export type MeasureErrorKind =
+  | "unreachable"
+  | "busy"
+  | "tooLarge"
+  | "http"
+  | "sodUnreachable"
+  | "sodTooLarge"
+  | "noLot"
+  | "lotUnreachable";
 
 const en = {
   tabs: { acreage: "Acreage", incentives: "Incentives", roi: "ROI" },
@@ -26,7 +34,7 @@ const en = {
   panelTitle: "Golf turf acreage",
   sodPanelTitle: "Sod field acreage",
   modeGroup: "What to measure",
-  modes: { golf: "Golf course", sod: "Sod farm" },
+  modes: { golf: "Golf course", sod: "Sod farm", lawn: "Lawn" },
   clear: "Clear",
   tapFirst: "Tap one corner of the area to scan",
   tapSecond: "Tap the opposite corner of the scan area",
@@ -75,6 +83,30 @@ const en = {
     `Detected fields: Agriculture and Agri-Food Canada, Annual Crop Inventory ${year}. Its 30 m pixels put field edges within about 15 m; traced fields are measured exactly.`,
   sodPct: "Sod being mowed (%)",
   sodPctHint: "Fields just harvested or reseeded aren’t mowed.",
+
+  lawnPanelTitle: "Residential lawn",
+  lawnSearchPlaceholder: "Search a residential address",
+  selectLot: "Select a lot",
+  tapLot: "Tap the lot to measure",
+  traceLot: "Trace the lot",
+  removeArea: "Remove an area",
+  lawnLoading: "Finding the lot and its buildings…",
+  lawnLot: "Lot",
+  lawnBuilt: "Buildings",
+  lawnTracedOut: "Traced out",
+  lawnTotal: "Lawn",
+  lawnLotNumber: (n: string) => `Lot ${n}, Quebec cadastre (indicative)`,
+  lawnLotTraced: "Lot traced by hand",
+  lawnNoBuilding:
+    "No building is mapped on this lot in OpenStreetMap. Use Remove an area to trace the house out.",
+  lawnBuildingsFailed:
+    "Couldn’t load the buildings from OpenStreetMap. Use Remove an area to trace the house out.",
+  lawnRemoveHint:
+    "Remove an area traces out a driveway, patio, garden bed or a house that isn’t mapped. Tap a traced area to put it back.",
+  lawnTreesNote: "Lawn under trees counts as lawn.",
+  lawnQuoteTitle: "Lawn for the quote",
+  lawnOverride: "Manual override (sq ft)",
+  lawnQuoteTotal: "Lawn for quote",
   categories: { fairway: "Fairway", rough: "Rough", green: "Green", tee: "Tee" },
   courseArea: "Course area",
   totalTurf: "Total turf",
@@ -87,6 +119,7 @@ const en = {
   attribution: "Imagery © Esri · Map data © OpenStreetMap contributors",
   attributionWorldCover: "Land cover © ESA WorldCover project, contains modified Copernicus Sentinel data",
   attributionAci: "Crop map © Agriculture and Agri-Food Canada, Open Government Licence – Canada",
+  attributionCadastre: "Lots © Gouvernement du Québec (cadastre, indicative only)",
 
   quoteTitle: "Acres for the quote",
   quoteCats: { fairway: "Fairways", rough: "Rough", green: "Greens", tee: "Tees", range: "Driving range" },
@@ -122,6 +155,13 @@ const en = {
   reportFieldsLeftOut: "Fields left out",
   reportSodAt: (pct: number) => `Sod counted at ${pct}%: fields just harvested or reseeded aren’t mowed.`,
   unnamedFarm: "Farm measured on the map",
+  reportLawnTitle: "Lawn area report",
+  reportLawnLede:
+    "Lawn measured on the lot, net of the buildings, pools and areas traced out, for a robotic mowing quote.",
+  reportAddress: "Address",
+  reportLawnEmpty: "Select a lot on the Acreage tab first.",
+  reportLawnOverride: (v: string) => `Manual override: ${v} replaces the measured lawn.`,
+  unnamedLot: "Lot selected on the map",
 
   searchPlaceholder: "Search a golf course or address",
   clearSearch: "Clear search",
@@ -133,6 +173,8 @@ const en = {
     http: (status: number) => `The data request failed (HTTP ${status}). Please try again.`,
     sodUnreachable: "Couldn’t load Agriculture Canada’s crop map. Try again in a moment, or trace the fields by hand.",
     sodTooLarge: "That area is too large for the crop map. Zoom in on the farm (about 15 km across at most) and try again.",
+    noLot: "No lot boundary found here. The Quebec cadastre only covers Quebec: trace the lot instead.",
+    lotUnreachable: "Couldn’t reach the Quebec cadastre. Try again in a moment, or trace the lot.",
   },
 
   errorTitle: "Something went wrong.",
@@ -163,7 +205,7 @@ const fr: UiStrings = {
   panelTitle: "Superficie du gazon",
   sodPanelTitle: "Superficie des champs de gazon",
   modeGroup: "Quoi mesurer",
-  modes: { golf: "Terrain de golf", sod: "Gazonnière" },
+  modes: { golf: "Terrain de golf", sod: "Gazonnière", lawn: "Pelouse" },
   clear: "Effacer",
   tapFirst: "Touchez un coin de la zone à analyser",
   tapSecond: "Touchez le coin opposé de la zone à analyser",
@@ -213,6 +255,30 @@ const fr: UiStrings = {
     `Champs détectés : Agriculture et Agroalimentaire Canada, Inventaire annuel des cultures ${year}. Ses pixels de 30 m placent les bords des champs à environ 15 m près; les champs tracés sont mesurés exactement.`,
   sodPct: "Gazon en tonte (%)",
   sodPctHint: "Les champs fraîchement récoltés ou ressemés ne sont pas tondus.",
+
+  lawnPanelTitle: "Pelouse résidentielle",
+  lawnSearchPlaceholder: "Chercher une adresse résidentielle",
+  selectLot: "Choisir un terrain",
+  tapLot: "Touchez le terrain à mesurer",
+  traceLot: "Tracer le terrain",
+  removeArea: "Retirer une zone",
+  lawnLoading: "Recherche du terrain et de ses bâtiments…",
+  lawnLot: "Terrain",
+  lawnBuilt: "Bâtiments",
+  lawnTracedOut: "Retiré",
+  lawnTotal: "Pelouse",
+  lawnLotNumber: (n: string) => `Lot ${n}, cadastre du Québec (à titre indicatif)`,
+  lawnLotTraced: "Terrain tracé à la main",
+  lawnNoBuilding:
+    "Aucun bâtiment n’est cartographié sur ce terrain dans OpenStreetMap. Utilisez Retirer une zone pour tracer la maison.",
+  lawnBuildingsFailed:
+    "Impossible de charger les bâtiments d’OpenStreetMap. Utilisez Retirer une zone pour tracer la maison.",
+  lawnRemoveHint:
+    "Retirer une zone sert à tracer une entrée, un patio, une plate-bande ou une maison non cartographiée. Touchez une zone tracée pour la remettre.",
+  lawnTreesNote: "La pelouse sous les arbres compte comme pelouse.",
+  lawnQuoteTitle: "Pelouse pour la soumission",
+  lawnOverride: "Valeur saisie à la main (pi²)",
+  lawnQuoteTotal: "Pelouse pour la soumission",
   categories: { fairway: "Allée", rough: "Herbe longue", green: "Vert", tee: "Départ" },
   courseArea: "Superficie du terrain",
   totalTurf: "Gazon total",
@@ -225,6 +291,7 @@ const fr: UiStrings = {
   attribution: "Imagerie © Esri · Données © les contributeurs d’OpenStreetMap",
   attributionWorldCover: "Couverture du sol © projet ESA WorldCover, contient des données Copernicus Sentinel modifiées",
   attributionAci: "Carte des cultures © Agriculture et Agroalimentaire Canada, Licence du gouvernement ouvert – Canada",
+  attributionCadastre: "Lots © Gouvernement du Québec (cadastre, à titre indicatif)",
 
   quoteTitle: "Acres pour la soumission",
   quoteCats: { fairway: "Allées", rough: "Herbe longue", green: "Verts", tee: "Départs", range: "Champ de pratique" },
@@ -261,6 +328,13 @@ const fr: UiStrings = {
   reportSodAt: (pct: number) =>
     `Gazon compté à ${pct} % : les champs fraîchement récoltés ou ressemés ne sont pas tondus.`,
   unnamedFarm: "Ferme mesurée sur la carte",
+  reportLawnTitle: "Rapport de superficie de pelouse",
+  reportLawnLede:
+    "Pelouse mesurée sur le terrain, sans les bâtiments, piscines et zones retirées, pour une soumission de tonte robotisée.",
+  reportAddress: "Adresse",
+  reportLawnEmpty: "Choisissez d’abord un terrain dans l’onglet Superficie.",
+  reportLawnOverride: (v: string) => `Valeur saisie à la main : ${v} remplace la pelouse mesurée.`,
+  unnamedLot: "Terrain choisi sur la carte",
 
   searchPlaceholder: "Chercher un terrain de golf ou une adresse",
   clearSearch: "Effacer la recherche",
@@ -276,6 +350,8 @@ const fr: UiStrings = {
       "Impossible de charger la carte des cultures d’Agriculture Canada. Réessayez dans un moment, ou tracez les champs à la main.",
     sodTooLarge:
       "Cette zone est trop grande pour la carte des cultures. Rapprochez-vous de la ferme (environ 15 km de large au plus) et réessayez.",
+    noLot: "Aucune limite de terrain trouvée ici. Le cadastre du Québec ne couvre que le Québec : tracez plutôt le terrain.",
+    lotUnreachable: "Impossible de joindre le cadastre du Québec. Réessayez dans un moment, ou tracez le terrain.",
   },
 
   errorTitle: "Une erreur est survenue.",

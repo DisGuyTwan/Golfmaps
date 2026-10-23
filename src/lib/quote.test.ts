@@ -3,6 +3,7 @@ import {
   DEFAULT_QUOTE,
   acresForQuote,
   decodeQuote,
+  lawnQuoteSqft,
   encodeQuote,
   quoteAcres,
   quoteBreakdown,
@@ -57,6 +58,7 @@ describe("share-link round trip", () => {
       override: 55.5,
       grassPct: 70,
       sodPct: DEFAULT_QUOTE.sodPct,
+      lawnOverride: null,
     };
     expect(decodeQuote(new URLSearchParams(encodeQuote(q)))).toEqual(q);
   });
@@ -87,5 +89,19 @@ describe("sod quote", () => {
   it("acresForQuote follows the mode", () => {
     expect(acresForQuote("sod", m, sod, { ...DEFAULT_QUOTE, sodPct: 100 })).toBe(140);
     expect(acresForQuote("golf", m, sod, DEFAULT_QUOTE)).toBe(80);
+  });
+});
+
+describe("lawn quote", () => {
+  it("is in square feet, never goes to the ROI tab, and takes an override", () => {
+    expect(acresForQuote("lawn", m, null, { ...DEFAULT_QUOTE, override: 5 })).toBeNull();
+    expect(lawnQuoteSqft(null, DEFAULT_QUOTE)).toBeNull();
+    expect(lawnQuoteSqft(null, { ...DEFAULT_QUOTE, lawnOverride: 4200 })).toBe(4200);
+  });
+  it("round-trips the lawn override in a link, and nothing else", () => {
+    const q: QuoteSettings = { ...DEFAULT_QUOTE, lawnOverride: 5150 };
+    expect(encodeQuote(q, "lawn")).toEqual({ q_lovr: "5150" });
+    expect(encodeQuote(DEFAULT_QUOTE, "lawn")).toEqual({});
+    expect(decodeQuote(new URLSearchParams(encodeQuote(q, "lawn")))).toEqual(q);
   });
 });

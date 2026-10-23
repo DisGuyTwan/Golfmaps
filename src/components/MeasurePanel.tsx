@@ -3,6 +3,7 @@
 import { TURF_COLORS } from "@/lib/area";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { estimatedTurf } from "@/lib/landcover";
+import { formatSqft, type LawnMeasurement, type LawnTotals } from "@/lib/lawn";
 import type { AcreageMode } from "@/lib/quote";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import type { MeasureError, SatelliteError, TraceKind } from "./GolfCourseCalculator";
@@ -15,6 +16,8 @@ interface MeasurePanelProps {
   mode: AcreageMode;
   result: CourseMeasurement | null;
   sod: SodMeasurement | null;
+  lawn: LawnMeasurement | null;
+  lawnTotals: LawnTotals | null;
   loading: boolean;
   error: MeasureError | null;
   satLoading: boolean;
@@ -23,6 +26,8 @@ interface MeasurePanelProps {
   awaitingSecondCorner: boolean;
   tracing: TraceKind | null;
   tracePointCount: number;
+  /** Lawn: waiting for the tap that picks a lot. */
+  picking: boolean;
   onModeChange: (mode: AcreageMode) => void;
   onMeasure: () => void;
   onStartSelect: () => void;
@@ -31,14 +36,17 @@ interface MeasurePanelProps {
   onUndoPoint: () => void;
   onFinishTrace: () => void;
   onCancelTrace: () => void;
+  onStartPick: () => void;
+  onCancelPick: () => void;
   onClear: () => void;
   getShareUrl: () => string;
 }
 
 const CATEGORIES = ["fairway", "rough", "green", "tee"] as const;
-const MODES: { id: AcreageMode; icon: "flag" | "sprout" }[] = [
+const MODES: { id: AcreageMode; icon: "flag" | "sprout" | "home" }[] = [
   { id: "golf", icon: "flag" },
   { id: "sod", icon: "sprout" },
+  { id: "lawn", icon: "home" },
 ];
 
 /** One figure in a four-up row: value on top, label (with an optional swatch) below. */
@@ -71,6 +79,8 @@ export default function MeasurePanel({
   mode,
   result,
   sod,
+  lawn,
+  lawnTotals,
   loading,
   error,
   satLoading,
@@ -79,6 +89,7 @@ export default function MeasurePanel({
   awaitingSecondCorner,
   tracing,
   tracePointCount,
+  picking,
   onModeChange,
   onMeasure,
   onStartSelect,
@@ -87,6 +98,8 @@ export default function MeasurePanel({
   onUndoPoint,
   onFinishTrace,
   onCancelTrace,
+  onStartPick,
+  onCancelPick,
   onClear,
   getShareUrl,
 }: MeasurePanelProps) {
@@ -107,19 +120,27 @@ export default function MeasurePanel({
   // Tracing an outline is offered when OSM has no course here, only its outline,
   // or couldn't be reached (the satellite count doesn't need it).
   const offerOutline = mode === "golf" && ((!!result && (!result.found || outlineOnly)) || error !== null);
+  const sq = (n: number) => formatSqft(n, lang);
+  const modeIcon = MODES.find((m) => m.id === mode)!.icon;
+  const title = mode === "sod" ? t.sodPanelTitle : mode === "lawn" ? t.lawnPanelTitle : t.panelTitle;
+  // Lawn: say so when OSM has no building on the lot, so the rep traces the house out.
+  const lawnNoBuilding =
+    !!lawn && lawn.mapped !== null && !lawn.mappedFailed && !lawn.mapped.some((a) => a.kind === "building") && lawn.traced.length === 0;
 
   return (
     <div
       className="pointer-events-none absolute inset-x-0 bottom-0 z-[1200] flex justify-center p-3"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="pointer-events-auto max-h-[70dvh] w-full max-w-md animate-fade-up space-y-3 overflow-y-auto rounded-2xl bg-surface/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur dark:ring-white/10">
+      <div
+        data-measure-panel
+        className="pointer-events-auto max-h-[70dvh] w-full max-w-md animate-fade-up space-y-3 overflow-y-auto rounded-2xl bg-surface/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur dark:ring-white/10">
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-bold text-ink">
-            <Icon name={mode === "sod" ? "sprout" : "flag"} className="h-[18px] w-[18px] text-accent" />
-            {mode === "sod" ? t.sodPanelTitle : t.panelTitle}
+            <Icon name={modeIcon} className="h-[18px] w-[18px] text-accent" />
+            {title}
           </h2>
-          {(result || sod) && (
+          {(result || sod || lawn) && (
             <button
               onClick={onClear}
               className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-faint transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
@@ -130,7 +151,7 @@ export default function MeasurePanel({
           )}
         </div>
 
-        <div role="group" aria-label={t.modeGroup} className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-surface-2 p-1">
+        <div role="group" aria-label={t.modeGroup} className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-surface-2 p-1">
           {MODES.map(({ id, icon }) => (
             <button
               key={id}
@@ -167,6 +188,14 @@ export default function MeasurePanel({
               </button>
             </div>
           </div>
+        ) : picking ? (
+          <div className="space-y-2">
+            <Notice tone="info">{t.tapLot}</Notice>
+            <button onClick={onCancelPick} className={`${ui.btnSecondary} w-full`}>
+              <Icon name="close" />
+              {t.cancel}
+            </button>
+          </div>
         ) : selecting ? (
           <div className="space-y-2">
             <Notice tone="info">{awaitingSecondCorner ? t.tapSecond : t.tapFirst}</Notice>
@@ -177,6 +206,27 @@ export default function MeasurePanel({
               <Icon name="close" />
               {t.cancel}
             </button>
+          </div>
+        ) : mode === "lawn" ? (
+          <div className="flex flex-wrap gap-2">
+            <button onClick={onStartPick} disabled={loading} className={`${ui.btnPrimary} grow basis-48`}>
+              {loading ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <Icon name="home" />
+              )}
+              {loading ? t.measuring : t.selectLot}
+            </button>
+            <button onClick={() => onStartTrace("lot")} disabled={loading} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
+              <Icon name="pen" />
+              {t.traceLot}
+            </button>
+            {lawn && (
+              <button onClick={() => onStartTrace("remove")} disabled={loading} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
+                <Icon name="close" />
+                {t.removeArea}
+              </button>
+            )}
           </div>
         ) : (
           // Side by side when both fit; otherwise each takes a full row.
@@ -219,7 +269,30 @@ export default function MeasurePanel({
         )}
 
         {/* While a tool takes taps, the results fold away so the map stays visible. */}
-        {tracing || selecting ? null : mode === "golf" ? (
+        {tracing || selecting || picking ? null : mode === "lawn" ? (
+          <>
+            {loading && <Notice tone="info">{t.lawnLoading}</Notice>}
+            {lawn?.mappedFailed && <Notice tone="warn">{t.lawnBuildingsFailed}</Notice>}
+            {lawnNoBuilding && <Notice tone="warn">{t.lawnNoBuilding}</Notice>}
+
+            <div className="grid grid-cols-3 gap-1.5 border-t border-line pt-3">
+              <Stat value={sq(lawnTotals?.lotSqft ?? 0)} label={t.lawnLot} swatch={TURF_COLORS.course} />
+              <Stat value={sq(lawnTotals?.mappedSqft ?? 0)} label={t.lawnBuilt} swatch="#334155" />
+              <Stat value={sq(lawnTotals?.tracedSqft ?? 0)} label={t.lawnTracedOut} swatch="#f87171" />
+            </div>
+            <Total label={t.lawnTotal} value={sq(lawnTotals?.lawnSqft ?? 0)} />
+
+            {lawn && (
+              <div className="space-y-1 text-[11px]">
+                <p className="text-muted">{lawn.lotNumber ? t.lawnLotNumber(lawn.lotNumber) : lawn.lotSource === "traced" ? t.lawnLotTraced : null}</p>
+                <p className="text-muted">{t.lawnRemoveHint}</p>
+                <p className="text-faint">{t.lawnTreesNote}</p>
+              </div>
+            )}
+
+            {lawn && !error && <QuoteSection lang={lang} mode="lawn" result={null} sod={null} lawn={lawn} getShareUrl={getShareUrl} />}
+          </>
+        ) : mode === "golf" ? (
           <>
             {result && !result.found && !error && (
               <Notice tone="warn">{t.notFound}</Notice>
@@ -311,7 +384,7 @@ export default function MeasurePanel({
             )}
 
             {result && (result.found || result.boundaryOnly) && !error && (
-              <QuoteSection lang={lang} mode="golf" result={result} sod={null} getShareUrl={getShareUrl} />
+              <QuoteSection lang={lang} mode="golf" result={result} sod={null} lawn={null} getShareUrl={getShareUrl} />
             )}
           </>
         ) : (
@@ -334,7 +407,7 @@ export default function MeasurePanel({
               </div>
             )}
 
-            {sod && !error && <QuoteSection lang={lang} mode="sod" result={null} sod={sod} getShareUrl={getShareUrl} />}
+            {sod && !error && <QuoteSection lang={lang} mode="sod" result={null} sod={sod} lawn={null} getShareUrl={getShareUrl} />}
           </>
         )}
 
@@ -342,6 +415,7 @@ export default function MeasurePanel({
           {t.attribution}
           {mode === "golf" && sat && <> · {t.attributionWorldCover}</>}
           {mode === "sod" && sod?.year != null && <> · {t.attributionAci}</>}
+          {mode === "lawn" && lawn?.lotSource === "cadastre" && <> · {t.attributionCadastre}</>}
         </p>
       </div>
     </div>

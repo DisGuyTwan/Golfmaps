@@ -23,14 +23,19 @@ import {
   tracedPolygon,
   type LandGrid,
 } from "@/lib/landcover";
+import { lawnTotals, lotBBox, mappedOnLot, type LawnArea, type LawnMeasurement } from "@/lib/lawn";
+import { fetchParcel } from "@/lib/parcel";
 import { encodeQuote, type AcreageMode } from "@/lib/quote";
 import {
+  getLawn,
   getSod,
   setCourseName,
+  setLawn,
   setMeasurement,
   setMode,
   setSod,
   useCourseName,
+  useLawn,
   useMode,
   useQuoteSettings,
   useSod,
@@ -65,8 +70,17 @@ export interface MeasureError {
 /** Why the satellite grass count didn't run. */
 export type SatelliteError = "failed" | "tooLarge";
 
-/** What a trace is for: a golf course outline or a sod field. */
-export type TraceKind = "outline" | "field";
+/** What a trace is for: a golf course outline, a sod field, a residential lot or an area that isn't lawn. */
+export type TraceKind = "outline" | "field" | "lot" | "remove";
+
+/** Traced areas from a share link (lx=), as lawn removals. */
+function linkedRemovals(value: string | null): LawnArea[] {
+  return (value ?? "")
+    .split(",")
+    .map(decodePolyline)
+    .filter((pts): pts is [number, number][] => pts !== null && pts.length >= 3)
+    .map((pts, i) => ({ id: `t${i + 1}`, kind: "traced", geometry: tracedPolygon(pts) }));
+}
 
 /** Maps a failed Overpass request to a message type (translated at render). */
 function toMeasureError(err: unknown): MeasureError {
@@ -76,6 +90,28 @@ function toMeasureError(err: unknown): MeasureError {
     return { kind: "http", status: err.status };
   }
   return { kind: "unreachable" };
+}
+
+/**
+ * Frames a lot in the part of the map the results panel doesn't cover, once
+ * the panel has grown to show the results (two frames later).
+ */
+function fitAbovePanel(map: L.Map, lot: Polygon | MultiPolygon) {
+  const { south, west, north, east } = lotBBox(lot, 0);
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      const panel = document.querySelector<HTMLElement>("[data-measure-panel]");
+      const mapBox = map.getContainer().getBoundingClientRect();
+      const covered = panel ? Math.max(0, mapBox.bottom - panel.getBoundingClientRect().top) : 0;
+      map.fitBounds(
+        [
+          [south, west],
+          [north, east],
+        ],
+        { paddingTopLeft: [24, 72], paddingBottomRight: [24, Math.min(covered + 16, mapBox.height - 140)], maxZoom: 19 },
+      );
+    }),
+  );
 }
 
 function viewBBox(map: L.Map): BBox {
@@ -100,6 +136,7 @@ export default function GolfCourseCalculator() {
   const lang = useLang();
   const mode = useMode();
   const sod = useSod();
+  const lawn = useLawn();
   const [result, setResult] = useState<CourseMeasurement | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<MeasureError | null>(null);
@@ -113,6 +150,8 @@ export default function GolfCourseCalculator() {
   >(null);
   const [tracing, setTracing] = useState<TraceKind | null>(null);
   const [tracePoints, setTracePoints] = useState<[number, number][]>([]);
+  /** Lawn: the next tap picks the lot under it. */
+  const [picking, setPicking] = useState(false);
 
   const mapRef = useRef<L.Map | null>(null);
   /** Bumped by every new measurement or clear, so a late answer never lands on a newer one. */
@@ -229,19 +268,96 @@ export default function GolfCourseCalculator() {
     [startRun],
   );
 
+  /** Shows a lawn on its lot and fills in what OSM has on it (buildings, pools, paving). */
+  const showLawn = useCallback(async (next: LawnMeasurement, id: number) => {
+    setLawn(next);
+    try {
+      const json = await fetchFairways(lotBBox(next.lot), "lawn");
+      if (id !== runId.current) return;
+      setLawn({ ...(getLawn() ?? next), mapped: mappedOnLot(json, next.lot), mappedFailed: false });
+    } catch (err) {
+      if (id !== runId.current) return;
+      setLawn({ ...(getLawn() ?? next), mapped: [], mappedFailed: true });
+      reportError("lawn:buildings", err);
+    }
+  }, []);
+
+  /** The lawn on the cadastre lot at a point: a searched address, a tap or a share link. */
+  const runLawn = useCallback(
+    async (lat: number, lon: number, traced: LawnArea[] = []) => {
+      const id = startRun();
+      setLoading(true);
+      setError(null);
+      setLawn(null);
+      try {
+        const parcel = await fetchParcel(lat, lon);
+        if (id !== runId.current) return;
+        if (!parcel) {
+          setError({ kind: "noLot" });
+          return;
+        }
+        const next: LawnMeasurement = {
+          lot: parcel.geometry,
+          lotSource: "cadastre",
+          lotNumber: parcel.lot,
+          pickPoint: [lat, lon],
+          mapped: null,
+          mappedFailed: false,
+          traced,
+        };
+        if (mapRef.current) fitAbovePanel(mapRef.current, parcel.geometry);
+        await showLawn(next, id);
+      } catch (err) {
+        if (id !== runId.current) return;
+        setError({ kind: "lotUnreachable" });
+        reportError("lawn:lot", err);
+      } finally {
+        if (id === runId.current) setLoading(false);
+      }
+    },
+    [startRun, showLawn],
+  );
+
+  /** The lawn on a lot traced by hand (no cadastre here, e.g. Ontario). */
+  const showTracedLot = useCallback(
+    async (lot: Polygon, traced: LawnArea[] = []) => {
+      const id = startRun();
+      setLoading(true);
+      setError(null);
+      try {
+        const next: LawnMeasurement = { lot, lotSource: "traced", lotNumber: null, pickPoint: null, mapped: null, mappedFailed: false, traced };
+        await showLawn(next, id);
+      } finally {
+        if (id === runId.current) setLoading(false);
+      }
+    },
+    [startRun, showLawn],
+  );
+
   const measure = mode === "sod" ? runSod : runMeasure;
 
   // A share link reopens what was measured: a traced course outline (o=), the
-  // traced sod fields (sf=) and the detected ones left out (sx=), and with m=1
-  // measures again in the scan box (b=) if one was drawn, else the linked view
-  // (v=, applied by GolfMap). Runs once, so its callbacks must stay stable.
+  // traced sod fields (sf=) and the detected ones left out (sx=), a lawn's lot
+  // (lp= the point picked, or lo= a traced lot) and its traced-out areas (lx=),
+  // and with m=1 measures again in the scan box (b=) if one was drawn, else the
+  // linked view (v=, applied by GolfMap). Runs once, so its callbacks must stay
+  // stable.
   const handleMapReady = useCallback(
     (map: L.Map) => {
       mapRef.current = map;
       const params = new URLSearchParams(window.location.search);
       const box = parseBBoxParam(params.get("b"));
-      const linkedMode: AcreageMode = params.get("a") === "sod" ? "sod" : "golf";
+      const a = params.get("a");
+      const linkedMode: AcreageMode = a === "sod" || a === "lawn" ? a : "golf";
       map.whenReady(() => {
+        if (linkedMode === "lawn") {
+          const removals = linkedRemovals(params.get("lx"));
+          const lot = decodePolyline(params.get("lo") ?? "");
+          const [lat, lon] = (params.get("lp") ?? "").split(",").map(Number);
+          if (lot && lot.length >= 3) void showTracedLot(tracedPolygon(lot), removals);
+          else if (Number.isFinite(lat) && Number.isFinite(lon)) void runLawn(lat, lon, removals);
+          return;
+        }
         if (linkedMode === "sod") {
           const traced = (params.get("sf") ?? "")
             .split(",")
@@ -262,7 +378,7 @@ export default function GolfCourseCalculator() {
         void (linkedMode === "sod" ? runSod : runMeasure)(box ?? undefined);
       });
     },
-    [runMeasure, runSod, showOutline],
+    [runMeasure, runSod, showOutline, runLawn, showTracedLot],
   );
 
   const getShareUrl = useCallback(() => {
@@ -274,6 +390,18 @@ export default function GolfCourseCalculator() {
       b: box ? bboxParam(box) : undefined,
       n: courseName ?? undefined,
     };
+    if (mode === "lawn") {
+      const pick = lawn?.pickPoint;
+      return buildShareUrl(window.location, {
+        a: "lawn",
+        v: common.v,
+        n: common.n,
+        lp: pick ? `${pick[0].toFixed(6)},${pick[1].toFixed(6)}` : undefined,
+        lo: lawn?.lotSource === "traced" ? encodePolyline(tracedPoints(lawn.lot)) : undefined,
+        lx: (lawn?.traced ?? []).map((t) => encodePolyline(tracedPoints(t.geometry))).join(","),
+        ...encodeQuote(quoteSettings, "lawn"),
+      });
+    }
     if (mode === "sod") {
       const fields = sod?.fields ?? [];
       return buildShareUrl(window.location, {
@@ -295,7 +423,7 @@ export default function GolfCourseCalculator() {
       o: traced ? encodePolyline(tracedPoints(traced)) : undefined,
       ...encodeQuote(quoteSettings),
     });
-  }, [mode, scanBox, result, sod, courseName, quoteSettings]);
+  }, [mode, scanBox, result, sod, lawn, courseName, quoteSettings]);
 
   const getSearchBias = useCallback(() => {
     const map = mapRef.current;
@@ -309,6 +437,12 @@ export default function GolfCourseCalculator() {
       const map = mapRef.current;
       if (!map) return;
       setCourseName(place.primary);
+      // A lawn: zoom onto the house and look up the lot under the address.
+      if (mode === "lawn") {
+        map.setView([place.lat, place.lon], 19);
+        void runLawn(place.lat, place.lon);
+        return;
+      }
       // A farm spreads wider than a course: frame it a step further out.
       const maxZoom = mode === "sod" ? 15 : 17;
 
@@ -332,7 +466,7 @@ export default function GolfCourseCalculator() {
         });
       }
     },
-    [mode, measure],
+    [mode, measure, runLawn],
   );
 
   const handleStartSelect = useCallback(() => {
@@ -348,6 +482,7 @@ export default function GolfCourseCalculator() {
 
   const handleStartTrace = useCallback((kind: TraceKind) => {
     setSelecting(false);
+    setPicking(false);
     setFirstCorner(null);
     setTracing(kind);
     setTracePoints([]);
@@ -366,6 +501,14 @@ export default function GolfCourseCalculator() {
       if (tracing === "outline") {
         setScanBox(null);
         showOutline(tracedOutlineMeasurement(tracedPolygon(points)));
+      } else if (tracing === "lot") {
+        void showTracedLot(tracedPolygon(points));
+      } else if (tracing === "remove") {
+        const current = getLawn();
+        if (current) {
+          const n = Math.max(0, ...current.traced.map((t) => Number(t.id.slice(1)) || 0)) + 1;
+          setLawn({ ...current, traced: [...current.traced, { id: `t${n}`, kind: "traced", geometry: tracedPolygon(points) }] });
+        }
       } else {
         const fields = getSod()?.fields ?? [];
         const n = Math.max(0, ...fields.filter((f) => f.traced).map((f) => Number(f.id.slice(1)) || 0)) + 1;
@@ -374,7 +517,7 @@ export default function GolfCourseCalculator() {
       setTracing(null);
       setTracePoints([]);
     },
-    [tracing, showOutline],
+    [tracing, showOutline, showTracedLot],
   );
 
   const handleMapClick = useCallback(
@@ -390,6 +533,12 @@ export default function GolfCourseCalculator() {
           }
         }
         setTracePoints((points) => [...points, latlng]);
+        return;
+      }
+
+      if (picking) {
+        setPicking(false);
+        void runLawn(latlng[0], latlng[1]);
         return;
       }
 
@@ -413,6 +562,14 @@ export default function GolfCourseCalculator() {
         return;
       }
 
+      // Lawn: a tap on an area traced out puts it back.
+      if (mode === "lawn") {
+        const current = getLawn();
+        const hit = current && [...current.traced].reverse().find((t) => pointInGeometry(latlng[1], latlng[0], t.geometry));
+        if (current && hit) setLawn({ ...current, traced: current.traced.filter((t) => t.id !== hit.id) });
+        return;
+      }
+
       // Sod: a tap on a field takes it out of the quote, or puts it back.
       // Traced fields are drawn on top, so they're checked first.
       const current = getSod();
@@ -424,7 +581,7 @@ export default function GolfCourseCalculator() {
         fields: current.fields.map((f) => (f.id === hit.id ? { ...f, included: !f.included } : f)),
       });
     },
-    [tracing, tracePoints, finishTrace, selecting, firstCorner, measure, mode],
+    [tracing, tracePoints, finishTrace, picking, runLawn, selecting, firstCorner, measure, mode],
   );
 
   const resetView = useCallback(() => {
@@ -435,6 +592,7 @@ export default function GolfCourseCalculator() {
     setScanBox(null);
     setFirstCorner(null);
     setSelecting(false);
+    setPicking(false);
     setTracing(null);
     setTracePoints([]);
   }, [startRun]);
@@ -443,6 +601,7 @@ export default function GolfCourseCalculator() {
     resetView();
     setMeasurement(null);
     setSod(null);
+    setLawn(null);
     setCourseName(null);
   }, [resetView]);
 
@@ -455,8 +614,27 @@ export default function GolfCourseCalculator() {
     [mode, resetView],
   );
 
+  const totals = useMemo(() => (lawn ? lawnTotals(lawn) : null), [lawn]);
+
   const mapGeojson = useMemo<FeatureCollection | null>(() => {
     if (mode === "golf") return result?.geojson ?? null;
+    if (mode === "lawn") {
+      if (!lawn) return null;
+      const feature = (geometry: Polygon | MultiPolygon, category: string) => ({
+        type: "Feature" as const,
+        geometry,
+        properties: { _category: category },
+      });
+      return {
+        type: "FeatureCollection",
+        features: [
+          ...(totals?.lawn ? [feature(totals.lawn, "lawn")] : []),
+          ...(lawn.mapped ?? []).map((a) => feature(a.geometry, "lawn_built")),
+          ...lawn.traced.map((a) => feature(a.geometry, "lawn_removed")),
+          feature(lawn.lot, "course"),
+        ],
+      };
+    }
     if (!sod) return null;
     return {
       type: "FeatureCollection",
@@ -466,14 +644,14 @@ export default function GolfCourseCalculator() {
         properties: { _category: !f.included ? "sod_off" : f.traced ? "sod_traced" : "sod" },
       })),
     };
-  }, [mode, result, sod]);
+  }, [mode, result, sod, lawn, totals]);
 
   return (
     <div className="relative h-full w-full">
       <GolfMap
         lang={lang}
         geojson={mapGeojson}
-        capturing={selecting || tracing !== null}
+        capturing={selecting || picking || tracing !== null}
         firstCorner={firstCorner}
         tracePoints={tracing ? tracePoints : null}
         overlay={mode === "golf" ? overlay : null}
@@ -486,7 +664,9 @@ export default function GolfCourseCalculator() {
         onSelect={handleSearchSelect}
         getBias={getSearchBias}
         lang={lang}
-        placeholder={mode === "sod" ? UI[lang].sodSearchPlaceholder : undefined}
+        placeholder={
+          mode === "sod" ? UI[lang].sodSearchPlaceholder : mode === "lawn" ? UI[lang].lawnSearchPlaceholder : undefined
+        }
       />
 
       <MeasurePanel
@@ -494,6 +674,15 @@ export default function GolfCourseCalculator() {
         mode={mode}
         result={mode === "golf" ? result : null}
         sod={mode === "sod" ? sod : null}
+        lawn={mode === "lawn" ? lawn : null}
+        lawnTotals={mode === "lawn" ? totals : null}
+        picking={picking}
+        onStartPick={() => {
+          setSelecting(false);
+          setTracing(null);
+          setPicking(true);
+        }}
+        onCancelPick={() => setPicking(false)}
         loading={loading}
         error={error}
         satLoading={satLoading}
