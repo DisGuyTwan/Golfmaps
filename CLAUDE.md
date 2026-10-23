@@ -67,7 +67,7 @@ src/lib/
   quote.ts      measurement → acres for the quote, share params (pure, tested)
   quote-store.ts  client store shared by the tabs (useSyncExternalStore)
   share.ts      share-link helpers + polylines (pure, tested); keys r_ / i_ / q_ /
-                v, m, b, n, a, o, sf, sx, lp, lo, lx
+                v, m, b, n, a, o, sf, sx, lp, lo, lx, ld
   gas.ts        StatCan gas price parsing (pure, tested)
   report-error.ts  sendBeacon to /api/log
   tabs.ts       goToTab() for in-app navigation
@@ -118,10 +118,17 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   commercial). The lot comes from the Quebec cadastre allégé at a point
   (`/api/parcel` → the environment ministry's ArcGIS layer; indicative only, not
   a survey), or is traced (Ontario has no open parcels). OSM buildings, pools,
-  parking and `area:highway` on the lot are removed automatically (Overpass
-  `kind: "lawn"`); OSM misses most houses in some Quebec suburbs (Microsoft
-  footprints there aren't reachable), so the panel says when the lot has no
-  building and the rep traces it out. `lawnTotals` counts every removal once.
+  parking (incl. multipolygons and spaces), paved areas and `highway=service`
+  lines (driveways, parking aisles, widened by `stripAlong` to their width tag
+  or a typical width) on the lot are removed automatically (Overpass
+  `kind: "lawn"`), as Buildings or Paving. OSM misses most houses in some
+  Quebec suburbs (Microsoft footprints there aren't reachable) and most
+  residential driveways (1-30% mapped), so the rep traces them: Remove a
+  driveway is a centre line (2+ taps) at 11/20/29 ft (1/2/3 cars), kept as
+  path + width so links (`ld`) rebuild it exactly; Remove an area is a
+  polygon. No open layer separates lawn from pavement (Quebec orthophotos are
+  downloads only; Esri imagery can't be analysed), so there's no automatic
+  driveway detection. `lawnTotals` counts every removal once.
   Trees aren't removed. A cadastre lot is framed above the results panel.
   Streets are cadastre lots too and a geocoded address can land on the road,
   so `lotLooksOdd` (over 5,000 m², or a strip with compactness under 0.2)

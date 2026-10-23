@@ -3,7 +3,7 @@
 import { TURF_COLORS } from "@/lib/area";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { estimatedTurf } from "@/lib/landcover";
-import { formatSqft, lotLooksOdd, type LawnMeasurement, type LawnTotals } from "@/lib/lawn";
+import { DRIVEWAY_WIDTHS_FT, formatSqft, lotLooksOdd, type LawnMeasurement, type LawnTotals } from "@/lib/lawn";
 import type { AcreageMode } from "@/lib/quote";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import type { MeasureError, SatelliteError, TraceKind } from "./GolfCourseCalculator";
@@ -28,6 +28,9 @@ interface MeasurePanelProps {
   tracePointCount: number;
   /** Lawn: waiting for the tap that picks a lot. */
   picking: boolean;
+  /** Width (ft) for the driveway being traced. */
+  driveWidthFt: number;
+  onDriveWidth: (ft: number) => void;
   onModeChange: (mode: AcreageMode) => void;
   onMeasure: () => void;
   onStartSelect: () => void;
@@ -90,6 +93,8 @@ export default function MeasurePanel({
   tracing,
   tracePointCount,
   picking,
+  driveWidthFt,
+  onDriveWidth,
   onModeChange,
   onMeasure,
   onStartSelect,
@@ -121,6 +126,7 @@ export default function MeasurePanel({
   // or couldn't be reached (the satellite count doesn't need it).
   const offerOutline = mode === "golf" && ((!!result && (!result.found || outlineOnly)) || error !== null);
   const sq = (n: number) => formatSqft(n, lang);
+  const num = (n: number) => formatSqft(n, lang, false);
   const modeIcon = MODES.find((m) => m.id === mode)!.icon;
   const title = mode === "sod" ? t.sodPanelTitle : mode === "lawn" ? t.lawnPanelTitle : t.panelTitle;
   // Lawn: say so when OSM has no building on the lot, so the rep traces the house out.
@@ -171,10 +177,31 @@ export default function MeasurePanel({
         {tracing ? (
           <div className="space-y-2">
             <Notice tone="info">
-              {t.traceHint} ({t.tracePoints(tracePointCount)})
+              {tracing === "driveway" ? t.drivewayHint : t.traceHint} ({t.tracePoints(tracePointCount)})
             </Notice>
+            {tracing === "driveway" && (
+              <div role="group" aria-label={t.drivewayWidthGroup} className="flex flex-wrap gap-1.5">
+                {DRIVEWAY_WIDTHS_FT.map((ft, i) => (
+                  <button
+                    key={ft}
+                    type="button"
+                    aria-pressed={driveWidthFt === ft}
+                    onClick={() => onDriveWidth(ft)}
+                    className={`inline-flex min-h-8 items-center rounded-full border px-2.5 text-xs font-semibold transition-all duration-200 active:scale-95 ${
+                      driveWidthFt === ft ? "border-brand bg-brand text-white" : "border-line bg-surface text-muted hover:text-ink"
+                    }`}
+                  >
+                    {t.drivewayWidth(i + 1, ft)}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
-              <button onClick={onFinishTrace} disabled={tracePointCount < 3} className={`${ui.btnPrimary} grow`}>
+              <button
+                onClick={onFinishTrace}
+                disabled={tracePointCount < (tracing === "driveway" ? 2 : 3)}
+                className={`${ui.btnPrimary} grow`}
+              >
                 <Icon name="check" />
                 {t.done}
               </button>
@@ -222,10 +249,16 @@ export default function MeasurePanel({
               {t.traceLot}
             </button>
             {lawn && (
-              <button onClick={() => onStartTrace("remove")} disabled={loading} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
-                <Icon name="close" />
-                {t.removeArea}
-              </button>
+              <>
+                <button onClick={() => onStartTrace("driveway")} disabled={loading} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
+                  <Icon name="road" />
+                  {t.removeDriveway}
+                </button>
+                <button onClick={() => onStartTrace("remove")} disabled={loading} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
+                  <Icon name="close" />
+                  {t.removeArea}
+                </button>
+              </>
             )}
           </div>
         ) : (
@@ -278,10 +311,12 @@ export default function MeasurePanel({
             {lawn?.mappedFailed && <Notice tone="warn">{t.lawnBuildingsFailed}</Notice>}
             {lawnNoBuilding && <Notice tone="warn">{t.lawnNoBuilding}</Notice>}
 
-            <div className="grid grid-cols-3 gap-1.5 border-t border-line pt-3">
-              <Stat value={sq(lawnTotals?.lotSqft ?? 0)} label={t.lawnLot} swatch={TURF_COLORS.course} />
-              <Stat value={sq(lawnTotals?.mappedSqft ?? 0)} label={t.lawnBuilt} swatch="#334155" />
-              <Stat value={sq(lawnTotals?.tracedSqft ?? 0)} label={t.lawnTracedOut} swatch="#f87171" />
+            {/* Four across: the unit goes in the labels so the numbers fit on a phone. */}
+            <div className="grid grid-cols-4 gap-1.5 border-t border-line pt-3">
+              <Stat value={num(lawnTotals?.lotSqft ?? 0)} label={`${t.lawnLot} (${t.sqftUnit})`} swatch={TURF_COLORS.course} />
+              <Stat value={num(lawnTotals?.builtSqft ?? 0)} label={t.lawnBuilt} swatch="#334155" />
+              <Stat value={num(lawnTotals?.pavedSqft ?? 0)} label={t.lawnPaved} swatch="#64748b" />
+              <Stat value={num(lawnTotals?.tracedSqft ?? 0)} label={t.lawnTracedOut} swatch="#f87171" />
             </div>
             <Total label={t.lawnTotal} value={sq(lawnTotals?.lawnSqft ?? 0)} />
 

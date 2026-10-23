@@ -90,6 +90,12 @@ const en = {
   tapLot: "Tap the lot to measure",
   traceLot: "Trace the lot",
   removeArea: "Remove an area",
+  removeDriveway: "Remove a driveway",
+  drivewayHint: "Tap along the middle of the driveway, from the street to the garage, then Done.",
+  drivewayWidthGroup: "Driveway width",
+  drivewayWidth: (cars: number, ft: number) => `${cars} car${cars > 1 ? "s" : ""} · ${ft} ft`,
+  sqftUnit: "sq ft",
+  lawnPaved: "Paving",
   lawnLoading: "Finding the lot and its buildings…",
   lawnLot: "Lot",
   lawnBuilt: "Buildings",
@@ -102,7 +108,7 @@ const en = {
   lawnBuildingsFailed:
     "Couldn’t load the buildings from OpenStreetMap. Use Remove an area to trace the house out.",
   lawnRemoveHint:
-    "Remove an area traces out a driveway, patio, garden bed or a house that isn’t mapped. Tap a traced area to put it back.",
+    "Remove a driveway: tap along it and pick its width. Remove an area: a patio, garden bed or a house that isn’t mapped. Tap a traced area to put it back.",
   lawnTreesNote: "Lawn under trees counts as lawn.",
   lawnOddLot: (size: string) =>
     `This lot (${size}) looks too big or too narrow for one house: it may be the street. Tap the house itself with Select a lot, or trace the lot.`,
@@ -264,6 +270,12 @@ const fr: UiStrings = {
   tapLot: "Touchez le terrain à mesurer",
   traceLot: "Tracer le terrain",
   removeArea: "Retirer une zone",
+  removeDriveway: "Retirer une entrée",
+  drivewayHint: "Touchez le long du centre de l’entrée de garage, de la rue au garage, puis Terminé.",
+  drivewayWidthGroup: "Largeur de l’entrée",
+  drivewayWidth: (cars: number, ft: number) => `${cars} auto${cars > 1 ? "s" : ""} · ${ft} pi`,
+  sqftUnit: "pi²",
+  lawnPaved: "Pavé",
   lawnLoading: "Recherche du terrain et de ses bâtiments…",
   lawnLot: "Terrain",
   lawnBuilt: "Bâtiments",
@@ -276,7 +288,7 @@ const fr: UiStrings = {
   lawnBuildingsFailed:
     "Impossible de charger les bâtiments d’OpenStreetMap. Utilisez Retirer une zone pour tracer la maison.",
   lawnRemoveHint:
-    "Retirer une zone sert à tracer une entrée, un patio, une plate-bande ou une maison non cartographiée. Touchez une zone tracée pour la remettre.",
+    "Retirer une entrée : touchez le long de l’entrée et choisissez sa largeur. Retirer une zone : un patio, une plate-bande ou une maison non cartographiée. Touchez une zone tracée pour la remettre.",
   lawnTreesNote: "La pelouse sous les arbres compte comme pelouse.",
   lawnOddLot: (size: string) =>
     `Ce lot (${size}) semble trop grand ou trop étroit pour une maison : c’est peut-être la rue. Touchez la maison elle-même avec Choisir un terrain, ou tracez le terrain.`,

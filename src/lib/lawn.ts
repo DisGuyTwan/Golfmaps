@@ -1,8 +1,10 @@
 /**
  * Residential lawn: the lot (Quebec cadastre, or traced) minus what isn't
- * lawn. OpenStreetMap supplies buildings, pools, parking and mapped paved
- * areas where it has them; the rep traces out the rest (driveway, patio, a
- * house OSM doesn't have). Trees aren't removed: lawn under them is mowed.
+ * lawn. OpenStreetMap supplies buildings, pools, parking and paving where it
+ * has them, including driveways and parking aisles mapped as lines (widened
+ * into strips); the rep traces out the rest: a driveway with two taps and a
+ * width, or any other area (patio, a house OSM doesn't have). Trees aren't
+ * removed: lawn under them is mowed.
  * Pure, so the arithmetic is tested without a browser. Areas in square feet.
  */
 import area from "@turf/area";
@@ -11,21 +13,28 @@ import intersect from "@turf/intersect";
 import union from "@turf/union";
 import { featureCollection } from "@turf/helpers";
 import osmtogeojson from "osmtogeojson";
-import type { Feature, MultiPolygon, Polygon } from "geojson";
+import type { Feature, MultiPolygon, Polygon, Position } from "geojson";
 import { toAreaFeature } from "./area";
 import type { BBox } from "./types";
 
 /** 1 m² in square feet. */
 export const SQ_M_TO_SQ_FT = 10.7639104;
 
-export type LawnAreaKind = "building" | "pool" | "paving" | "traced";
+export type LawnAreaKind = "building" | "pool" | "paving" | "traced" | "driveway";
 
 /** Something that isn't lawn: mapped in OSM (clipped to the lot) or traced by hand. */
 export interface LawnArea {
   id: string;
   kind: LawnAreaKind;
   geometry: Polygon | MultiPolygon;
+  /** A traced driveway's centre line ([lat, lon]) and width, so a link rebuilds it exactly. */
+  path?: [number, number][];
+  widthM?: number;
 }
+
+/** Driveway widths offered for 1, 2 and 3 cars, in feet. */
+export const DRIVEWAY_WIDTHS_FT = [11, 20, 29] as const;
+export const FT_TO_M = 0.3048;
 
 export interface LawnMeasurement {
   lot: Polygon | MultiPolygon;
@@ -42,9 +51,11 @@ export interface LawnMeasurement {
 
 export interface LawnTotals {
   lotSqft: number;
-  /** Buildings, pools and paving mapped in OSM, on the lot. */
-  mappedSqft: number;
-  /** Traced out by hand, not counting what OSM already removed. */
+  /** Buildings and pools mapped in OSM, on the lot. */
+  builtSqft: number;
+  /** Paving mapped in OSM (parking, driveways, aisles), not under a building. */
+  pavedSqft: number;
+  /** Traced out by hand (driveways and areas), not counting what OSM already removed. */
   tracedSqft: number;
   lawnSqft: number;
   /** The lawn itself, for the map; null if nothing is left. */
@@ -71,20 +82,74 @@ function minus(a: Poly | null, ...others: (Poly | null)[]): Poly | null {
   return cut.length ? difference(featureCollection([a, ...cut])) : a;
 }
 
-function kindOf(props: Record<string, unknown>): Exclude<LawnAreaKind, "traced"> | null {
+/**
+ * A strip `widthM` wide along a line of [lon, lat] points (a driveway, a
+ * parking aisle), with rounded bends so turns leave no notch. Built on a
+ * local flat projection: plenty for lot-sized shapes.
+ */
+export function stripAlong(line: Position[], widthM: number): Polygon | MultiPolygon | null {
+  if (line.length < 2 || !(widthM > 0)) return null;
+  const [lon0, lat0] = line[0];
+  const kx = 111_320 * Math.cos((lat0 * Math.PI) / 180);
+  const ky = 111_320;
+  const xy = line.map(([lon, lat]) => [(lon - lon0) * kx, (lat - lat0) * ky]);
+  const ll = ([x, y]: number[]): Position => [lon0 + x / kx, lat0 + y / ky];
+  const h = widthM / 2;
+  const pieces: Polygon[] = [];
+  for (let i = 1; i < xy.length; i++) {
+    const [x1, y1] = xy[i - 1];
+    const [x2, y2] = xy[i];
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    if (len < 0.01) continue;
+    const nx = (-(y2 - y1) / len) * h;
+    const ny = ((x2 - x1) / len) * h;
+    const ring = [[x1 + nx, y1 + ny], [x1 - nx, y1 - ny], [x2 - nx, y2 - ny], [x2 + nx, y2 + ny], [x1 + nx, y1 + ny]];
+    pieces.push({ type: "Polygon", coordinates: [ring.map(ll)] });
+  }
+  for (let i = 1; i < xy.length - 1; i++) {
+    const [cx, cy] = xy[i];
+    const ring = Array.from({ length: 13 }, (_, k) => ll([cx + h * Math.cos((k * Math.PI) / 6), cy + h * Math.sin((k * Math.PI) / 6)]));
+    pieces.push({ type: "Polygon", coordinates: [ring] });
+  }
+  return pieces.length ? (merge(pieces)?.geometry ?? null) : null;
+}
+
+/** A driveway traced along its centre line ([lat, lon] taps), `widthM` wide. */
+export function drivewayArea(path: [number, number][], widthM: number, id: string): LawnArea | null {
+  const geometry = stripAlong(path.map(([lat, lon]) => [lon, lat]), widthM);
+  return geometry ? { id, kind: "driveway", geometry, path, widthM } : null;
+}
+
+/** Width of a service road mapped as a line: its width tag, else typical for its kind. */
+const SERVICE_WIDTH_M: Record<string, number> = { driveway: 3.5, parking_aisle: 6, alley: 4, "drive-through": 3.5 };
+function lineWidth(props: Record<string, unknown>): number {
+  const tagged = parseFloat(String(props.width ?? ""));
+  if (tagged > 0 && tagged < 30) return tagged;
+  return SERVICE_WIDTH_M[String(props.service)] ?? 5;
+}
+
+function kindOf(props: Record<string, unknown>): "building" | "pool" | "paving" | null {
   if (props.building) return "building";
   if (props.leisure === "swimming_pool") return "pool";
-  if (props.amenity === "parking" || props["area:highway"]) return "paving";
+  if (props.amenity === "parking" || props.amenity === "parking_space" || props["area:highway"]) return "paving";
+  if (props.highway && props.area === "yes") return "paving";
   return null;
 }
 
-/** Buildings, pools and paving from the Overpass lawn query, clipped to the lot. */
+/**
+ * Buildings, pools and paving from the Overpass lawn query, clipped to the
+ * lot. Service roads mapped as lines (driveways, parking aisles) are widened
+ * into strips; a closed loop of road is still a road, not the area inside it.
+ */
 export function mappedOnLot(overpassJson: unknown, lot: Polygon | MultiPolygon): LawnArea[] {
   const lotF = asFeature(lot);
   const out: LawnArea[] = [];
   for (const feature of osmtogeojson(overpassJson).features) {
-    const kind = kindOf((feature.properties ?? {}) as Record<string, unknown>);
-    const shape = kind ? toAreaFeature(feature) : null;
+    const props = (feature.properties ?? {}) as Record<string, unknown>;
+    const isRoadLine = props.highway === "service" && props.area !== "yes" && feature.geometry?.type === "LineString";
+    const kind = isRoadLine ? "paving" : kindOf(props);
+    const strip = isRoadLine ? stripAlong((feature.geometry as { coordinates: Position[] }).coordinates, lineWidth(props)) : null;
+    const shape = isRoadLine ? (strip ? asFeature(strip) : null) : kind ? toAreaFeature(feature) : null;
     if (!kind || !shape) continue;
     try {
       const onLot = clip(shape as Poly, lotF);
@@ -101,16 +166,34 @@ export function mappedOnLot(overpassJson: unknown, lot: Polygon | MultiPolygon):
 export function lawnTotals(m: LawnMeasurement): LawnTotals {
   const lotF = asFeature(m.lot);
   const lotSqft = sqft(lotF);
+  const mapped = m.mapped ?? [];
   try {
-    const mapped = clip(merge((m.mapped ?? []).map((a) => a.geometry)), lotF);
-    const traced = minus(clip(merge(m.traced.map((a) => a.geometry)), lotF), mapped);
-    const lawn = minus(lotF, mapped, traced);
-    return { lotSqft, mappedSqft: sqft(mapped), tracedSqft: sqft(traced), lawnSqft: sqft(lawn), lawn: lawn?.geometry ?? null };
+    const built = clip(merge(mapped.filter((a) => a.kind !== "paving").map((a) => a.geometry)), lotF);
+    const paved = minus(clip(merge(mapped.filter((a) => a.kind === "paving").map((a) => a.geometry)), lotF), built);
+    const traced = minus(clip(merge(m.traced.map((a) => a.geometry)), lotF), built, paved);
+    const lawn = minus(lotF, built, paved, traced);
+    return {
+      lotSqft,
+      builtSqft: sqft(built),
+      pavedSqft: sqft(paved),
+      tracedSqft: sqft(traced),
+      lawnSqft: sqft(lawn),
+      lawn: lawn?.geometry ?? null,
+    };
   } catch {
     // Invalid geometry: fall back to plain sums (may double count overlaps).
-    const mappedSqft = (m.mapped ?? []).reduce((s, a) => s + sqft(asFeature(a.geometry)), 0);
-    const tracedSqft = m.traced.reduce((s, a) => s + sqft(asFeature(a.geometry)), 0);
-    return { lotSqft, mappedSqft, tracedSqft, lawnSqft: Math.max(0, lotSqft - mappedSqft - tracedSqft), lawn: null };
+    const sum = (areas: LawnArea[]) => areas.reduce((s, a) => s + sqft(asFeature(a.geometry)), 0);
+    const builtSqft = sum(mapped.filter((a) => a.kind !== "paving"));
+    const pavedSqft = sum(mapped.filter((a) => a.kind === "paving"));
+    const tracedSqft = sum(m.traced);
+    return {
+      lotSqft,
+      builtSqft,
+      pavedSqft,
+      tracedSqft,
+      lawnSqft: Math.max(0, lotSqft - builtSqft - pavedSqft - tracedSqft),
+      lawn: null,
+    };
   }
 }
 
@@ -153,8 +236,9 @@ export function lotBBox(lot: Polygon | MultiPolygon, marginDeg = 0.0002): BBox {
   return { south: south - marginDeg, west: west - marginDeg, north: north + marginDeg, east: east + marginDeg };
 }
 
-/** Square feet, whole, formatted for the language: "12,345 sq ft" / "12 345 pi²". */
-export function formatSqft(value: number, lang: "en" | "fr"): string {
+/** Square feet, whole, formatted for the language: "12,345 sq ft" / "12 345 pi²" (or just the number). */
+export function formatSqft(value: number, lang: "en" | "fr", withUnit = true): string {
   const n = Math.round(value).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA");
+  if (!withUnit) return n;
   return lang === "fr" ? `${n} pi²` : `${n} sq ft`;
 }

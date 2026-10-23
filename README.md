@@ -150,14 +150,18 @@ The **Lawn** switch measures a residential lawn in **square feet**:
    Quebec, the app looks up the lot under that point in the provincial cadastre
    (cadastre allégé, through `/api/parcel`) and frames it on the map. Outside
    Quebec (Ontario has no open lot data), **Trace the lot** instead.
-2. Buildings, pools and mapped paving on the lot come from OpenStreetMap and
-   are taken out automatically (only the part on the lot). OSM has most houses
-   in Laval, Gatineau, Sherbrooke, Ottawa, Barrie and Kingston, but few in
-   Boucherville, Trois-Rivières or Saint-Jean-sur-Richelieu; the panel says so
-   when the lot has no building.
-3. **Remove an area** traces out the driveway, patio, garden beds, or the house
-   when OSM doesn't have it. Tap a traced area to put it back. Lawn under trees
-   counts as lawn.
+2. Buildings, pools, parking and paving on the lot come from OpenStreetMap and
+   are taken out automatically (only the part on the lot), including
+   driveways and parking aisles mapped as lines, widened to their width. OSM
+   has most houses in Laval, Gatineau, Sherbrooke, Ottawa, Barrie and Kingston,
+   but few in Boucherville, Trois-Rivières or Saint-Jean-sur-Richelieu, and
+   few residential driveways anywhere; the panel says so when the lot has no
+   building.
+3. **Remove a driveway**: tap along its middle from the street to the garage
+   and pick its width (1, 2 or 3 cars: 11, 20 or 29 ft); the strip shows on
+   the map as you go. **Remove an area** traces out a patio, garden beds, or
+   the house when OSM doesn't have it. Tap a traced area to put it back. Lawn
+   under trees counts as lawn.
 4. The lawn (lot minus everything removed, each counted once) is the quote;
    a manual override in square feet wins. The PDF report and Copy link work as
    elsewhere; a lawn doesn't go to the ROI tab, which compares a Voyager with a

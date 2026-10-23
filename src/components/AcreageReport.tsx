@@ -205,7 +205,8 @@ function LawnReport() {
                 head={[t.reportCategory, t.reportMeasured, t.reportCounted]}
                 rows={[
                   [t.lawnLot, sq(totals.lotSqft), "–"],
-                  [t.lawnBuilt, sq(totals.mappedSqft), "–"],
+                  [t.lawnBuilt, sq(totals.builtSqft), "–"],
+                  [t.lawnPaved, sq(totals.pavedSqft), "–"],
                   [t.lawnTracedOut, sq(totals.tracedSqft), "–"],
                   [t.lawnTotal, sq(totals.lawnSqft), quoted !== null ? sq(quoted) : "–"],
                 ]}

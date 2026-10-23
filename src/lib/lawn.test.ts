@@ -1,7 +1,18 @@
 import { describe, it, expect } from "vitest";
 import area from "@turf/area";
 import type { Polygon } from "geojson";
-import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, lotBBox, lotLooksOdd, mappedOnLot, type LawnMeasurement } from "./lawn";
+import {
+  FT_TO_M,
+  SQ_M_TO_SQ_FT,
+  drivewayArea,
+  formatSqft,
+  lawnTotals,
+  lotBBox,
+  lotLooksOdd,
+  mappedOnLot,
+  stripAlong,
+  type LawnMeasurement,
+} from "./lawn";
 
 /*
  * A residential lot near Boucherville, built in metres: a 30 × 40 m lot with a
@@ -19,20 +30,23 @@ function rect(x: number, y: number, w: number, h: number): Polygon {
 }
 const sqft = (p: Polygon) => area({ type: "Feature", geometry: p, properties: {} }) * SQ_M_TO_SQ_FT;
 
-/** Overpass JSON for closed ways with tags, the shape the lawn query returns. */
-function overpass(...ways: [Polygon, Record<string, string>][]) {
+/** Overpass JSON for closed ways (polygons) or open ways (lines, [lon, lat][]) with tags. */
+function overpass(...ways: [Polygon | number[][], Record<string, string>][]) {
   const elements: object[] = [];
   let id = 1;
-  for (const [poly, tags] of ways) {
-    const ring = poly.coordinates[0].slice(0, -1);
-    const ids = ring.map(([lon, lat]) => {
+  for (const [shape, tags] of ways) {
+    const closed = !Array.isArray(shape);
+    const pts = closed ? (shape as Polygon).coordinates[0].slice(0, -1) : (shape as number[][]);
+    const ids = pts.map(([lon, lat]) => {
       elements.push({ type: "node", id, lat, lon });
       return id++;
     });
-    elements.push({ type: "way", id: id++, nodes: [...ids, ids[0]], tags });
+    elements.push({ type: "way", id: id++, nodes: closed ? [...ids, ids[0]] : ids, tags });
   }
   return { version: 0.6, elements };
 }
+/** A point `x`, `y` metres from the lot's south-west corner, as [lon, lat]. */
+const at = (x: number, y: number) => [LON + dLon(x), LAT + dLat(y)];
 
 const lot = rect(0, 0, 30, 40);
 const house = rect(8, 22, 12, 10);
@@ -73,19 +87,19 @@ describe("lawnTotals", () => {
   it("is the lot minus the house, the pool and the part of the neighbour's garage on it", () => {
     const t = lawnTotals(measurement());
     expect(t.lotSqft).toBeCloseTo(sqft(lot), 0);
-    expect(t.mappedSqft).toBeCloseTo(sqft(house) + sqft(pool) + sqft(rect(29, 10, 1, 6)), 0);
-    expect(t.lawnSqft).toBeCloseTo(t.lotSqft - t.mappedSqft, 0);
+    expect(t.builtSqft).toBeCloseTo(sqft(house) + sqft(pool) + sqft(rect(29, 10, 1, 6)), 0);
+    expect(t.lawnSqft).toBeCloseTo(t.lotSqft - t.builtSqft, 0);
     expect(t.tracedSqft).toBe(0);
   });
   it("counts a traced driveway once where it overlaps the house", () => {
     const t = lawnTotals(measurement([driveway]));
     expect(t.tracedSqft).toBeCloseTo(sqft(driveway) - sqft(rect(16, 25, 4, 7)), 0);
-    expect(t.lawnSqft).toBeCloseTo(t.lotSqft - t.mappedSqft - t.tracedSqft, 0);
+    expect(t.lawnSqft).toBeCloseTo(t.lotSqft - t.builtSqft - t.tracedSqft, 0);
     expect(t.lawn?.type).toBeDefined();
   });
   it("ignores the part of a trace outside the lot, and handles OSM still loading", () => {
     const t = lawnTotals({ ...measurement([rect(25, 0, 10, 10)]), mapped: null });
-    expect(t.mappedSqft).toBe(0);
+    expect(t.builtSqft).toBe(0);
     expect(t.tracedSqft).toBeCloseTo(sqft(rect(25, 0, 5, 10)), 0);
   });
   it("leaves no lawn when the whole lot is traced out", () => {
@@ -133,5 +147,47 @@ describe("lotLooksOdd", () => {
   it("flags a street-like strip and a lot too big for one house", () => {
     expect(lotLooksOdd(rect(0, 0, 400, 15))).toBe(true);
     expect(lotLooksOdd(rect(0, 0, 80, 80))).toBe(true);
+  });
+});
+
+describe("driveways and paving", () => {
+  it("widens a line into a strip of the right area, bends included", () => {
+    const straight = stripAlong([at(0, 0), at(20, 0)], 3.5)!;
+    expect(sqft(straight as Polygon) / SQ_M_TO_SQ_FT).toBeCloseTo(70, 0);
+    const bent = stripAlong([at(0, 0), at(10, 0), at(10, 10)], 4)!;
+    // Two 10 × 4 m legs that overlap by 2 × 2 m inside the bend, plus the rounded outer corner.
+    const m2 = sqft(bent as Polygon) / SQ_M_TO_SQ_FT;
+    expect(m2).toBeGreaterThan(76);
+    expect(m2).toBeLessThan(76 + Math.PI);
+    expect(stripAlong([at(0, 0)], 3)).toBeNull();
+  });
+  it("takes a mapped driveway line out as paving, clipped to the lot, at its width tag", () => {
+    // From the street (5 m below the lot) up to the house: 25 m long, 15 m on the lot.
+    const m = mappedOnLot(overpass([[at(4, -5), at(4, 20)], { highway: "service", service: "driveway", width: "4" }]), lot);
+    expect(m).toHaveLength(1);
+    expect(m[0].kind).toBe("paving");
+    // On the lot from y = 0 to 20, x = 2 to 6.
+    expect(sqft(m[0].geometry as Polygon)).toBeCloseTo(sqft(rect(2, 0, 4, 20)), -1);
+  });
+  it("uses a typical width when untagged, and never fills a closed loop of road", () => {
+    const aisle = mappedOnLot(overpass([[at(5, 10), at(25, 10)], { highway: "service", service: "parking_aisle" }]), lot);
+    expect(sqft(aisle[0].geometry as Polygon)).toBeCloseTo(sqft(rect(5, 7, 20, 6)), -1);
+    const loop = [at(5, 5), at(25, 5), at(25, 35), at(5, 35), at(5, 5)];
+    const ring = mappedOnLot(overpass([loop, { highway: "service" }]), lot);
+    // A 5 m strip around a 20 × 30 m loop, not the 600 m² inside it.
+    expect(sqft(ring[0].geometry as Polygon) / SQ_M_TO_SQ_FT).toBeLessThan(560);
+  });
+  it("counts paving apart from buildings, and a traced driveway over mapped paving once", () => {
+    const mapped = mappedOnLot(
+      overpass([house, { building: "house" }], [[at(4, -5), at(4, 22)], { highway: "service", service: "driveway", width: "4" }]),
+      lot,
+    );
+    const drive = drivewayArea([[LAT + dLat(0), LON + dLon(4)], [LAT + dLat(30), LON + dLon(4)]], 20 * FT_TO_M, "t1")!;
+    const t = lawnTotals({ ...measurement(), mapped, traced: [drive] });
+    expect(t.builtSqft).toBeCloseTo(sqft(house), 0);
+    expect(t.pavedSqft).toBeCloseTo(sqft(rect(2, 0, 4, 22)), -1);
+    expect(t.lotSqft - t.builtSqft - t.pavedSqft - t.tracedSqft).toBeCloseTo(t.lawnSqft, 0);
+    expect(drive.path).toHaveLength(2);
+    expect(drive.widthM).toBeCloseTo(6.096, 3);
   });
 });

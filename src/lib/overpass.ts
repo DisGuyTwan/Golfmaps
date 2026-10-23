@@ -51,8 +51,9 @@ out skel qt;`;
 
 /**
  * Everything on a residential lot that isn't lawn and that OpenStreetMap may
- * have: buildings (house, garage, shed), swimming pools, parking and mapped
- * paved areas.
+ * have: buildings (house, garage, shed), swimming pools, parking (areas,
+ * multipolygons, spaces), paved areas, and service roads mapped as lines
+ * (driveways, parking aisles), which lawn.ts widens into strips.
  */
 function buildLawnQuery({ south, west, north, east }: BBox): string {
   const bbox = `${south},${west},${north},${east}`;
@@ -62,7 +63,11 @@ function buildLawnQuery({ south, west, north, east }: BBox): string {
   relation["building"](${bbox});
   way["leisure"="swimming_pool"](${bbox});
   way["amenity"="parking"](${bbox});
+  relation["amenity"="parking"](${bbox});
+  way["amenity"="parking_space"](${bbox});
   way["area:highway"](${bbox});
+  way["highway"]["area"="yes"](${bbox});
+  way["highway"="service"](${bbox});
 );
 out body;
 >;

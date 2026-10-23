@@ -23,7 +23,17 @@ import {
   tracedPolygon,
   type LandGrid,
 } from "@/lib/landcover";
-import { lawnTotals, lotBBox, mappedOnLot, type LawnArea, type LawnMeasurement } from "@/lib/lawn";
+import {
+  DRIVEWAY_WIDTHS_FT,
+  FT_TO_M,
+  drivewayArea,
+  lawnTotals,
+  lotBBox,
+  mappedOnLot,
+  stripAlong,
+  type LawnArea,
+  type LawnMeasurement,
+} from "@/lib/lawn";
 import { fetchParcel } from "@/lib/parcel";
 import { encodeQuote, type AcreageMode } from "@/lib/quote";
 import {
@@ -70,16 +80,29 @@ export interface MeasureError {
 /** Why the satellite grass count didn't run. */
 export type SatelliteError = "failed" | "tooLarge";
 
-/** What a trace is for: a golf course outline, a sod field, a residential lot or an area that isn't lawn. */
-export type TraceKind = "outline" | "field" | "lot" | "remove";
+/**
+ * What a trace is for: a golf course outline, a sod field, a residential lot,
+ * an area that isn't lawn, or a driveway (a line, widened to the chosen width).
+ */
+export type TraceKind = "outline" | "field" | "lot" | "remove" | "driveway";
 
-/** Traced areas from a share link (lx=), as lawn removals. */
-function linkedRemovals(value: string | null): LawnArea[] {
-  return (value ?? "")
+/** Traced areas (lx=) and driveways (ld=, "polyline:width in mm") from a share link, as lawn removals. */
+function linkedRemovals(areas: string | null, driveways: string | null): LawnArea[] {
+  const traced: LawnArea[] = (areas ?? "")
     .split(",")
     .map(decodePolyline)
     .filter((pts): pts is [number, number][] => pts !== null && pts.length >= 3)
-    .map((pts, i) => ({ id: `t${i + 1}`, kind: "traced", geometry: tracedPolygon(pts) }));
+    .map((pts) => ({ id: "", kind: "traced", geometry: tracedPolygon(pts) }));
+  const drives = (driveways ?? "")
+    .split(",")
+    .map((entry) => {
+      const [line, mm] = entry.split(":");
+      const pts = decodePolyline(line ?? "");
+      const width = Number(mm) / 1000;
+      return pts && pts.length >= 2 && width > 0 && width < 30 ? drivewayArea(pts, width, "") : null;
+    })
+    .filter((d): d is LawnArea => d !== null);
+  return [...traced, ...drives].map((a, i) => ({ ...a, id: `t${i + 1}` }));
 }
 
 /** Maps a failed Overpass request to a message type (translated at render). */
@@ -152,6 +175,8 @@ export default function GolfCourseCalculator() {
   const [tracePoints, setTracePoints] = useState<[number, number][]>([]);
   /** Lawn: the next tap picks the lot under it. */
   const [picking, setPicking] = useState(false);
+  /** Width of the driveway being traced, in feet (one car by default). */
+  const [driveWidthFt, setDriveWidthFt] = useState<number>(DRIVEWAY_WIDTHS_FT[0]);
 
   const mapRef = useRef<L.Map | null>(null);
   /** Bumped by every new measurement or clear, so a late answer never lands on a newer one. */
@@ -351,7 +376,7 @@ export default function GolfCourseCalculator() {
       const linkedMode: AcreageMode = a === "sod" || a === "lawn" ? a : "golf";
       map.whenReady(() => {
         if (linkedMode === "lawn") {
-          const removals = linkedRemovals(params.get("lx"));
+          const removals = linkedRemovals(params.get("lx"), params.get("ld"));
           const lot = decodePolyline(params.get("lo") ?? "");
           const [lat, lon] = (params.get("lp") ?? "").split(",").map(Number);
           if (lot && lot.length >= 3) void showTracedLot(tracedPolygon(lot), removals);
@@ -398,7 +423,14 @@ export default function GolfCourseCalculator() {
         n: common.n,
         lp: pick ? `${pick[0].toFixed(6)},${pick[1].toFixed(6)}` : undefined,
         lo: lawn?.lotSource === "traced" ? encodePolyline(tracedPoints(lawn.lot)) : undefined,
-        lx: (lawn?.traced ?? []).map((t) => encodePolyline(tracedPoints(t.geometry))).join(","),
+        lx: (lawn?.traced ?? [])
+          .filter((t) => t.kind !== "driveway")
+          .map((t) => encodePolyline(tracedPoints(t.geometry)))
+          .join(","),
+        ld: (lawn?.traced ?? [])
+          .filter((t) => t.kind === "driveway" && t.path && t.widthM)
+          .map((t) => `${encodePolyline(t.path!)}:${Math.round(t.widthM! * 1000)}`)
+          .join(","),
         ...encodeQuote(quoteSettings, "lawn"),
       });
     }
@@ -486,6 +518,9 @@ export default function GolfCourseCalculator() {
     setFirstCorner(null);
     setTracing(kind);
     setTracePoints([]);
+    // The panel folds away while tracing: zoom the lot into the room it leaves.
+    const current = getLawn();
+    if ((kind === "driveway" || kind === "remove") && current && mapRef.current) fitAbovePanel(mapRef.current, current.lot);
   }, []);
 
   const handleCancelTrace = useCallback(() => {
@@ -495,7 +530,7 @@ export default function GolfCourseCalculator() {
 
   const finishTrace = useCallback(
     (tapped: [number, number][]) => {
-      if (tapped.length < 3) return;
+      if (tapped.length < (tracing === "driveway" ? 2 : 3)) return;
       // Rounded like a share link stores them (≈ 1 m), so a reopened link measures the same shape.
       const points = tapped.map(([lat, lon]): [number, number] => [Math.round(lat * 1e5) / 1e5, Math.round(lon * 1e5) / 1e5]);
       if (tracing === "outline") {
@@ -503,11 +538,15 @@ export default function GolfCourseCalculator() {
         showOutline(tracedOutlineMeasurement(tracedPolygon(points)));
       } else if (tracing === "lot") {
         void showTracedLot(tracedPolygon(points));
-      } else if (tracing === "remove") {
+      } else if (tracing === "remove" || tracing === "driveway") {
         const current = getLawn();
         if (current) {
-          const n = Math.max(0, ...current.traced.map((t) => Number(t.id.slice(1)) || 0)) + 1;
-          setLawn({ ...current, traced: [...current.traced, { id: `t${n}`, kind: "traced", geometry: tracedPolygon(points) }] });
+          const id = `t${Math.max(0, ...current.traced.map((t) => Number(t.id.slice(1)) || 0)) + 1}`;
+          const area: LawnArea | null =
+            tracing === "driveway"
+              ? drivewayArea(points, driveWidthFt * FT_TO_M, id)
+              : { id, kind: "traced", geometry: tracedPolygon(points) };
+          if (area) setLawn({ ...current, traced: [...current.traced, area] });
         }
       } else {
         const fields = getSod()?.fields ?? [];
@@ -517,15 +556,15 @@ export default function GolfCourseCalculator() {
       setTracing(null);
       setTracePoints([]);
     },
-    [tracing, showOutline, showTracedLot],
+    [tracing, showOutline, showTracedLot, driveWidthFt],
   );
 
   const handleMapClick = useCallback(
     (latlng: [number, number]) => {
       if (tracing) {
-        // Tapping near the first point closes the shape.
+        // Tapping near the first point closes the shape (not a driveway: that's a line).
         const map = mapRef.current;
-        if (map && tracePoints.length >= 3) {
+        if (map && tracing !== "driveway" && tracePoints.length >= 3) {
           const first = map.latLngToContainerPoint(tracePoints[0]);
           if (first.distanceTo(map.latLngToContainerPoint(latlng)) < 16) {
             finishTrace(tracePoints);
@@ -625,12 +664,18 @@ export default function GolfCourseCalculator() {
         geometry,
         properties: { _category: category },
       });
+      // While a driveway is traced, show the strip at the chosen width.
+      const preview =
+        tracing === "driveway" && tracePoints.length >= 2
+          ? stripAlong(tracePoints.map(([lat, lon]) => [lon, lat]), driveWidthFt * FT_TO_M)
+          : null;
       return {
         type: "FeatureCollection",
         features: [
           ...(totals?.lawn ? [feature(totals.lawn, "lawn")] : []),
-          ...(lawn.mapped ?? []).map((a) => feature(a.geometry, "lawn_built")),
+          ...(lawn.mapped ?? []).map((a) => feature(a.geometry, a.kind === "paving" ? "lawn_paved" : "lawn_built")),
           ...lawn.traced.map((a) => feature(a.geometry, "lawn_removed")),
+          ...(preview ? [feature(preview, "lawn_removed")] : []),
           feature(lawn.lot, "course"),
         ],
       };
@@ -644,7 +689,7 @@ export default function GolfCourseCalculator() {
         properties: { _category: !f.included ? "sod_off" : f.traced ? "sod_traced" : "sod" },
       })),
     };
-  }, [mode, result, sod, lawn, totals]);
+  }, [mode, result, sod, lawn, totals, tracing, tracePoints, driveWidthFt]);
 
   return (
     <div className="relative h-full w-full">
@@ -677,6 +722,8 @@ export default function GolfCourseCalculator() {
         lawn={mode === "lawn" ? lawn : null}
         lawnTotals={mode === "lawn" ? totals : null}
         picking={picking}
+        driveWidthFt={driveWidthFt}
+        onDriveWidth={setDriveWidthFt}
         onStartPick={() => {
           setSelecting(false);
           setTracing(null);

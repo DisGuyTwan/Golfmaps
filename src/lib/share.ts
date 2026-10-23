@@ -8,7 +8,8 @@
  * for a sod farm or a residential lawn, o a traced course outline, sf traced
  * sod fields, sx detected sod fields left out (a point inside each), lp the
  * point a lawn's lot was picked at, lo a traced lot, lx areas traced out of a
- * lawn. Shapes travel as encoded polylines.
+ * lawn, ld traced driveways ("centre line polyline:width in mm"). Shapes
+ * travel as encoded polylines.
  */
 
 export type ParamValue = string | number | boolean | null | undefined;
