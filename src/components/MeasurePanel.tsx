@@ -3,7 +3,7 @@
 import { TURF_COLORS } from "@/lib/area";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { estimatedTurf } from "@/lib/landcover";
-import { DRIVEWAY_WIDTHS_FT, formatSqft, lotLooksOdd, type LawnMeasurement, type LawnTotals } from "@/lib/lawn";
+import { DRIVEWAY_WIDTHS_FT, formatSqft, lotLooksOdd, photoAreas, type LawnMeasurement, type LawnTotals } from "@/lib/lawn";
 import type { AcreageMode } from "@/lib/quote";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import type { MeasureError, SatelliteError, TraceKind } from "./GolfCourseCalculator";
@@ -151,6 +151,7 @@ export default function MeasurePanel({
     lawn.lidar !== undefined &&
     !lawn.lidar?.length &&
     lawn.traced.length === 0;
+  const photosKept = lawn ? photoAreas(lawn).kept.length : 0;
 
   return (
     <div
@@ -351,6 +352,13 @@ export default function MeasurePanel({
               <div className="space-y-1 text-[11px]">
                 <p className="text-muted">{lawn.lotNumber ? t.lawnLotNumber(lawn.lotNumber) : lawn.lotSource === "traced" ? t.lawnLotTraced : null}</p>
                 {!!lawnTotals?.lidarCount && <p className="text-muted">{t.lawnLidar(lawnTotals.lidarCount)}</p>}
+                {lawn.imagery === undefined && !loading && <p className="text-muted">{t.lawnPhotosLoading}</p>}
+                {!!lawnTotals && lawnTotals.photoPools + lawnTotals.photoPaved > 0 && (
+                  <p className="text-muted">
+                    {t.lawnPhotos(lawnTotals.photoPools, lawnTotals.photoPaved)} {t.lawnPhotosHint}
+                  </p>
+                )}
+                {photosKept > 0 && <p className="text-muted">{t.lawnPhotosKept(photosKept)}</p>}
                 <p className="text-muted">{t.lawnRemoveHint}</p>
                 <p className="text-faint">{t.lawnTreesNote}</p>
               </div>
@@ -488,6 +496,7 @@ export default function MeasurePanel({
           {mode === "sod" && sod?.year != null && <> · {t.attributionAci}</>}
           {mode === "lawn" && lawn?.lotSource === "cadastre" && <> · {t.attributionCadastre}</>}
           {terrain && <> · {t.attributionLidar}</>}
+          {mode === "lawn" && !!lawn?.imagery && <> · {t.attributionPhotos}</>}
         </p>
       </div>
     </div>

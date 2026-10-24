@@ -2,9 +2,11 @@
  * Residential lawn: the lot (Quebec cadastre, or traced) minus what isn't
  * lawn. OpenStreetMap supplies buildings, pools, parking and paving where it
  * has them, including driveways and parking aisles mapped as lines (widened
- * into strips); the rep traces out the rest: a driveway with two taps and a
- * width, or any other area (patio, a house OSM doesn't have). Trees aren't
- * removed: lawn under them is mowed.
+ * into strips); the LiDAR adds the houses OSM misses (terrain.ts) and the
+ * aerial photos the pools, driveways and patios (surface.ts); the rep traces
+ * out the rest: a driveway with two taps and a width, or any other area, and
+ * taps a misread photo area to keep it as lawn. Trees aren't removed: lawn
+ * under them is mowed.
  * Pure, so the arithmetic is tested without a browser. Areas in square feet.
  */
 import area from "@turf/area";
@@ -15,6 +17,7 @@ import { featureCollection } from "@turf/helpers";
 import osmtogeojson from "osmtogeojson";
 import type { Feature, MultiPolygon, Polygon, Position } from "geojson";
 import { toAreaFeature } from "./area";
+import { pointInGeometry } from "./landcover";
 import type { BBox } from "./types";
 
 /** 1 m² in square feet. */
@@ -52,17 +55,27 @@ export interface LawnMeasurement {
    * overlaps an OSM building is left to OSM's outline.
    */
   lidar?: LawnArea[] | null;
+  /**
+   * Pools and paving seen in the aerial photos (surface.ts), for what OSM
+   * doesn't have; undefined while loading, null where there are no photos.
+   */
+  imagery?: LawnArea[] | null;
+  /** Points ([lat, lon]) tapped on photo areas to keep them as lawn: a misread, or since changed. */
+  kept?: [number, number][];
   traced: LawnArea[];
 }
 
 export interface LawnTotals {
   lotSqft: number;
-  /** Buildings and pools mapped in OSM, and buildings only the LiDAR sees, on the lot. */
+  /** Buildings and pools mapped in OSM, buildings only the LiDAR sees and pools only the photos show, on the lot. */
   builtSqft: number;
   /** Buildings counted from the LiDAR alone (not in OSM). */
   lidarCount: number;
-  /** Paving mapped in OSM (parking, driveways, aisles), not under a building. */
+  /** Paving mapped in OSM (parking, driveways, aisles) or seen in the photos, not under a building. */
   pavedSqft: number;
+  /** Pools and paved areas counted from the photos alone (not in OSM). */
+  photoPools: number;
+  photoPaved: number;
   /** Traced out by hand (driveways and areas), not counting what OSM already removed. */
   tracedSqft: number;
   lawnSqft: number;
@@ -170,14 +183,45 @@ export function mappedOnLot(overpassJson: unknown, lot: Polygon | MultiPolygon):
   return out;
 }
 
-/** LiDAR buildings OSM doesn't already have: less than 30 % of each under an OSM building. */
-function lidarOnly(lidar: LawnArea[], osm: Poly | null): LawnArea[] {
-  if (!osm) return lidar;
-  return lidar.filter((a) => {
+/** Areas OSM doesn't already have: less than 30 % of each under what OSM maps. */
+function notInOsm(areas: LawnArea[], osm: Poly | null): LawnArea[] {
+  if (!osm) return areas;
+  return areas.filter((a) => {
     const f = asFeature(a.geometry);
     const shared = intersect(featureCollection([f, osm]));
     return !shared || area(shared) < 0.3 * area(f);
   });
+}
+
+/** The photo areas that count, and those tapped to keep as lawn. */
+export function photoAreas(m: LawnMeasurement): { removed: LawnArea[]; kept: LawnArea[] } {
+  const removed: LawnArea[] = [];
+  const kept: LawnArea[] = [];
+  for (const a of m.imagery ?? []) {
+    const isKept = (m.kept ?? []).some(([lat, lon]) => pointInGeometry(lon, lat, a.geometry));
+    (isKept ? kept : removed).push(a);
+  }
+  return { removed, kept };
+}
+
+/**
+ * Where a tap that keeps a photo area is stored: on the 5-decimal grid a
+ * share link rounds to (about 1 m), at the grid point nearest the tap that's
+ * still inside the area, so a narrow strip stays kept when the link reopens
+ * (else the tap itself: it holds for the session).
+ */
+export function keepPoint(geometry: Polygon | MultiPolygon, lat: number, lon: number): [number, number] {
+  const r = (v: number) => Math.round(v * 1e5);
+  let best: [number, number] | null = null;
+  let bestD = Infinity;
+  for (let dy = -3; dy <= 3; dy++) {
+    for (let dx = -3; dx <= 3; dx++) {
+      const p: [number, number] = [(r(lat) + dy) / 1e5, (r(lon) + dx) / 1e5];
+      const d = (p[0] - lat) ** 2 + ((p[1] - lon) * Math.cos((lat * Math.PI) / 180)) ** 2;
+      if (d < bestD && pointInGeometry(p[1], p[0], geometry)) [best, bestD] = [p, d];
+    }
+  }
+  return best ?? [lat, lon];
 }
 
 /** Lot, what's removed and the lawn left, in square feet. Each part counts once. */
@@ -185,11 +229,17 @@ export function lawnTotals(m: LawnMeasurement): LawnTotals {
   const lotF = asFeature(m.lot);
   const lotSqft = sqft(lotF);
   const mapped = m.mapped ?? [];
+  const photos = photoAreas(m).removed;
+  const isPaving = (a: LawnArea) => a.kind === "paving";
+  const isBuilt = (a: LawnArea) => !isPaving(a);
   try {
-    const osmBuilt = mapped.filter((a) => a.kind !== "paving");
-    const lidar = lidarOnly(m.lidar ?? [], merge(osmBuilt.map((a) => a.geometry)));
-    const built = clip(merge([...osmBuilt, ...lidar].map((a) => a.geometry)), lotF);
-    const paved = minus(clip(merge(mapped.filter((a) => a.kind === "paving").map((a) => a.geometry)), lotF), built);
+    const osmBuilt = merge(mapped.filter(isBuilt).map((a) => a.geometry));
+    const osmPaved = merge(mapped.filter(isPaving).map((a) => a.geometry));
+    const lidar = notInOsm(m.lidar ?? [], osmBuilt);
+    const pools = photos.filter(isBuilt);
+    const photoPaving = photos.filter(isPaving);
+    const built = clip(merge([...mapped.filter(isBuilt), ...lidar, ...pools].map((a) => a.geometry)), lotF);
+    const paved = minus(clip(merge([...mapped.filter(isPaving), ...photoPaving].map((a) => a.geometry)), lotF), built);
     const traced = minus(clip(merge(m.traced.map((a) => a.geometry)), lotF), built, paved);
     const lawn = minus(lotF, built, paved, traced);
     return {
@@ -197,6 +247,8 @@ export function lawnTotals(m: LawnMeasurement): LawnTotals {
       builtSqft: sqft(built),
       lidarCount: lidar.length,
       pavedSqft: sqft(paved),
+      photoPools: notInOsm(pools, osmBuilt).length,
+      photoPaved: notInOsm(photoPaving, osmPaved).length,
       tracedSqft: sqft(traced),
       lawnSqft: sqft(lawn),
       lawn: lawn?.geometry ?? null,
@@ -204,14 +256,16 @@ export function lawnTotals(m: LawnMeasurement): LawnTotals {
   } catch {
     // Invalid geometry: fall back to plain sums (may double count overlaps).
     const sum = (areas: LawnArea[]) => areas.reduce((s, a) => s + sqft(asFeature(a.geometry)), 0);
-    const builtSqft = sum(mapped.filter((a) => a.kind !== "paving"));
-    const pavedSqft = sum(mapped.filter((a) => a.kind === "paving"));
+    const builtSqft = sum(mapped.filter(isBuilt));
+    const pavedSqft = sum(mapped.filter(isPaving));
     const tracedSqft = sum(m.traced);
     return {
       lotSqft,
       builtSqft,
       lidarCount: 0,
       pavedSqft,
+      photoPools: 0,
+      photoPaved: 0,
       tracedSqft,
       lawnSqft: Math.max(0, lotSqft - builtSqft - pavedSqft - tracedSqft),
       lawn: null,

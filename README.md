@@ -175,6 +175,19 @@ The **Lawn** switch measures a residential lawn in **square feet**:
 
 The cadastre is indicative only (the surveyor's boundary is the official one).
 
+Pools, driveways, patios and decks OSM doesn't have are found in the Quebec
+government's aerial photos: the forest-inventory orthophoto mosaic (MRNF,
+CC BY 4.0, summer photos at about 20 cm a pixel, towns included).
+`/api/surface` reads the photo tiles over the lot and the LiDAR under them
+(CDN 30 days): clearly blue is a pool; open ground (no tree crown or roof in
+the LiDAR) that isn't green is paving, with green told from grey by each
+photo's own colours since the tint changes from one flight to the next. Ground
+in deep shade is left as lawn. Pools count with the buildings, paving with the
+paving, each once; the panel says how many and that the photos may be a few
+years old. Tap an area the photos got wrong (a garden bed, a patio since
+turned to lawn) to keep it as lawn; tap it again to take it out. Copy link
+keeps those taps.
+
 Houses OSM doesn't have are found in the LiDAR (next section) and taken off
 too; the panel says how many. One that mostly overlaps an OSM building is left
 to OSM's outline. The panel only asks the rep to trace the house when neither

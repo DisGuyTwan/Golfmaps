@@ -8,8 +8,9 @@
  * for a sod farm or a residential lawn, o a traced course outline, sf traced
  * sod fields, sx detected sod fields left out (a point inside each), lp the
  * point a lawn's lot was picked at, lo a traced lot, lx areas traced out of a
- * lawn, ld traced driveways ("centre line polyline:width in mm"), ch the
- * robot's charger ("lat,lon", when the rep placed it). Shapes travel as
+ * lawn, ld traced driveways ("centre line polyline:width in mm"), lk pools
+ * and paving from the aerial photos kept as lawn (a point inside each), ch
+ * the robot's charger ("lat,lon", when the rep placed it). Shapes travel as
  * encoded polylines.
  */
 

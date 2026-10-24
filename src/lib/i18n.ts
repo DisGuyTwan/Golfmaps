@@ -248,7 +248,13 @@ const en = {
   fitSource: (date: string) =>
     `Kress specs as of ${date}; passage widths are estimates, check them on site. Slope and trees from NRCan’s HRDEM LiDAR.`,
   lawnLidar: (n: number) => (n === 1 ? "Includes 1 building seen in the LiDAR, not in OpenStreetMap." : `Includes ${n} buildings seen in the LiDAR, not in OpenStreetMap.`),
+  lawnPhotos: (pools: number, paved: number) =>
+    `Includes ${[pools ? (pools === 1 ? "1 pool" : `${pools} pools`) : "", paved ? (paved === 1 ? "1 paved area" : `${paved} paved areas`) : ""].filter(Boolean).join(" and ")} seen in Quebec’s aerial photos (driveways, patios, decks), which may be a few years old.`,
+  lawnPhotosHint: "Tap one that’s really lawn to keep it.",
+  lawnPhotosKept: (n: number) => (n === 1 ? "1 area from the photos kept as lawn: tap it again to take it out." : `${n} areas from the photos kept as lawn: tap one again to take it out.`),
+  lawnPhotosLoading: "Looking for pools and paving in the aerial photos…",
   attributionLidar: "LiDAR © NRCan (HRDEM)",
+  attributionPhotos: "Pools and paving: aerial photos © Gouvernement du Québec (MRNF), CC BY 4.0",
 
   errorTitle: "Something went wrong.",
   errorBody:
@@ -498,7 +504,13 @@ const fr: UiStrings = {
   fitSource: (date: string) =>
     `Fiches Kress au ${date}; les largeurs de passage sont estimées, vérifiez-les sur place. Pente et arbres : LiDAR MNEHR de RNCan.`,
   lawnLidar: (n: number) => (n === 1 ? "Comprend 1 bâtiment vu par le LiDAR, absent d’OpenStreetMap." : `Comprend ${n} bâtiments vus par le LiDAR, absents d’OpenStreetMap.`),
+  lawnPhotos: (pools: number, paved: number) =>
+    `Comprend ${[pools ? (pools === 1 ? "1 piscine" : `${pools} piscines`) : "", paved ? (paved === 1 ? "1 surface pavée" : `${paved} surfaces pavées`) : ""].filter(Boolean).join(" et ")} ${pools + paved === 1 ? "vue" : "vues"} sur les photos aériennes du Québec (entrées, patios, terrasses), qui peuvent dater de quelques années.`,
+  lawnPhotosHint: "Touchez une zone qui est en fait de la pelouse pour la garder.",
+  lawnPhotosKept: (n: number) => (n === 1 ? "1 zone des photos gardée comme pelouse : touchez-la de nouveau pour la retirer." : `${n} zones des photos gardées comme pelouse : touchez-en une de nouveau pour la retirer.`),
+  lawnPhotosLoading: "Recherche des piscines et surfaces pavées sur les photos aériennes…",
   attributionLidar: "LiDAR © RNCan (MNEHR)",
+  attributionPhotos: "Piscines et pavé : photos aériennes © Gouvernement du Québec (MRNF), CC BY 4.0",
 
   errorTitle: "Une erreur est survenue.",
   errorBody:

@@ -433,15 +433,15 @@ export function lidarBuildings(grid: TerrainGrid, lot: Polygon | MultiPolygon, m
   const on = new Uint8Array(mask.length);
   for (let i = 0; i < mask.length; i++) on[i] = mask[i] && grid.cover[i] === COVER.building ? 1 : 0;
   const minCells = minM2 / (grid.cellM * grid.cellM);
-  const straighten = (rings: Position[][]) => rings.map((ring) => simplifyRing(ring, grid.cellM * 0.75));
   return labelRegions(on, grid.width, grid.height)
     .regions.filter((cells) => cells.length >= minCells)
-    .map((cells) => {
-      const g = regionGeometry(grid, cells);
-      return g.type === "Polygon"
-        ? { type: "Polygon", coordinates: straighten(g.coordinates) }
-        : { type: "MultiPolygon", coordinates: g.coordinates.map(straighten) };
-    });
+    .map((cells) => straighten(regionGeometry(grid, cells), grid.cellM * 0.75));
+}
+
+/** An outline traced along grid cells, with its stair steps straightened (Douglas-Peucker, `tolM` metres). */
+export function straighten(g: Polygon | MultiPolygon, tolM: number): Polygon | MultiPolygon {
+  const rings = (rs: Position[][]) => rs.map((ring) => simplifyRing(ring, tolM));
+  return g.type === "Polygon" ? { type: "Polygon", coordinates: rings(g.coordinates) } : { type: "MultiPolygon", coordinates: g.coordinates.map(rings) };
 }
 
 /** Largest box /api/terrain reads (degrees per side): a whole golf course. */

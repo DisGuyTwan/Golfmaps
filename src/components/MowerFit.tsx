@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
-import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, type LawnMeasurement } from "@/lib/lawn";
+import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, photoAreas, type LawnMeasurement } from "@/lib/lawn";
 import { MOWERS_AS_OF, capacityM2, mowerName, recommend, type Fit, type Recommendation } from "@/lib/mowers";
 import { MOW_EVERY, acresForQuote, lawnQuoteSqft, type AcreageMode, type MowEvery, type QuoteSettings } from "@/lib/quote";
 import { setQuoteSettings, useCharger, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
@@ -41,8 +41,10 @@ function computeFit(...inputs: FitInputs): MowerFitResult | null {
     if (lawn) {
       const totals = lawnTotals(lawn);
       const sqft = lawnQuoteSqft(lawn, q) ?? totals.lawnSqft;
-      // The robot drives around buildings and pools, from OSM or the LiDAR.
-      const blocked = [...(lawn.mapped ?? []).filter((a) => a.kind !== "paving"), ...(lawn.lidar ?? [])].map((a) => a.geometry);
+      // The robot drives around buildings and pools, from OSM, the LiDAR or the photos.
+      const blocked = [...(lawn.mapped ?? []), ...(lawn.lidar ?? []), ...photoAreas(lawn).removed]
+        .filter((a) => a.kind !== "paving")
+        .map((a) => a.geometry);
       if (sqft > 0) site = lawnSite(totals.lawn, lawn.lot, blocked, charger, sqft / SQ_M_TO_SQ_FT, terrain);
     }
   } else {

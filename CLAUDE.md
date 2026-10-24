@@ -16,8 +16,9 @@ French, with light and dark themes. The tabs are connected (measured acres →
 ROI sizing; the Incentives profile → ROI's net investment) and every tab has a
 share link and a client PDF. Every measurement gets a mower fit: how hard
 the property is for a robot and which Kress model fits. No API keys and no
-database: six small route handlers (Overpass cache, land cover, LiDAR terrain,
-Quebec cadastre lot, gas price, client error log) run on Vercel; everything
+database: seven small route handlers (Overpass cache, land cover, LiDAR terrain,
+aerial photo surfaces, Quebec cadastre lot, gas price, client error log) run on
+Vercel; everything
 else goes straight from the browser to public APIs (built-in `fetch`).
 
 ## Layout
@@ -31,6 +32,8 @@ src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
                   ESA WorldCover (src=worldcover) or AAFC crop inventory (src=aci)
   api/terrain/    slope and cover (ground, low plants, trees, buildings) from
                   NRCan's HRDEM LiDAR as a small lat/lon grid (CDN 30 days)
+  api/surface/    pools and paving on a lot from Quebec's aerial photos and the
+                  LiDAR, as a small class grid (CDN 30 days)
   api/parcel/     the Quebec cadastre lot at a point (CDN 1 week), for lawns
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
@@ -75,6 +78,9 @@ src/lib/
                 between zones, against a square of the same area; one unit's
                 share when several split it (pure, tested)
   mowers.ts     the 12 Kress models quoted and the fit / recommendation (pure, tested)
+  surface.ts    pools and paving from aerial photo pixels: classes, areas on a lot
+                (pure, tested)
+  surface-server.ts  MRNF photo tiles (jpeg-js) + LiDAR cover for /api/surface (route only)
   parcel.ts     Quebec cadastre lot lookup and parsing (pure parts tested)
   types.ts      BBox, CourseMeasurement, SatelliteTurf, SodField, SodMeasurement
   incentives.ts program rules, FR/EN copy and savings math (pure, tested)
@@ -83,7 +89,7 @@ src/lib/
   quote.ts      measurement → acres for the quote, share params (pure, tested)
   quote-store.ts  client store shared by the tabs (useSyncExternalStore)
   share.ts      share-link helpers + polylines (pure, tested); keys r_ / i_ / q_ /
-                v, m, b, n, a, o, sf, sx, lp, lo, lx, ld, ch
+                v, m, b, n, a, o, sf, sx, lp, lo, lx, ld, lk, ch
   gas.ts        StatCan gas price parsing (pure, tested)
   report-error.ts  sendBeacon to /api/log
   tabs.ts       goToTab() for in-app navigation
@@ -144,9 +150,19 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   them: Remove a
   driveway is a centre line (2+ taps) at 11/20/29 ft (1/2/3 cars), kept as
   path + width so links (`ld`) rebuild it exactly; Remove an area is a
-  polygon. No open layer separates lawn from pavement (Quebec orthophotos are
-  downloads only; Esri imagery can't be analysed), so there's no automatic
-  driveway detection. `lawnTotals` counts every removal once.
+  polygon. Pools and paving OSM misses come from Quebec's aerial photos
+  (`lawn.imagery`, `surface.ts`): the MRNF forest-inventory mosaic
+  (`Inventaire_Ecoforestier` WMTS, CC BY 4.0, summer, about 20 cm, zoom 19),
+  the only Quebec imagery whose licence allows it. Don't switch to
+  `Imagerie_GQ` (its service isn't for outside use) or Esri (its terms forbid
+  automated extraction). Clearly blue is a pool. Paving is open ground that
+  isn't green: the LiDAR rules out only crowns and roofs (photo and LiDAR years
+  differ, so cars and hedges in the LiDAR stay candidates). Grass is told from
+  grey per scene by Otsu on G / (R+G+B), clamped to 0.335-0.37 (a fixed split
+  removed shaded lawns in Boucherville), and the darkest 15 % (at most 50) is
+  shade, left as lawn (a higher cap dropped dark asphalt in Carignan). The rep
+  taps a misread area to keep it (`lawn.kept`, points, link `lk`).
+  `lawnTotals` counts every removal once.
   Trees aren't removed. A cadastre lot is framed above the results panel.
   Streets are cadastre lots too and a geocoded address can land on the road,
   so `lotLooksOdd` (over 5,000 m², or a strip with compactness under 0.2)

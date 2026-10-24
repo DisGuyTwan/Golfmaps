@@ -227,13 +227,22 @@ function LawnReport() {
             <MowerFit lang={lang} print />
 
             <div className={`${ui.note} space-y-1`}>
-              <p>{t.lawnTreesNote}</p>
-              {!!totals?.lidarCount && <p>{t.lawnLidar(totals.lidarCount)}</p>}
+              {/* One paragraph, so a lot with LiDAR buildings and photo areas still prints on one page. */}
+              <p>
+                {[
+                  t.lawnTreesNote,
+                  totals?.lidarCount ? t.lawnLidar(totals.lidarCount) : null,
+                  totals && totals.photoPools + totals.photoPaved > 0 ? t.lawnPhotos(totals.photoPools, totals.photoPaved) : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              </p>
               {q.lawnOverride !== null && <p>{t.reportLawnOverride(sq(q.lawnOverride))}</p>}
               <p>
                 {t.attribution}
                 {lawn?.lotSource === "cadastre" && <> · {t.attributionCadastre}</>}
                 {terrain && <> · {t.attributionLidar}</>}
+                {!!lawn?.imagery && <> · {t.attributionPhotos}</>}
               </p>
             </div>
           </>

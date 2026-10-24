@@ -32,11 +32,14 @@ import {
   lawnTotals,
   lotBBox,
   mappedOnLot,
+  keepPoint,
+  photoAreas,
   stripAlong,
   type LawnArea,
   type LawnMeasurement,
 } from "@/lib/lawn";
 import { fetchParcel, inQuebec } from "@/lib/parcel";
+import { fetchSurface, fitsSurface, surfaceAreas } from "@/lib/surface";
 import { TERRAIN_MAX_SPAN_DEG, fetchTerrain, lidarBuildings, terrainStats, type TerrainGrid } from "@/lib/terrain";
 import { encodeQuote, type AcreageMode } from "@/lib/quote";
 import {
@@ -249,6 +252,27 @@ export default function GolfCourseCalculator() {
     [loadTerrain],
   );
 
+  /**
+   * Pools and paving on a lot from the Quebec aerial photos (surface.ts).
+   * `imagery` ends up null outside Quebec or where the photos don't load, so
+   * the lawn is then measured without them.
+   */
+  const loadLotSurface = useCallback(async (lot: Polygon | MultiPolygon, id: number) => {
+    const box = lotBBox(lot, 0.00005);
+    const update = (imagery: LawnMeasurement["imagery"]) => {
+      const current = getLawn();
+      if (current && id === runId.current) setLawn({ ...current, imagery });
+    };
+    if (!fitsSurface(box) || !inQuebec((box.south + box.north) / 2, (box.west + box.east) / 2)) return update(null);
+    try {
+      const grid = await fetchSurface(box);
+      update(grid ? surfaceAreas(grid, lot) : null);
+    } catch (err) {
+      if (id === runId.current) reportError("lawn:surface", err);
+      update(null);
+    }
+  }, []);
+
   /** Counts the satellite grass inside a course's outline (no turf mapped, or traced). */
   const countSatellite = useCallback(async (m: CourseMeasurement, id: number) => {
     const outline = courseOutline(m);
@@ -358,6 +382,7 @@ export default function GolfCourseCalculator() {
   const showLawn = useCallback(async (next: LawnMeasurement, id: number, nearby?: Promise<unknown>, terrain?: Promise<TerrainGrid>) => {
     setLawn(next);
     void loadLotTerrain(next.lot, id, terrain);
+    void loadLotSurface(next.lot, id);
     try {
       const json = await (nearby ?? fetchFairways(lotBBox(next.lot), "lawn"));
       if (id !== runId.current) return;
@@ -367,11 +392,11 @@ export default function GolfCourseCalculator() {
       setLawn({ ...(getLawn() ?? next), mapped: [], mappedFailed: true });
       reportError("lawn:buildings", err);
     }
-  }, [loadLotTerrain]);
+  }, [loadLotTerrain, loadLotSurface]);
 
   /** The lawn on the cadastre lot at a point: a searched address, a tap or a share link. */
   const runLawn = useCallback(
-    async (lat: number, lon: number, traced: LawnArea[] = []) => {
+    async (lat: number, lon: number, traced: LawnArea[] = [], kept: [number, number][] = []) => {
       const id = startRun();
       setLoading(true);
       setError(null);
@@ -397,6 +422,7 @@ export default function GolfCourseCalculator() {
           pickPoint: [lat, lon],
           mapped: null,
           mappedFailed: false,
+          kept,
           traced,
         };
         if (mapRef.current) fitAbovePanel(mapRef.current, parcel.geometry);
@@ -415,12 +441,12 @@ export default function GolfCourseCalculator() {
 
   /** The lawn on a lot traced by hand (no cadastre here, e.g. Ontario). */
   const showTracedLot = useCallback(
-    async (lot: Polygon, traced: LawnArea[] = []) => {
+    async (lot: Polygon, traced: LawnArea[] = [], kept: [number, number][] = []) => {
       const id = startRun();
       setLoading(true);
       setError(null);
       try {
-        const next: LawnMeasurement = { lot, lotSource: "traced", lotNumber: null, pickPoint: null, mapped: null, mappedFailed: false, traced };
+        const next: LawnMeasurement = { lot, lotSource: "traced", lotNumber: null, pickPoint: null, mapped: null, mappedFailed: false, kept, traced };
         await showLawn(next, id);
       } finally {
         if (id === runId.current) setLoading(false);
@@ -433,8 +459,9 @@ export default function GolfCourseCalculator() {
 
   // A share link reopens what was measured: a traced course outline (o=), the
   // traced sod fields (sf=) and the detected ones left out (sx=), a lawn's lot
-  // (lp= the point picked, or lo= a traced lot) and its traced-out areas (lx=),
-  // the robot's charger (ch=), and with m=1 measures again in the scan box (b=) if one was drawn, else the
+  // (lp= the point picked, or lo= a traced lot), its traced-out areas (lx=, ld=)
+  // and the photo areas kept as lawn (lk=), the robot's charger (ch=), and with
+  // m=1 measures again in the scan box (b=) if one was drawn, else the
   // linked view (v=, applied by GolfMap). Runs once, so its callbacks must stay
   // stable.
   const handleMapReady = useCallback(
@@ -449,10 +476,11 @@ export default function GolfCourseCalculator() {
       const reopen = () => {
         if (linkedMode === "lawn") {
           const removals = linkedRemovals(params.get("lx"), params.get("ld"));
+          const kept = decodePolyline(params.get("lk") ?? "") ?? [];
           const lot = decodePolyline(params.get("lo") ?? "");
           const [lat, lon] = (params.get("lp") ?? "").split(",").map(Number);
-          if (lot && lot.length >= 3) void showTracedLot(tracedPolygon(lot), removals);
-          else if (Number.isFinite(lat) && Number.isFinite(lon)) void runLawn(lat, lon, removals);
+          if (lot && lot.length >= 3) void showTracedLot(tracedPolygon(lot), removals, kept);
+          else if (Number.isFinite(lat) && Number.isFinite(lon)) void runLawn(lat, lon, removals, kept);
           return;
         }
         if (linkedMode === "sod") {
@@ -509,6 +537,7 @@ export default function GolfCourseCalculator() {
           .filter((t) => t.kind === "driveway" && t.path && t.widthM)
           .map((t) => `${encodePolyline(t.path!)}:${Math.round(t.widthM! * 1000)}`)
           .join(","),
+        lk: lawn?.kept?.length ? encodePolyline(lawn.kept) : undefined,
         ...encodeQuote(quoteSettings, "lawn"),
       });
     }
@@ -685,11 +714,25 @@ export default function GolfCourseCalculator() {
         return;
       }
 
-      // Lawn: a tap on an area traced out puts it back.
+      // Lawn: a tap on an area traced out puts it back; on a pool or paving
+      // from the photos it keeps it as lawn, or takes it out again.
       if (mode === "lawn") {
         const current = getLawn();
-        const hit = current && [...current.traced].reverse().find((t) => pointInGeometry(latlng[1], latlng[0], t.geometry));
-        if (current && hit) setLawn({ ...current, traced: current.traced.filter((t) => t.id !== hit.id) });
+        if (!current) return;
+        const inside = (g: Polygon | MultiPolygon) => pointInGeometry(latlng[1], latlng[0], g);
+        const hit = [...current.traced].reverse().find((t) => inside(t.geometry));
+        if (hit) {
+          setLawn({ ...current, traced: current.traced.filter((t) => t.id !== hit.id) });
+          return;
+        }
+        const photos = photoAreas(current);
+        const kept = photos.kept.find((a) => inside(a.geometry));
+        if (kept) {
+          setLawn({ ...current, kept: (current.kept ?? []).filter(([lat, lon]) => !pointInGeometry(lon, lat, kept.geometry)) });
+        } else {
+          const tapped = photos.removed.find((a) => inside(a.geometry));
+          if (tapped) setLawn({ ...current, kept: [...(current.kept ?? []), keepPoint(tapped.geometry, latlng[0], latlng[1])] });
+        }
         return;
       }
 
@@ -748,6 +791,7 @@ export default function GolfCourseCalculator() {
         geometry,
         properties: { _category: category },
       });
+      const photos = photoAreas(lawn);
       // While a driveway is traced, show the strip at the chosen width.
       const preview =
         tracing === "driveway" && tracePoints.length >= 2
@@ -759,6 +803,8 @@ export default function GolfCourseCalculator() {
           ...(totals?.lawn ? [feature(totals.lawn, "lawn")] : []),
           ...(lawn.mapped ?? []).map((a) => feature(a.geometry, a.kind === "paving" ? "lawn_paved" : "lawn_built")),
           ...(lawn.lidar ?? []).map((a) => feature(a.geometry, "lawn_built")),
+          ...photos.removed.map((a) => feature(a.geometry, a.kind === "paving" ? "lawn_paved" : "lawn_built")),
+          ...photos.kept.map((a) => feature(a.geometry, "lawn_kept")),
           ...lawn.traced.map((a) => feature(a.geometry, "lawn_removed")),
           ...(preview ? [feature(preview, "lawn_removed")] : []),
           feature(lawn.lot, "course"),

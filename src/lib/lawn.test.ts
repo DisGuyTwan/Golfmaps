@@ -9,6 +9,7 @@ import {
   bboxContains,
   drivewayArea,
   formatSqft,
+  keepPoint,
   lawnTotals,
   lotBBox,
   lotLooksOdd,
@@ -170,6 +171,51 @@ describe("buildings from the LiDAR", () => {
     const t = lawnTotals({ ...measurement(), lidar: [{ id: "l1", kind: "building", geometry: houseFromLidar }] });
     expect(t.lidarCount).toBe(0);
     expect(t.builtSqft).toBeCloseTo(base.builtSqft, 5);
+  });
+});
+
+describe("pools and paving from the photos", () => {
+  const patio = rect(10, 14, 6, 4); // pavers OSM doesn't have
+  const poolFromPhotos = rect(5.2, 5, 5, 8.2); // the mapped pool as the photos show it
+  const photoDriveway = rect(16, 32, 5, 8); // the driveway past the house
+  const imagery = [
+    { id: "i1", kind: "pool" as const, geometry: poolFromPhotos },
+    { id: "i2", kind: "paving" as const, geometry: patio },
+    { id: "i3", kind: "paving" as const, geometry: photoDriveway },
+  ];
+
+  it("takes paving off the lawn, and leaves a pool OSM has to OSM", () => {
+    const base = lawnTotals(measurement());
+    const t = lawnTotals({ ...measurement(), imagery });
+    expect(t.photoPools).toBe(0);
+    expect(t.photoPaved).toBe(2);
+    expect(t.builtSqft - base.builtSqft).toBeLessThan(40); // only the edge the photos add to the pool
+    expect(t.pavedSqft).toBeCloseTo(sqft(patio) + sqft(photoDriveway), -1);
+    expect(base.lawnSqft - t.lawnSqft).toBeCloseTo(sqft(patio) + sqft(photoDriveway) + (t.builtSqft - base.builtSqft), -1);
+  });
+
+  it("keeps an area tapped as lawn, and counts a trace over photo paving once", () => {
+    const tapped: [number, number] = [LAT + dLat(16), LON + dLon(12)]; // inside the patio
+    const kept = lawnTotals({ ...measurement(), imagery, kept: [tapped] });
+    expect(kept.photoPaved).toBe(1);
+    expect(kept.pavedSqft).toBeCloseTo(sqft(photoDriveway), -1);
+    const traced = lawnTotals({ ...measurement([rect(16, 30, 5, 10)]), imagery });
+    expect(traced.tracedSqft).toBeCloseTo(sqft(rect(20, 30, 1, 2)), 0); // beside the house, below the photo driveway
+  });
+
+  it("stores a tap on a narrow strip where a link keeps it inside", () => {
+    const edging = rect(3, 20.3, 12, 1.3); // a path of pavers 1.3 m wide, a little more than the link's 1.1 m grid
+    const [lat, lon] = keepPoint(edging, LAT + dLat(20.4), LON + dLon(9));
+    expect(Math.round(lat * 1e5)).toBeCloseTo(lat * 1e5, 6);
+    expect(Math.round(lon * 1e5)).toBeCloseTo(lon * 1e5, 6);
+    const t = lawnTotals({ ...measurement(), imagery: [{ id: "i1", kind: "paving", geometry: edging }], kept: [[lat, lon]] });
+    expect(t.pavedSqft).toBe(0);
+  });
+
+  it("changes nothing while the photos load or where there are none", () => {
+    const base = lawnTotals(measurement());
+    expect(lawnTotals({ ...measurement(), imagery: null }).lawnSqft).toBeCloseTo(base.lawnSqft, 5);
+    expect(lawnTotals({ ...measurement(), imagery: undefined }).photoPaved).toBe(0);
   });
 });
 
