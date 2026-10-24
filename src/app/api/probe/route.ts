@@ -20,8 +20,30 @@ const HOSTS = [
   "overpass.kumi.systems",
 ];
 
+const TILE = "https://servicesmatriciels.mern.gouv.qc.ca/erdas-iws/ogc/wmts/Imagerie_Continue/Imagerie_GQ/default/GoogleMapsCompatibleExt2:epsg:3857";
+
 export async function GET(request: Request) {
-  const u = new URL(request.url).searchParams.get("u");
+  const q = new URL(request.url).searchParams;
+  if (q.get("z")) {
+    // Several imagery tiles at once: z, x0..x1, y0..y1 (at most 36).
+    const [z, x0, x1, y0, y1] = ["z", "x0", "x1", "y0", "y1"].map((k) => Number(q.get(k)));
+    const jobs: Promise<{ x: number; y: number; status: number; base64: string }>[] = [];
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        if (jobs.length >= 36) break;
+        jobs.push(
+          fetch(`${TILE}/${z}/${y}/${x}.jpg`, { signal: AbortSignal.timeout(40000) }).then(async (r) => ({
+            x,
+            y,
+            status: r.status,
+            base64: Buffer.from(await r.arrayBuffer()).toString("base64"),
+          })),
+        );
+      }
+    }
+    return Response.json({ z, tiles: await Promise.all(jobs) }, { headers: { "Cache-Control": "no-store" } });
+  }
+  const u = q.get("u");
   if (!u) return Response.json({ error: "u required" }, { status: 400 });
   const target = new URL(u);
   if (!HOSTS.includes(target.hostname)) return Response.json({ error: "host not allowed" }, { status: 400 });
