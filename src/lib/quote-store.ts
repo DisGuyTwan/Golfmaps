@@ -13,8 +13,9 @@ import type { CourseMeasurement, SodMeasurement } from "./types";
  * - the Acreage tab's mode (golf course, sod farm or residential lawn), its
  *   last measurement, sod fields or lawn, the property name and quote
  *   settings (read by its PDF report and the ROI tab);
- * - the LiDAR terrain under the measured property (slope, trees, buildings),
- *   for the mower fit on screen and in the PDF;
+ * - the LiDAR terrain under the measured property (slope, trees, buildings)
+ *   and where the rep put the charger, for the mower fit on screen and in
+ *   the PDF;
  * - acres sent to the ROI tab ("Send to ROI"), with the recommended Voyager
  *   size and a version number so the ROI tab applies each send exactly once;
  * - the Incentives tab's profile, so the ROI tab can price grants and credits
@@ -29,6 +30,8 @@ interface QuoteStoreState {
   lawn: LawnMeasurement | null;
   courseName: string | null;
   terrain: TerrainGrid | null;
+  /** Where the rep put the robot's charger, [lat, lon]; null = estimated by the mower fit. */
+  charger: [number, number] | null;
   roiImport: { acres: number; model: VoyagerModel | null; version: number } | null;
   incentiveProfile: IncentiveInputs | null;
 }
@@ -41,6 +44,7 @@ const SERVER_STATE: QuoteStoreState = {
   lawn: null,
   courseName: null,
   terrain: null,
+  charger: null,
   roiImport: null,
   incentiveProfile: null,
 };
@@ -84,6 +88,7 @@ export const useLawn = () => useStore((s) => s.lawn);
 export const useCourseName = () => useStore((s) => s.courseName);
 export const useRoiImport = () => useStore((s) => s.roiImport);
 export const useTerrain = () => useStore((s) => s.terrain);
+export const useCharger = () => useStore((s) => s.charger);
 export const useIncentiveProfile = () => useStore((s) => s.incentiveProfile);
 
 export function setQuoteSettings(patch: Partial<QuoteSettings>) {
@@ -120,6 +125,7 @@ export function setMode(mode: AcreageMode) {
     sod: null,
     lawn: null,
     terrain: null,
+    charger: null,
     courseName: null,
     settings: { ...current().settings, override: null, lawnOverride: null },
   });
@@ -131,6 +137,10 @@ export function setCourseName(courseName: string | null) {
 
 export function setTerrain(terrain: TerrainGrid | null) {
   update({ terrain });
+}
+
+export function setCharger(charger: [number, number] | null) {
+  update({ charger });
 }
 
 /** Acres for the ROI tab, and the Voyager size the mower fit recommends (null keeps the tab's choice). */

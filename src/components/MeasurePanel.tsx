@@ -25,6 +25,10 @@ interface MeasurePanelProps {
   satLoading: boolean;
   /** The LiDAR terrain for the mower fit is loading. */
   terrainLoading: boolean;
+  /** The next tap places the robot's charger. */
+  placingCharger: boolean;
+  onMoveCharger: () => void;
+  onCancelCharger: () => void;
   satError: SatelliteError | null;
   selecting: boolean;
   awaitingSecondCorner: boolean;
@@ -92,6 +96,9 @@ export default function MeasurePanel({
   error,
   satLoading,
   terrainLoading,
+  placingCharger,
+  onMoveCharger,
+  onCancelCharger,
   satError,
   selecting,
   awaitingSecondCorner,
@@ -141,6 +148,7 @@ export default function MeasurePanel({
     lawn.mapped !== null &&
     !lawn.mappedFailed &&
     !lawn.mapped.some((a) => a.kind === "building") &&
+    lawn.lidar !== undefined &&
     !lawn.lidar?.length &&
     lawn.traced.length === 0;
 
@@ -225,6 +233,14 @@ export default function MeasurePanel({
                 {t.cancel}
               </button>
             </div>
+          </div>
+        ) : placingCharger ? (
+          <div className="space-y-2">
+            <Notice tone="info">{t.tapCharger}</Notice>
+            <button onClick={onCancelCharger} className={`${ui.btnSecondary} w-full`}>
+              <Icon name="close" />
+              {t.cancel}
+            </button>
           </div>
         ) : picking ? (
           <div className="space-y-2">
@@ -313,14 +329,14 @@ export default function MeasurePanel({
         )}
 
         {/* While a tool takes taps, the results fold away so the map stays visible. */}
-        {tracing || selecting || picking ? null : mode === "lawn" ? (
+        {tracing || selecting || picking || placingCharger ? null : mode === "lawn" ? (
           <>
             {loading && <Notice tone="info">{t.lawnLoading}</Notice>}
             {lawn?.lotSource === "cadastre" && lotLooksOdd(lawn.lot) && lawnTotals && (
               <Notice tone="warn">{t.lawnOddLot(sq(lawnTotals.lotSqft))}</Notice>
             )}
             {lawn?.mappedFailed && <Notice tone="warn">{t.lawnBuildingsFailed}</Notice>}
-            {lawnNoBuilding && <Notice tone="warn">{t.lawnNoBuilding}</Notice>}
+            {lawnNoBuilding && <Notice tone="warn">{lawn?.lidar === null ? t.lawnNoBuildingNoLidar : t.lawnNoBuilding}</Notice>}
 
             {/* Four across: the unit goes in the labels so the numbers fit on a phone. */}
             <div className="grid grid-cols-4 gap-1.5 border-t border-line pt-3">
@@ -340,7 +356,7 @@ export default function MeasurePanel({
               </div>
             )}
 
-            {lawn && !error && <MowerFit lang={lang} loading={terrainLoading} />}
+            {lawn && !error && <MowerFit lang={lang} loading={terrainLoading} onMoveCharger={onMoveCharger} />}
             {lawn && !error && <QuoteSection lang={lang} mode="lawn" result={null} sod={null} lawn={lawn} getShareUrl={getShareUrl} />}
           </>
         ) : mode === "golf" ? (
@@ -436,7 +452,7 @@ export default function MeasurePanel({
 
             {result && (result.found || result.boundaryOnly) && !error && (
               <>
-                <MowerFit lang={lang} loading={terrainLoading} />
+                <MowerFit lang={lang} loading={terrainLoading} onMoveCharger={onMoveCharger} />
                 <QuoteSection lang={lang} mode="golf" result={result} sod={null} lawn={null} getShareUrl={getShareUrl} />
               </>
             )}
@@ -461,7 +477,7 @@ export default function MeasurePanel({
               </div>
             )}
 
-            {sod && !error && <MowerFit lang={lang} loading={terrainLoading} />}
+            {sod && !error && <MowerFit lang={lang} loading={terrainLoading} onMoveCharger={onMoveCharger} />}
             {sod && !error && <QuoteSection lang={lang} mode="sod" result={null} sod={sod} lawn={null} getShareUrl={getShareUrl} />}
           </>
         )}

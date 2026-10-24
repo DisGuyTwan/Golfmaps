@@ -37,7 +37,7 @@ import {
   type LawnMeasurement,
 } from "@/lib/lawn";
 import { fetchParcel, inQuebec } from "@/lib/parcel";
-import { TERRAIN_MAX_SPAN_DEG, fetchTerrain, lidarBuildings, type TerrainGrid } from "@/lib/terrain";
+import { TERRAIN_MAX_SPAN_DEG, fetchTerrain, lidarBuildings, terrainStats, type TerrainGrid } from "@/lib/terrain";
 import { encodeQuote, type AcreageMode } from "@/lib/quote";
 import {
   getLawn,
@@ -46,8 +46,10 @@ import {
   setLawn,
   setMeasurement,
   setMode,
+  setCharger,
   setSod,
   setTerrain,
+  useCharger,
   useCourseName,
   useLawn,
   useMode,
@@ -60,6 +62,7 @@ import { useLang } from "@/lib/preferences";
 import type { BBox, CourseMeasurement } from "@/lib/types";
 import type { MapOverlay } from "./GolfMap";
 import MeasurePanel from "./MeasurePanel";
+import { useMowerFit } from "./MowerFit";
 import SearchBox, { type PlaceResult } from "./SearchBox";
 import { Loader } from "./ui";
 
@@ -183,6 +186,10 @@ export default function GolfCourseCalculator() {
   const [driveWidthFt, setDriveWidthFt] = useState<number>(DRIVEWAY_WIDTHS_FT[0]);
   /** The LiDAR terrain (slope, trees, buildings) for the mower fit is loading. */
   const [terrainLoading, setTerrainLoading] = useState(false);
+  /** The next tap places the robot's charger. */
+  const [placingCharger, setPlacingCharger] = useState(false);
+  const charger = useCharger();
+  const fit = useMowerFit();
 
   const mapRef = useRef<L.Map | null>(null);
   /** Bumped by every new measurement or clear, so a late answer never lands on a newer one. */
@@ -199,6 +206,7 @@ export default function GolfCourseCalculator() {
     setSatLoading(false);
     setTerrain(null);
     setTerrainLoading(false);
+    setCharger(null);
     return runId.current;
   }, []);
 
@@ -222,13 +230,20 @@ export default function GolfCourseCalculator() {
     }
   }, []);
 
-  /** The terrain under a lot, and the buildings on it the LiDAR sees (houses OSM doesn't have). */
+  /**
+   * The terrain under a lot, and the buildings on it the LiDAR sees (houses
+   * OSM doesn't have). `lidar` ends up null when there's no LiDAR for the lot,
+   * so the panel can tell "none found" from "couldn't look".
+   */
   const loadLotTerrain = useCallback(
     async (lot: Polygon | MultiPolygon, id: number, pending?: Promise<TerrainGrid>) => {
       const grid = await loadTerrain(lotBBox(lot), id, pending);
       const current = getLawn();
-      if (!grid || !current || id !== runId.current) return;
-      const lidar: LawnArea[] = lidarBuildings(grid, lot).map((geometry, i) => ({ id: `l${i + 1}`, kind: "building", geometry }));
+      if (!current || id !== runId.current) return;
+      const covered = grid && (terrainStats(grid, [lot])?.coverage ?? 0) >= 0.5;
+      const lidar: LawnArea[] | null = covered
+        ? lidarBuildings(grid, lot).map((geometry, i) => ({ id: `l${i + 1}`, kind: "building", geometry }))
+        : null;
       setLawn({ ...current, lidar });
     },
     [loadTerrain],
@@ -419,7 +434,7 @@ export default function GolfCourseCalculator() {
   // A share link reopens what was measured: a traced course outline (o=), the
   // traced sod fields (sf=) and the detected ones left out (sx=), a lawn's lot
   // (lp= the point picked, or lo= a traced lot) and its traced-out areas (lx=),
-  // and with m=1 measures again in the scan box (b=) if one was drawn, else the
+  // the robot's charger (ch=), and with m=1 measures again in the scan box (b=) if one was drawn, else the
   // linked view (v=, applied by GolfMap). Runs once, so its callbacks must stay
   // stable.
   const handleMapReady = useCallback(
@@ -429,7 +444,9 @@ export default function GolfCourseCalculator() {
       const box = parseBBoxParam(params.get("b"));
       const a = params.get("a");
       const linkedMode: AcreageMode = a === "sod" || a === "lawn" ? a : "golf";
-      map.whenReady(() => {
+      // The charger (ch=) is set after the measurement starts, which clears it.
+      const [chLat, chLon] = (params.get("ch") ?? "").split(",").map(Number);
+      const reopen = () => {
         if (linkedMode === "lawn") {
           const removals = linkedRemovals(params.get("lx"), params.get("ld"));
           const lot = decodePolyline(params.get("lo") ?? "");
@@ -456,6 +473,10 @@ export default function GolfCourseCalculator() {
         if (params.get("m") !== "1") return;
         if (box) setScanBox([box.south, box.west, box.north, box.east]);
         void (linkedMode === "sod" ? runSod : runMeasure)(box ?? undefined);
+      };
+      map.whenReady(() => {
+        reopen();
+        if (Number.isFinite(chLat) && Number.isFinite(chLon) && params.get("ch")) setCharger([chLat, chLon]);
       });
     },
     [runMeasure, runSod, showOutline, runLawn, showTracedLot],
@@ -469,6 +490,7 @@ export default function GolfCourseCalculator() {
       v: map && center ? encodeView(center.lat, center.lng, map.getZoom()) : undefined,
       b: box ? bboxParam(box) : undefined,
       n: courseName ?? undefined,
+      ch: charger ? `${charger[0].toFixed(5)},${charger[1].toFixed(5)}` : undefined,
     };
     if (mode === "lawn") {
       const pick = lawn?.pickPoint;
@@ -476,6 +498,7 @@ export default function GolfCourseCalculator() {
         a: "lawn",
         v: common.v,
         n: common.n,
+        ch: common.ch,
         lp: pick ? `${pick[0].toFixed(6)},${pick[1].toFixed(6)}` : undefined,
         lo: lawn?.lotSource === "traced" ? encodePolyline(tracedPoints(lawn.lot)) : undefined,
         lx: (lawn?.traced ?? [])
@@ -510,7 +533,7 @@ export default function GolfCourseCalculator() {
       o: traced ? encodePolyline(tracedPoints(traced)) : undefined,
       ...encodeQuote(quoteSettings),
     });
-  }, [mode, scanBox, result, sod, lawn, courseName, quoteSettings]);
+  }, [mode, scanBox, result, sod, lawn, courseName, quoteSettings, charger]);
 
   const getSearchBias = useCallback(() => {
     const map = mapRef.current;
@@ -616,6 +639,12 @@ export default function GolfCourseCalculator() {
 
   const handleMapClick = useCallback(
     (latlng: [number, number]) => {
+      if (placingCharger) {
+        setCharger(latlng);
+        setPlacingCharger(false);
+        return;
+      }
+
       if (tracing) {
         // Tapping near the first point closes the shape (not a driveway: that's a line).
         const map = mapRef.current;
@@ -675,7 +704,7 @@ export default function GolfCourseCalculator() {
         fields: current.fields.map((f) => (f.id === hit.id ? { ...f, included: !f.included } : f)),
       });
     },
-    [tracing, tracePoints, finishTrace, picking, runLawn, selecting, firstCorner, measure, mode],
+    [placingCharger, tracing, tracePoints, finishTrace, picking, runLawn, selecting, firstCorner, measure, mode],
   );
 
   const resetView = useCallback(() => {
@@ -752,7 +781,8 @@ export default function GolfCourseCalculator() {
       <GolfMap
         lang={lang}
         geojson={mapGeojson}
-        capturing={selecting || picking || tracing !== null}
+        capturing={selecting || picking || placingCharger || tracing !== null}
+        charger={fit?.site.charger ? [fit.site.charger[1], fit.site.charger[0]] : null}
         firstCorner={firstCorner}
         tracePoints={tracing ? tracePoints : null}
         overlay={mode === "golf" ? overlay : null}
@@ -791,6 +821,14 @@ export default function GolfCourseCalculator() {
         satLoading={satLoading}
         satError={satError}
         terrainLoading={terrainLoading}
+        placingCharger={placingCharger}
+        onMoveCharger={() => {
+          setSelecting(false);
+          setTracing(null);
+          setPicking(false);
+          setPlacingCharger(true);
+        }}
+        onCancelCharger={() => setPlacingCharger(false)}
         selecting={selecting}
         awaitingSecondCorner={firstCorner !== null}
         tracing={tracing}

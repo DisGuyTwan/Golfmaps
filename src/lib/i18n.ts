@@ -104,7 +104,9 @@ const en = {
   lawnLotNumber: (n: string) => `Lot ${n}, Quebec cadastre (indicative)`,
   lawnLotTraced: "Lot traced by hand",
   lawnNoBuilding:
-    "No building is mapped on this lot in OpenStreetMap. Use Remove an area to trace the house out.",
+    "No building found on this lot in OpenStreetMap or the LiDAR. If there’s a house (a new one, say), use Remove an area to trace it out.",
+  lawnNoBuildingNoLidar:
+    "No building on this lot in OpenStreetMap, and no LiDAR here to look for one. Use Remove an area to trace the house out.",
   lawnBuildingsFailed:
     "Couldn’t load the buildings from OpenStreetMap. Use Remove an area to trace the house out.",
   lawnRemoveHint:
@@ -194,11 +196,12 @@ const en = {
     parts: (n: number, kind: "lawn" | "golf" | "sod") =>
       kind === "lawn" ? `${n} separate lawn areas` : kind === "golf" ? `${n} separate turf areas` : `${n} fields`,
     narrow: (ft: string, m: string) => `Narrowest passage ${ft} ft (${m} m)`,
+    shapes: (pct: string) => `Irregular shapes: about ${pct}% more time in turns and edges`,
+    travel: (pct: string, far: string) => `Driving: about ${pct}% more time, up to ${far} from the charger`,
     steep: (pct: string) => `${pct}% of it steeper than 40%`,
     slope: (pct: string) => `Slopes up to about ${pct}%`,
     canopy: (pct: string) => `${pct}% under trees (weaker GPS signal)`,
     obstacles: (n: number) => `${n} obstacles to go around`,
-    edges: "Lots of edges for its size",
     noTerrain: "No LiDAR here: slope and trees not checked",
   },
   fitBest: "Recommended",
@@ -208,6 +211,14 @@ const en = {
   fitFairways: "For the fairways",
   fitNone: "No Kress robot can mow all of it: parts are steeper than 84%. Plan a trimmer for those.",
   fitUnits: (n: number) => (n === 1 ? "1 unit" : `${n} units`),
+  fitHours: (h: string, each: boolean) => `About ${h} h ${each ? "per unit " : ""}for a full mow, turns and driving included`,
+  fitCharger: {
+    lawn: "Charger: estimated next to the house",
+    field: "Charger: estimated in the middle of the biggest area",
+    placed: "Charger: where you placed it",
+  },
+  fitMoveCharger: "Move the charger",
+  tapCharger: "Tap where the charger goes.",
   fitRated: (area: string) => `Rated for ${area} every 48 h`,
   fitWhy: {
     vision: "EyePilot camera holds its position under trees",
@@ -331,7 +342,9 @@ const fr: UiStrings = {
   lawnLotNumber: (n: string) => `Lot ${n}, cadastre du Québec (à titre indicatif)`,
   lawnLotTraced: "Terrain tracé à la main",
   lawnNoBuilding:
-    "Aucun bâtiment n’est cartographié sur ce terrain dans OpenStreetMap. Utilisez Retirer une zone pour tracer la maison.",
+    "Aucun bâtiment trouvé sur ce terrain dans OpenStreetMap ni dans le LiDAR. S’il y a une maison (une neuve, par exemple), utilisez Retirer une zone pour la tracer.",
+  lawnNoBuildingNoLidar:
+    "Aucun bâtiment sur ce terrain dans OpenStreetMap, et pas de LiDAR ici pour en trouver un. Utilisez Retirer une zone pour tracer la maison.",
   lawnBuildingsFailed:
     "Impossible de charger les bâtiments d’OpenStreetMap. Utilisez Retirer une zone pour tracer la maison.",
   lawnRemoveHint:
@@ -426,11 +439,12 @@ const fr: UiStrings = {
     parts: (n: number, kind: "lawn" | "golf" | "sod") =>
       kind === "lawn" ? `${n} surfaces de pelouse séparées` : kind === "golf" ? `${n} zones de gazon séparées` : `${n} champs`,
     narrow: (ft: string, m: string) => `Passage le plus étroit : ${ft} pi (${m} m)`,
+    shapes: (pct: string) => `Formes irrégulières : environ ${pct} % de temps en plus (virages et bordures)`,
+    travel: (pct: string, far: string) => `Déplacements : environ ${pct} % de temps en plus, jusqu’à ${far} de la station`,
     steep: (pct: string) => `${pct} % plus raide que 40 %`,
     slope: (pct: string) => `Pentes jusqu’à environ ${pct} %`,
     canopy: (pct: string) => `${pct} % sous les arbres (signal GPS plus faible)`,
     obstacles: (n: number) => `${n} obstacles à contourner`,
-    edges: "Beaucoup de bordures pour sa taille",
     noTerrain: "Pas de LiDAR ici : pente et arbres non vérifiés",
   },
   fitBest: "Recommandé",
@@ -440,6 +454,14 @@ const fr: UiStrings = {
   fitFairways: "Pour les allées",
   fitNone: "Aucun robot Kress ne peut tout tondre : certaines parties dépassent 84 % de pente. Prévoyez un coupe-bordure pour celles-ci.",
   fitUnits: (n: number) => (n === 1 ? "1 unité" : `${n} unités`),
+  fitHours: (h: string, each: boolean) => `Environ ${h} h ${each ? "par unité " : ""}par tonte complète, virages et déplacements compris`,
+  fitCharger: {
+    lawn: "Station de recharge : estimée près de la maison",
+    field: "Station de recharge : estimée au milieu de la plus grande surface",
+    placed: "Station de recharge : à l’endroit choisi",
+  },
+  fitMoveCharger: "Déplacer la station",
+  tapCharger: "Touchez l’endroit où ira la station de recharge.",
   fitRated: (area: string) => `Conçu pour ${area} aux 48 h`,
   fitWhy: {
     vision: "Caméra EyePilot : garde sa position sous les arbres",

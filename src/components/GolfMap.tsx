@@ -70,6 +70,8 @@ export interface GolfMapProps {
   overlay: MapOverlay | null;
   /** Drawn scan box as [south, west, north, east], or null. */
   scanBox: [number, number, number, number] | null;
+  /** The robot's charger, [lat, lon] (placed or estimated), or null. */
+  charger: [number, number] | null;
   onMapClick: (latlng: [number, number]) => void;
   onMapReady: (map: L.Map) => void;
 }
@@ -142,6 +144,7 @@ export default function GolfMap({
   tracePoints,
   overlay,
   scanBox,
+  charger,
   onMapClick,
   onMapReady,
 }: GolfMapProps) {
@@ -242,6 +245,14 @@ export default function GolfMap({
             />
           ))}
         </>
+      )}
+
+      {charger && (
+        <CircleMarker
+          center={charger}
+          radius={8}
+          pathOptions={{ color: "#ffffff", weight: 3, fillColor: "#f59e0b", fillOpacity: 1, interactive: false }}
+        />
       )}
 
       {firstCorner && (

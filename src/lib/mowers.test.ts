@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MOWERS, capacityM2, recommend } from "./mowers";
+import { baseline } from "./coverage";
+import { MOWERS, capacityM2, fitMower, recommend } from "./mowers";
 import type { ShapeStats, Site } from "./site";
 import type { TerrainStats } from "./terrain";
 
@@ -14,6 +15,7 @@ const shape = (areaM2: number, patch: Partial<ShapeStats> = {}): ShapeStats => (
   zonesAt: () => 1,
   ...patch,
 });
+const noLayout = { coverage: null, charger: null, chargerEstimated: true };
 const lawn = (areaM2: number, terrain: TerrainStats | null = flat, patch: Partial<ShapeStats> = {}): Site => ({
   kind: "lawn",
   areaM2,
@@ -21,10 +23,14 @@ const lawn = (areaM2: number, terrain: TerrainStats | null = flat, patch: Partia
   shape: shape(areaM2, patch),
   terrain,
   fairwayM2: 0,
+  ...noLayout,
 });
 
 describe("Kress lineup data", () => {
-  it("has unique models with sane specs", () => {
+  it("has the twelve models quoted, each with sane specs", () => {
+    expect(MOWERS.map((m) => m.id).sort()).toEqual(
+      ["KR161", "KR172", "KR173", "KR174", "KR238", "KR272", "KR276", "KR282", "KR284", "KR286", "KR800", "KR804"],
+    );
     expect(new Set(MOWERS.map((m) => m.id)).size).toBe(MOWERS.length);
     for (const m of MOWERS) {
       expect(m.maxAreaM2).toBeGreaterThanOrEqual(m.areaM2);
@@ -67,6 +73,21 @@ describe("residential lawns", () => {
     expect(r.best?.mower.zeroTrim).toBe(true);
   });
 
+  it("moves up a size when the layout costs extra time", () => {
+    const area = 0.45 * ACRE;
+    const base = baseline(area, true, 0.5);
+    // Same stripes as a square, but the charger far from the lawn and two areas apart.
+    const far: Site = {
+      ...lawn(area),
+      coverage: { areaM2: area, stripes: base.stripes, reach: { avgM: base.reach.avgM * 6, farM: 150, tourM: 120 }, base },
+    };
+    const kr172 = fitMower(far, MOWERS.find((m) => m.id === "KR172")!);
+    expect(kr172.work!.factor).toBeGreaterThan(1.12);
+    expect(kr172.notes).toContain("atLimit");
+    expect(recommend(far).best?.mower.id).toBe("KR173");
+    expect(recommend(lawn(area)).best?.mower.id).toBe("KR172");
+  });
+
   it("recommends nothing when even a 4×4 can't climb it", () => {
     const r = recommend(lawn(0.3 * ACRE, { ...flat, over25: 0.6, over40: 0.4, over84: 0.1 }));
     expect(r.best).toBeNull();
@@ -75,33 +96,33 @@ describe("residential lawns", () => {
 
 describe("golf and sod", () => {
   it("sends fairways to the MasterSeries and the rough to a Voyager", () => {
-    const site: Site = { kind: "golf", areaM2: 60 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 25 * ACRE };
+    const site: Site = { kind: "golf", areaM2: 60 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 25 * ACRE, ...noLayout };
     const r = recommend(site);
-    expect(r.best?.mower.id).toBe("KR238G");
+    expect(r.best?.mower.id).toBe("KR238");
     expect(r.best?.units).toBe(2);
     expect(r.rough?.mower.line).toBe("voyager");
   });
 
   it("sizes the fairway robot on the fairways alone, however big the rough", () => {
-    const site: Site = { kind: "golf", areaM2: 190 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 13 * ACRE };
+    const site: Site = { kind: "golf", areaM2: 190 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 13 * ACRE, ...noLayout };
     const r = recommend(site);
     expect(r.best?.mower.minCutMm).toBeLessThanOrEqual(15);
     expect(r.best?.units).toBe(1);
     expect(r.rough?.mower.line).toBe("voyager");
   });
 
-  it("gives a short course's fairways to a KR237", () => {
-    const site: Site = { kind: "golf", areaM2: 12 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 5 * ACRE };
-    expect(recommend(site).best?.mower.id).toBe("KR237");
+  it("gives even a short course's fairways to the MasterSeries", () => {
+    const site: Site = { kind: "golf", areaM2: 12 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 5 * ACRE, ...noLayout };
+    expect(recommend(site).best?.mower.id).toBe("KR238");
   });
 
   it("uses Voyagers alone for rough-only quotes", () => {
-    const site: Site = { kind: "golf", areaM2: 40 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 0 };
+    const site: Site = { kind: "golf", areaM2: 40 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 0, ...noLayout };
     expect(recommend(site).best?.mower.line).toBe("voyager");
   });
 
   it("sizes a sod farm's Voyager to the acreage", () => {
-    const sod = (acres: number): Site => ({ kind: "sod", areaM2: acres * ACRE, parts: 4, shape: null, terrain: flat, fairwayM2: 0 });
+    const sod = (acres: number): Site => ({ kind: "sod", areaM2: acres * ACRE, parts: 4, shape: null, terrain: flat, fairwayM2: 0, ...noLayout });
     expect(recommend(sod(20)).best?.mower.id).toBe("KR800");
     expect(recommend(sod(60)).best?.mower.id).toBe("KR804");
   });

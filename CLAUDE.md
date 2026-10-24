@@ -69,7 +69,10 @@ src/lib/
   terrain-server.ts  minimal BigTIFF tile reader for the HRDEM COGs (route only)
   site.ts       lawn shape (parts, passages, islands, edges) and the complexity
                 score; site builders for lawn, golf, sod (pure, tested)
-  mowers.ts     Kress lineup specs and the fit / recommendation (pure, tested)
+  coverage.ts   how a robot works an area: stripes per zone (turns, broken runs,
+                edge laps), driving from the charger and between zones, against
+                a square of the same area (pure, tested)
+  mowers.ts     the 12 Kress models quoted and the fit / recommendation (pure, tested)
   parcel.ts     Quebec cadastre lot lookup and parsing (pure parts tested)
   types.ts      BBox, CourseMeasurement, SatelliteTurf, SodField, SodMeasurement
   incentives.ts program rules, FR/EN copy and savings math (pure, tested)
@@ -78,7 +81,7 @@ src/lib/
   quote.ts      measurement → acres for the quote, share params (pure, tested)
   quote-store.ts  client store shared by the tabs (useSyncExternalStore)
   share.ts      share-link helpers + polylines (pure, tested); keys r_ / i_ / q_ /
-                v, m, b, n, a, o, sf, sx, lp, lo, lx, ld
+                v, m, b, n, a, o, sf, sx, lp, lo, lx, ld, ch
   gas.ts        StatCan gas price parsing (pure, tested)
   report-error.ts  sendBeacon to /api/log
   tabs.ts       goToTab() for in-app navigation
@@ -133,8 +136,10 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   lines (driveways, parking aisles, widened by `stripAlong` to their width tag
   or a typical width) on the lot are removed automatically (Overpass
   `kind: "lawn"`), as Buildings or Paving. OSM misses most houses in some
-  Quebec suburbs (Microsoft footprints there aren't reachable) and most
-  residential driveways (1-30% mapped), so the rep traces them: Remove a
+  Quebec suburbs (Microsoft footprints there aren't reachable), so buildings
+  the HRDEM LiDAR sees come off too (`lawn.lidar`, see Terrain below). OSM
+  also misses most residential driveways (1-30% mapped), so the rep traces
+  them: Remove a
   driveway is a centre line (2+ taps) at 11/20/29 ft (1/2/3 cars), kept as
   path + width so links (`ld`) rebuild it exactly; Remove an area is a
   polygon. No open layer separates lawn from pavement (Quebec orthophotos are
@@ -157,15 +162,24 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   result and time.
 - **Mower fit is capability, then outlay.** `site.ts` scores the property
   (1-3 points per difficulty; 0-2 simple, 3-5 moderate, 6+ complex) and
-  `mowers.ts` ranks Kress robots: fits first (area, slope limit), then fewest
-  penalties (no camera under trees, no 4x4 on slopes, no ZeroTrim on edgy
-  lawns, passages), then `listUsd × units`. `listUsd` is a rough order only,
-  never shown: prices conflict between sources. Golf with fairways is two jobs
-  (a 10-15 mm robot on the fairways, the best robot on the rest). Voyager
-  units use the ROI tab's defaults (`capacityM2`), and Send to ROI passes the
-  Voyager size (`roiModel`). Specs are dated (`MOWERS_AS_OF`, in the copy);
-  `passageM` is an estimate (Kress publishes none). Update both when Kress
-  changes the lineup.
+  `mowers.ts` ranks the 12 Kress models quoted (KR161/172/173/174,
+  KR272/276, KR282/284/286, KR238, KR800/804; keep to that list unless told
+  otherwise): fits first (area, slope limit), then fewest penalties (no
+  camera under trees, no 4x4 on slopes, no ZeroTrim on edgy lawns, passages),
+  then `listUsd × units`. `listUsd` is a rough order only, never shown:
+  prices conflict between sources. The area a robot must keep up with is the
+  site's area × the layout's extra time for that robot (`coverage.ts`
+  `overhead`: stripes in each zone's best direction, turns, hops around
+  broken stripes, edge laps, driving to and from the charger every charge and
+  between zones, around buildings on a lot), relative to a square of the same
+  area with the charger at its edge (what a rated area assumes). The charger
+  is estimated (next to the house; the middle of the biggest area on a course
+  or farm) unless the rep places it (store `charger`, link `ch`). Golf with
+  fairways is two jobs (the KR238 on the fairways, the best robot on the
+  rest). Voyager units use the ROI tab's defaults (`capacityM2`), and Send to
+  ROI passes the Voyager size (`roiModel`). Specs are dated (`MOWERS_AS_OF`,
+  in the copy); `passageM`, `speedMS`, `turnS` and most `runtimeMin` are
+  estimates (Kress publishes none). Update both when Kress changes the lineup.
 - **Terrain is HRDEM LiDAR, read sparingly.** geotiff.js would load each 500 km
   file's whole tile index (15 MB), so `terrain-server.ts` parses the BigTIFF
   header once per instance and range-reads only the index entries and LZW
@@ -173,9 +187,13 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   over 3 × 3 cells (1 m LiDAR noise reads as 10-20 %), read on open ground
   when there's enough (under crowns the DTM is interpolated), and steep shares
   only count patches of 8 m² or more. Roofs are smooth, crowns rough
-  (`coverClasses`, 1-2 m cells only); LiDAR buildings are taken off a lawn
-  unless an OSM building already covers 30 % of one. Don't drop the smoothing
-  or the patch filter: flat lawns then read as steep and get a 4x4.
+  (`coverClasses`, 1-2 m cells only); LiDAR buildings are straightened
+  (Douglas-Peucker, ¾ cell) and taken off a lawn unless an OSM building
+  already covers 30 % of one. `lawn.lidar` is undefined while loading, null
+  where there's no LiDAR, [] when it found none: the "no building" notice only
+  shows once both OSM and the LiDAR have answered and found nothing. Don't drop
+  the smoothing or the patch filter: flat lawns then read as steep and get a
+  4x4.
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in

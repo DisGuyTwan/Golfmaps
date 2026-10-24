@@ -177,7 +177,9 @@ The cadastre is indicative only (the surveyor's boundary is the official one).
 
 Houses OSM doesn't have are found in the LiDAR (next section) and taken off
 too; the panel says how many. One that mostly overlaps an OSM building is left
-to OSM's outline.
+to OSM's outline. The panel only asks the rep to trace the house when neither
+OSM nor the LiDAR has a building on the lot (a house newer than the LiDAR, or
+no LiDAR there).
 
 ## Mower fit
 
@@ -191,19 +193,36 @@ hard the property is for a robot and which Kress model to quote:
   more count as steep (a bank, not a curb). What stands on the ground is low
   plants, trees (rough crowns) or buildings (smooth roofs).
 - **Shape** (lawns): separate lawn areas, the narrowest passage a robot must
-  drive through (from the distance to the nearest edge), islands to go around,
-  and edge length.
-- The **score** adds 1-3 points per difficulty: Simple (0-2), Moderate (3-5),
-  Complex (6+), with the reasons listed.
-- The **recommendation** is the Kress robot that fits with the fewest
-  drawbacks, then the lowest outlay: RTKn for open lawns, EyePilot (camera) under
-  trees, EyePilot 4x4 on slopes over 40%; on a course, the MasterSeries (or a
-  KR237) for fairways and a Voyager for the rough, and a Voyager on a sod farm.
-  Send to ROI carries the recommended Voyager size to the ROI tab.
+  drive through (from the distance to the nearest edge) and islands to go
+  around.
+- **Layout** (`coverage.ts`): how a robot would actually work it. Each area is
+  striped in its best direction: a rectangle is a few long runs, an S-shaped or
+  ragged zone many short, broken ones, each ending in a turn, plus a slower lap
+  along every edge. Then the driving: to and from the **charger** on every
+  charge, and from one area to the next, around buildings and pools on a lot.
+  The charger is estimated (next to the house on a lot, the middle of the
+  biggest area on a course or farm) and shown on the map; **Move the charger**
+  and a tap puts it where it will really go (kept in the link). All of it is
+  compared with a plain square of the same area with the charger at its edge,
+  which is what a rated area assumes.
+- The **score** adds 1-3 points per difficulty (separate areas, passages,
+  irregular shapes, driving, slope, trees, obstacles): Simple (0-2), Moderate
+  (3-5), Complex (6+), with the reasons listed.
+- The **recommendation** chooses among the twelve Kress models quoted: RTKn
+  KR161, KR172, KR173, KR174; EyePilot KR272, KR276; EyePilot 4x4 KR282, KR284,
+  KR286; MasterSeries KR238; Voyager KR800 and KR804. A robot has to keep up
+  with the area times the extra time the layout costs it, so a ragged lawn far
+  from the charger can need the next size up; then the fewest drawbacks win
+  (no camera under trees, no 4x4 on slopes over 40%, no ZeroTrim on lawns that
+  are mostly edges, a passage narrower than the robot), then the lowest
+  outlay. On a course with fairways in the quote, the MasterSeries takes the
+  fairways (it cuts to 10 mm) and the best robot the rest, usually a Voyager;
+  a sod farm gets a Voyager. The card says about how many hours a full mow
+  takes. Send to ROI carries the recommended Voyager size to the ROI tab.
 
 Kress specs are as of Oct 24, 2026 (`src/lib/mowers.ts`). Kress publishes no
-minimum passage width, so those are estimates from each robot's size: check
-them on site.
+minimum passage width, mowing speed or (for most models) run time per charge,
+so those are estimates: check passages on site.
 
 ## Incentives tab
 

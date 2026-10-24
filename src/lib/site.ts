@@ -8,11 +8,12 @@ import area from "@turf/area";
 import type { MultiPolygon, Polygon, Position } from "geojson";
 import { labelRegions, polygonMask } from "./landcover";
 import { QUOTE_CATEGORIES, type QuoteSettings } from "./quote";
+import { baseline, overhead, polygonArea, reachOnFields, reachOnLot, stripes, type Coverage, type LocalPolygon, type Pace } from "./coverage";
 import { COVER, NO_SLOPE, terrainStats, type TerrainGrid, type TerrainStats } from "./terrain";
 import type { CourseMeasurement, SodMeasurement } from "./types";
 
 /** Areas smaller than this (m²) aren't counted as a separate lawn: a strip by the steps, a corner. */
-export const MIN_PART_M2 = 5;
+const MIN_PART_M2 = 5;
 /** Narrowest passage widths (m) tried when looking for bottlenecks. */
 const WIDTHS_M = Array.from({ length: 22 }, (_, i) => Math.round((0.4 + i * 0.1) * 10) / 10);
 /** A pocket of robot positions smaller than this (m²) is a dead end, not a zone. */
@@ -31,7 +32,7 @@ export interface ShapeStats {
   narrowestM: number | null;
   /** Islands inside the lawn a robot has to go around: beds, sheds, pools, traced areas. */
   obstacles: number;
-  /** Metres of lawn edge per 100 m² (a 20 × 20 m square has 20). */
+  /** Metres of lawn edge per 100 m² (a 20 × 20 m square has 20); scored through `shapes`, used for ZeroTrim. */
   edgePer100: number;
   /** Zones a robot that needs `widthM` of passage would have to be set up with (separate areas, each split at its bottlenecks). */
   zonesAt: (widthM: number) => number;
@@ -228,17 +229,30 @@ export interface Site {
   terrain: TerrainStats | null;
   /** Golf: fairways (and their area) are in the quote, so the robot must cut fairway height. */
   fairwayM2: number;
+  /** The layout: stripes, driving from the charger and between areas, against a plain square (coverage.ts). */
+  coverage: Coverage | null;
+  /** Where the charger is, [lon, lat]: placed by the rep, or estimated (`chargerEstimated`). */
+  charger: [number, number] | null;
+  chargerEstimated: boolean;
 }
 
 export type Level = "simple" | "moderate" | "complex";
-export type ReasonKey = "parts" | "narrow" | "steep" | "slope" | "canopy" | "obstacles" | "edges" | "noTerrain";
+export type ReasonKey = "parts" | "narrow" | "shapes" | "travel" | "steep" | "slope" | "canopy" | "obstacles" | "noTerrain";
 
-/** One thing that makes the property harder, with its weight (1-3) and the value behind it. */
+/** One thing that makes the property harder, with its weight (1-3) and the value behind it (and the farthest distance, for travel). */
 export interface Reason {
   key: ReasonKey;
   points: number;
   value: number;
+  farM?: number;
 }
+
+/** A typical robot for each kind of site, to score the layout before choosing one: a 22 cm residential robot, a 40 in. Voyager. */
+const REFERENCE_PACE: Record<SiteKind, Pace> = {
+  lawn: { stripeM: 0.19, speedMS: 0.35, turnS: 8, runtimeMin: 90 },
+  golf: { stripeM: 0.92, speedMS: 2.5, turnS: 12, runtimeMin: 480 },
+  sod: { stripeM: 0.92, speedMS: 2.5, turnS: 12, runtimeMin: 480 },
+};
 
 export interface Complexity {
   level: Level;
@@ -250,7 +264,8 @@ export interface Complexity {
  * Scores the property: each difficulty adds 1-3 points, 0-2 is simple, 3-5
  * moderate, 6 or more complex. Thresholds are the robots' practical limits:
  * 40 % slope for most Kress models, tree cover that blocks RTK satellite
- * signal, passages around a robot's width.
+ * signal, passages around a robot's width, and the extra time a typical robot
+ * would spend in turns, broken stripes and edges, or driving (coverage.ts).
  */
 export function complexity(site: Site): Complexity {
   const reasons: Reason[] = [];
@@ -259,10 +274,14 @@ export function complexity(site: Site): Complexity {
 
   if (site.kind === "lawn") add("parts", parts >= 5 ? 3 : parts >= 3 ? 2 : parts === 2 ? 1 : 0, parts);
   else add("parts", parts >= 9 ? 3 : parts >= 4 ? 2 : parts >= 2 ? 1 : 0, parts);
+  if (site.coverage) {
+    const o = overhead(site.coverage, REFERENCE_PACE[site.kind]);
+    add("shapes", o.shape > 0.25 ? 2 : o.shape > 0.1 ? 1 : 0, o.shape);
+    if (o.travel > 0.08) reasons.push({ key: "travel", points: o.travel > 0.2 ? 2 : 1, value: o.travel, farM: site.coverage.reach.farM });
+  }
   if (shape) {
     if (shape.narrowestM !== null) add("narrow", shape.narrowestM < 1 ? 2 : shape.narrowestM < 1.5 ? 1 : 0, shape.narrowestM);
     add("obstacles", shape.obstacles >= 6 ? 2 : shape.obstacles >= 3 ? 1 : 0, shape.obstacles);
-    add("edges", shape.edgePer100 > 35 ? 1 : 0, shape.edgePer100);
   }
   if (terrain && terrain.coverage >= 0.5) {
     if (terrain.over40 > 0.02) add("steep", 3, terrain.over40);
@@ -301,9 +320,89 @@ function turfTerrain(grid: TerrainGrid, shapes: Shape[], dropWoods: boolean): Te
   return terrainStats({ ...grid, slope }, shapes);
 }
 
-/** A residential lawn: its shape and the terrain under it. `areaM2` is the lawn (or the rep's override). */
-export function lawnSite(lawn: Shape | null, areaM2: number, terrain: TerrainGrid | null): Site {
+/** Local metres around a point, and back: plenty accurate over a lot or a course. */
+function frame(lon0: number, lat0: number) {
+  const kx = 111320 * Math.cos((lat0 * Math.PI) / 180);
+  const toLocal = ([lon, lat]: Position): [number, number] => [(lon - lon0) * kx, (lat - lat0) * 111320];
+  const toLonLat = ([x, y]: [number, number]): [number, number] => [lon0 + x / kx, lat0 + y / 111320];
+  const polygons = (geoms: Shape[]): LocalPolygon[] =>
+    geoms.flatMap((g) => (g.type === "Polygon" ? [g.coordinates] : g.coordinates)).map((rings) => rings.map((ring) => ring.map(toLocal)));
+  return { toLocal, toLonLat, polygons };
+}
+
+const firstPoint = (g: Shape): Position => (g.type === "Polygon" ? g.coordinates[0][0] : g.coordinates[0][0][0]);
+const largest = (parts: LocalPolygon[]) => parts.reduce((a, b) => (polygonArea(b) > polygonArea(a) ? b : a));
+const ringCentroid = (p: LocalPolygon): [number, number] => {
+  const ring = p[0];
+  const n = ring.length - 1 || 1;
+  return [ring.slice(0, n).reduce((s, q) => s + q[0], 0) / n, ring.slice(0, n).reduce((s, q) => s + q[1], 0) / n];
+};
+/** Distance from a point to a ring's edges. */
+function toRing(p: [number, number], ring: [number, number][]): number {
+  let best = Infinity;
+  for (let i = 1; i < ring.length; i++) {
+    const [ax, ay] = ring[i - 1], [bx, by] = ring[i];
+    const dx = bx - ax, dy = by - ay;
+    const t = Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / (dx * dx + dy * dy || 1)));
+    best = Math.min(best, Math.hypot(p[0] - ax - t * dx, p[1] - ay - t * dy));
+  }
+  return best;
+}
+
+/**
+ * Where a lawn's charger most likely goes: on the edge of the biggest lawn
+ * area, at the point closest to the house (power, and out of the way), or
+ * nearest the middle of the lot when there's no building.
+ */
+function lawnCharger(parts: LocalPolygon[], house: LocalPolygon | null, lot: LocalPolygon[]): [number, number] {
+  const edge = largest(parts)[0];
+  const target = house ?? largest(lot);
+  const centre = ringCentroid(target);
+  let best = edge[0];
+  let bestD = Infinity;
+  for (const p of edge) {
+    const d = house ? toRing(p, house[0]) : Math.hypot(p[0] - centre[0], p[1] - centre[1]);
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  }
+  return best;
+}
+
+/**
+ * A residential lawn: its shape, the terrain under it, and its layout for a
+ * robot: stripes, and driving from the charger (placed by the rep, else next
+ * to the house) around buildings and pools (`blocked`) on the lot. `areaM2` is
+ * the lawn (or the rep's override).
+ */
+export function lawnSite(
+  lawn: Shape | null,
+  lot: Shape,
+  blocked: Shape[],
+  charger: [number, number] | null,
+  areaM2: number,
+  terrain: TerrainGrid | null,
+): Site {
   const shape = lawn ? lawnShape(lawn) : null;
+  const [lon0, lat0] = firstPoint(lot);
+  const f = frame(lon0, lat0);
+  const parts = lawn ? f.polygons([lawn]).filter((p) => polygonArea(p) >= MIN_PART_M2) : [];
+  let coverage: Coverage | null = null;
+  let at: [number, number] | null = null;
+  if (parts.length) {
+    const lotParts = f.polygons([lot]);
+    const blockedParts = f.polygons(blocked);
+    const house = blockedParts.length ? largest(blockedParts) : null;
+    at = charger ? f.toLocal(charger) : lawnCharger(parts, house, lotParts);
+    const total = parts.reduce((s, p) => s + polygonArea(p), 0);
+    coverage = {
+      areaM2: total,
+      stripes: stripes(parts, 0.5),
+      reach: reachOnLot(parts, lotParts, blockedParts, at),
+      base: baseline(total, true, 0.5),
+    };
+  }
   return {
     kind: "lawn",
     areaM2,
@@ -311,15 +410,37 @@ export function lawnSite(lawn: Shape | null, areaM2: number, terrain: TerrainGri
     shape,
     terrain: lawn && terrain ? terrainStats(terrain, [lawn]) : null,
     fairwayM2: 0,
+    coverage,
+    charger: at ? f.toLonLat(at) : null,
+    chargerEstimated: !charger,
   };
+}
+
+/** Layout of fields or turf patches, with the charger placed or in the middle of the biggest one. */
+function fieldLayout(shapes: Shape[], charger: [number, number] | null, refM: number) {
+  if (!shapes.length) return { coverage: null, charger: null };
+  const [lon0, lat0] = firstPoint(shapes[0]);
+  const f = frame(lon0, lat0);
+  const parts = f.polygons(shapes).filter((p) => polygonArea(p) > 0);
+  if (!parts.length) return { coverage: null, charger: null };
+  const at = charger ? f.toLocal(charger) : ringCentroid(largest(parts));
+  const total = parts.reduce((s, p) => s + polygonArea(p), 0);
+  const coverage: Coverage = { areaM2: total, stripes: stripes(parts, refM), reach: reachOnFields(parts, at), base: baseline(total, false, refM) };
+  return { coverage, charger: f.toLonLat(at) };
 }
 
 /**
  * A golf course: the quoted acres, separate turf patches among the included
- * categories (fairways on their own are many; with the rough it's one piece)
- * and the terrain on the turf, not under the woods.
+ * categories (fairways on their own are many; with the rough it's one piece),
+ * the terrain on the turf, not under the woods, and the layout.
  */
-export function golfSite(m: CourseMeasurement, q: QuoteSettings, quotedAcres: number, terrain: TerrainGrid | null): Site {
+export function golfSite(
+  m: CourseMeasurement,
+  q: QuoteSettings,
+  quotedAcres: number,
+  terrain: TerrainGrid | null,
+  charger: [number, number] | null = null,
+): Site {
   const byCategory = (cats: string[]) =>
     m.geojson.features
       .filter((f) => cats.includes(String(f.properties?._category)) && (f.geometry?.type === "Polygon" || f.geometry?.type === "MultiPolygon"))
@@ -329,6 +450,7 @@ export function golfSite(m: CourseMeasurement, q: QuoteSettings, quotedAcres: nu
   const turf = byCategory(included);
   const roughEverywhere = q.include.rough && (m.roughEstimated || m.boundaryOnly);
   const shapes = roughEverywhere || !turf.length ? outline : turf;
+  const layout = fieldLayout(shapes, charger, 5);
   return {
     kind: "golf",
     areaM2: quotedAcres * ACRE_M2,
@@ -336,11 +458,13 @@ export function golfSite(m: CourseMeasurement, q: QuoteSettings, quotedAcres: nu
     shape: null,
     terrain: terrain && shapes.length ? turfTerrain(terrain, shapes, shapes === outline) : null,
     fairwayM2: q.include.fairway && !m.boundaryOnly ? m.fairway.acres * ACRE_M2 : 0,
+    ...layout,
+    chargerEstimated: !charger,
   };
 }
 
-/** A sod farm: the quoted acres, the included fields and the terrain on them. */
-export function sodSite(sod: SodMeasurement, quotedAcres: number, terrain: TerrainGrid | null): Site {
+/** A sod farm: the quoted acres, the included fields, the terrain on them, and the layout. */
+export function sodSite(sod: SodMeasurement, quotedAcres: number, terrain: TerrainGrid | null, charger: [number, number] | null = null): Site {
   const fields = sod.fields.filter((f) => f.included).map((f) => f.geometry);
   return {
     kind: "sod",
@@ -349,5 +473,7 @@ export function sodSite(sod: SodMeasurement, quotedAcres: number, terrain: Terra
     shape: null,
     terrain: terrain && fields.length ? terrainStats(terrain, fields) : null,
     fairwayM2: 0,
+    ...fieldLayout(fields, charger, 5),
+    chargerEstimated: !charger,
   };
 }

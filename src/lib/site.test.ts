@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MultiPolygon, Polygon, Position } from "geojson";
-import { complexity, lawnShape, type Site } from "./site";
+import { complexity, lawnShape, lawnSite, type Site } from "./site";
 import type { TerrainStats } from "./terrain";
 
 // Shapes built in metres around a Boucherville lot.
@@ -50,7 +50,7 @@ const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, o
 describe("complexity", () => {
   const lawn = (shape: Polygon | MultiPolygon, terrain: TerrainStats | null): Site => {
     const s = lawnShape(shape);
-    return { kind: "lawn", areaM2: s.areaM2, parts: s.parts, shape: s, terrain, fairwayM2: 0 };
+    return { kind: "lawn", areaM2: s.areaM2, parts: s.parts, shape: s, terrain, fairwayM2: 0, coverage: null, charger: null, chargerEstimated: true };
   };
 
   it("calls an open, flat, sunny backyard simple", () => {
@@ -71,5 +71,41 @@ describe("complexity", () => {
     const c = complexity(lawn(rect(0, 0, 25, 30), null));
     expect(c.reasons.map((r) => r.key)).toContain("noTerrain");
     expect(c.level).toBe("simple");
+  });
+});
+
+describe("lawn layout", () => {
+  // A 20 × 40 m lot, the house across the middle with a 2 m side passage: front and back yards.
+  const lot = rect(0, 0, 20, 40);
+  const house = rect(2, 15, 18, 10);
+  const yards: MultiPolygon = { type: "MultiPolygon", coordinates: [[ring(0, 0, 20, 15)], [ring(0, 25, 20, 15)], [ring(0, 15, 2, 10)]] };
+
+  it("puts the charger next to the house when none is placed", () => {
+    const site = lawnSite(yards, lot, [house], null, 760, null);
+    expect(site.chargerEstimated).toBe(true);
+    const [lon, lat] = site.charger!;
+    const [, y] = [(lon - LON) * 111320 * Math.cos((LAT * Math.PI) / 180), (lat - LAT) * 111320];
+    expect(y).toBeGreaterThanOrEqual(14);
+    expect(y).toBeLessThanOrEqual(26);
+  });
+
+  it("counts the drive to a far corner when the charger is placed there", () => {
+    const placed = lawnSite(yards, lot, [house], at(20, 0) as [number, number], 760, null);
+    expect(placed.chargerEstimated).toBe(false);
+    const near = lawnSite(yards, lot, [house], null, 760, null);
+    expect(placed.coverage!.reach.avgM).toBeGreaterThan(near.coverage!.reach.avgM);
+  });
+
+  it("scores a wavy lawn's extra turns and edges", () => {
+    const blob: Polygon = {
+      type: "Polygon",
+      coordinates: [Array.from({ length: 121 }, (_, i) => {
+        const t = ((i % 120) / 120) * 2 * Math.PI;
+        const r = 14 + 5 * Math.sin(5 * t);
+        return at(20 + r * Math.cos(t), 20 + r * Math.sin(t));
+      })],
+    };
+    const site = lawnSite(blob, rect(0, 0, 40, 40), [], null, 650, null);
+    expect(complexity(site).reasons.map((r) => r.key)).toContain("shapes");
   });
 });

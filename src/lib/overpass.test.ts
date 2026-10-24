@@ -56,15 +56,16 @@ describe("mirror attempts", () => {
       ["b.test", "429"],
       ["c.test", "ok"],
     ]);
-    expect(attempts[0].at).toBe(0);
+    expect(attempts[0].at).toBeLessThan(5);
     expect(attempts.every((a) => a.ms >= 0)).toBe(true);
   });
   it("stops every request when the caller cancels", async () => {
-    mockMirrors({ [endpoints[0]]: "hang", [endpoints[1]]: "hang", [endpoints[2]]: "hang" });
+    const calls = mockMirrors({ [endpoints[0]]: "hang", [endpoints[1]]: "hang", [endpoints[2]]: "hang" });
     const cancel = new AbortController();
     const attempts: MirrorAttempt[] = [];
     const lookup = fetchFromMirrorsHedged(bbox, { hedgeMs: 5, endpoints, signal: cancel.signal, attempts });
-    await new Promise((r) => setTimeout(r, 20));
+    // All three mirrors asked (not a fixed wait: timers run late on a busy machine).
+    await vi.waitFor(() => expect(calls).toHaveLength(3));
     cancel.abort();
     await expect(lookup).rejects.toMatchObject({ name: "AbortError" });
     expect(attempts.map((a) => a.result)).toEqual(["cancelled", "cancelled", "cancelled"]);

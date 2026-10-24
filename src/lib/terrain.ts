@@ -10,7 +10,7 @@
  * Coordinates from the browser are WGS84 and the mosaic is NAD83(CSRS); they
  * sit about 1 m apart in Quebec, so they are treated as the same.
  */
-import type { MultiPolygon, Polygon } from "geojson";
+import type { MultiPolygon, Polygon, Position } from "geojson";
 import { labelRegions, polygonMask, regionGeometry, type GridShape } from "./landcover";
 import type { BBox } from "./types";
 
@@ -304,19 +304,66 @@ export function terrainStats(grid: TerrainGrid, geoms: (Polygon | MultiPolygon)[
   };
 }
 
+/** Douglas-Peucker on a closed ring of [lon, lat], with the tolerance in metres. */
+function simplifyRing(ring: Position[], tolM: number): Position[] {
+  if (ring.length <= 5) return ring;
+  const kx = 111320 * Math.cos((ring[0][1] * Math.PI) / 180);
+  const xy = ring.map(([lon, lat]) => [lon * kx, lat * 111320]);
+  const keep = new Uint8Array(ring.length);
+  keep[0] = keep[ring.length - 1] = 1;
+  // Split the closed ring at its farthest point from the start, then simplify each half.
+  let far = 0, farD = -1;
+  for (let i = 1; i < ring.length - 1; i++) {
+    const d = Math.hypot(xy[i][0] - xy[0][0], xy[i][1] - xy[0][1]);
+    if (d > farD) {
+      farD = d;
+      far = i;
+    }
+  }
+  keep[far] = 1;
+  const stack: [number, number][] = [[0, far], [far, ring.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop()!;
+    const [ax, ay] = xy[a], [bx, by] = xy[b];
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    let worst = -1, worstD = tolM;
+    for (let i = a + 1; i < b; i++) {
+      const d = Math.abs((bx - ax) * (ay - xy[i][1]) - (ax - xy[i][0]) * (by - ay)) / len;
+      if (d > worstD) {
+        worstD = d;
+        worst = i;
+      }
+    }
+    if (worst >= 0) {
+      keep[worst] = 1;
+      stack.push([a, worst], [worst, b]);
+    }
+  }
+  const out = ring.filter((_, i) => keep[i]);
+  return out.length >= 4 ? out : ring;
+}
+
 /**
  * Buildings the LiDAR sees on a lot, as outlines (lon/lat), so houses
  * OpenStreetMap doesn't have still come off the lawn. Patches under `minM2`
- * are dropped.
+ * are dropped. Outlines traced cell by cell come out as staircases; they're
+ * straightened to within half a cell, so walls are walls (and the lawn's edge
+ * length, which the mower fit counts, isn't inflated).
  */
 export function lidarBuildings(grid: TerrainGrid, lot: Polygon | MultiPolygon, minM2 = 15): (Polygon | MultiPolygon)[] {
   const mask = polygonMask(grid, [lot]);
   const on = new Uint8Array(mask.length);
   for (let i = 0; i < mask.length; i++) on[i] = mask[i] && grid.cover[i] === COVER.building ? 1 : 0;
   const minCells = minM2 / (grid.cellM * grid.cellM);
+  const straighten = (rings: Position[][]) => rings.map((ring) => simplifyRing(ring, grid.cellM * 0.75));
   return labelRegions(on, grid.width, grid.height)
     .regions.filter((cells) => cells.length >= minCells)
-    .map((cells) => regionGeometry(grid, cells));
+    .map((cells) => {
+      const g = regionGeometry(grid, cells);
+      return g.type === "Polygon"
+        ? { type: "Polygon", coordinates: straighten(g.coordinates) }
+        : { type: "MultiPolygon", coordinates: g.coordinates.map(straighten) };
+    });
 }
 
 /** Largest box /api/terrain reads (degrees per side): a whole golf course. */

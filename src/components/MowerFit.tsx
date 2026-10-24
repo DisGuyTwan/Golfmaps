@@ -5,7 +5,7 @@ import { UI, type Lang } from "@/lib/i18n";
 import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, type LawnMeasurement } from "@/lib/lawn";
 import { MOWERS_AS_OF, mowerName, recommend, type Fit, type Recommendation } from "@/lib/mowers";
 import { acresForQuote, lawnQuoteSqft, type AcreageMode, type QuoteSettings } from "@/lib/quote";
-import { useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
+import { useCharger, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
 import { complexity, golfSite, lawnSite, sodSite, type Complexity, type Level, type Reason, type Site } from "@/lib/site";
 import type { TerrainGrid } from "@/lib/terrain";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
@@ -18,25 +18,37 @@ export interface MowerFitResult {
   recommendation: Recommendation;
 }
 
-type FitInputs = [AcreageMode, LawnMeasurement | null, CourseMeasurement | null, SodMeasurement | null, QuoteSettings, TerrainGrid | null];
+type FitInputs = [
+  AcreageMode,
+  LawnMeasurement | null,
+  CourseMeasurement | null,
+  SodMeasurement | null,
+  QuoteSettings,
+  TerrainGrid | null,
+  [number, number] | null,
+];
 
 /** The last fit, so the panel, the PDF and the quote share one computation per change. */
 let last: { inputs: FitInputs; result: MowerFitResult | null } | null = null;
 
 function computeFit(...inputs: FitInputs): MowerFitResult | null {
   if (last && inputs.every((v, i) => v === last!.inputs[i])) return last.result;
-  const [mode, lawn, measurement, sod, q, terrain] = inputs;
+  const [mode, lawn, measurement, sod, q, terrain, placed] = inputs;
+  // The store keeps [lat, lon] like the map; sites work in GeoJSON's [lon, lat].
+  const charger: [number, number] | null = placed && [placed[1], placed[0]];
   let site: Site | null = null;
   if (mode === "lawn") {
     if (lawn) {
       const totals = lawnTotals(lawn);
       const sqft = lawnQuoteSqft(lawn, q) ?? totals.lawnSqft;
-      if (sqft > 0) site = lawnSite(totals.lawn, sqft / SQ_M_TO_SQ_FT, terrain);
+      // The robot drives around buildings and pools, from OSM or the LiDAR.
+      const blocked = [...(lawn.mapped ?? []).filter((a) => a.kind !== "paving"), ...(lawn.lidar ?? [])].map((a) => a.geometry);
+      if (sqft > 0) site = lawnSite(totals.lawn, lawn.lot, blocked, charger, sqft / SQ_M_TO_SQ_FT, terrain);
     }
   } else {
     const acres = acresForQuote(mode, measurement, sod, q);
-    if (acres && mode === "golf" && measurement) site = golfSite(measurement, q, acres, terrain);
-    if (acres && mode === "sod" && sod) site = sodSite(sod, acres, terrain);
+    if (acres && mode === "golf" && measurement) site = golfSite(measurement, q, acres, terrain, charger);
+    if (acres && mode === "sod" && sod) site = sodSite(sod, acres, terrain, charger);
   }
   const result = site ? { site, complexity: complexity(site), recommendation: recommend(site) } : null;
   last = { inputs, result };
@@ -55,7 +67,11 @@ export function useMowerFit(): MowerFitResult | null {
   const sod = useSod();
   const q = useQuoteSettings();
   const terrain = useTerrain();
-  return useMemo(() => computeFit(mode, lawn, measurement, sod, q, terrain), [mode, lawn, measurement, sod, q, terrain]);
+  const charger = useCharger();
+  return useMemo(
+    () => computeFit(mode, lawn, measurement, sod, q, terrain, charger),
+    [mode, lawn, measurement, sod, q, terrain, charger],
+  );
 }
 
 const LEVEL_TONE: Record<Level, string> = {
@@ -76,6 +92,12 @@ function useCopy(lang: Lang) {
         return t.fitReason.parts(r.value, kind);
       case "narrow":
         return t.fitReason.narrow(num(r.value / 0.3048, 1), num(r.value, 1));
+      case "shapes":
+        return t.fitReason.shapes(pct(r.value));
+      case "travel": {
+        const far = r.farM ?? 0;
+        return t.fitReason.travel(pct(r.value), kind === "lawn" ? `${num(far / 0.3048)} ft (${num(far)} m)` : `${num(far)} m`);
+      }
       case "steep":
         return t.fitReason.steep(pct(r.value));
       case "slope":
@@ -84,8 +106,6 @@ function useCopy(lang: Lang) {
         return t.fitReason.canopy(pct(r.value));
       case "obstacles":
         return t.fitReason.obstacles(r.value);
-      case "edges":
-        return t.fitReason.edges;
       case "noTerrain":
         return t.fitReason.noTerrain;
     }
@@ -103,6 +123,7 @@ function useCopy(lang: Lang) {
     if (m.avoidance && site.shape && site.shape.obstacles >= 3) out.push(t.fitWhy.avoidance);
     if (site.kind === "golf" && site.fairwayM2 > 0 && m.minCutMm <= 15) out.push(t.fitWhy.fairway);
     if (m.line === "voyager") out.push(t.fitWhy.fleet);
+    if (fit.work) out.push(t.fitHours(num(fit.work.hours / fit.units, fit.work.hours / fit.units < 10 ? 1 : 0), fit.units > 1));
     return out;
   };
 
@@ -144,7 +165,18 @@ function Pick({ label, fit, site, lang }: { label: string; fit: Fit; site: Site;
  * and why) and which Kress model fits it best, with the next best. Shown in
  * the results panel and, with `print`, in the PDF report.
  */
-export default function MowerFit({ lang, loading, print = false }: { lang: Lang; loading?: boolean; print?: boolean }) {
+export default function MowerFit({
+  lang,
+  loading,
+  print = false,
+  onMoveCharger,
+}: {
+  lang: Lang;
+  loading?: boolean;
+  print?: boolean;
+  /** Starts placing the charger on the map (the panel only). */
+  onMoveCharger?: () => void;
+}) {
   const fit = useMowerFit();
   const { t, reason, date } = useCopy(lang);
   if (!fit && !loading) return null;
@@ -203,6 +235,19 @@ export default function MowerFit({ lang, loading, print = false }: { lang: Lang;
               {mowerName(runnerUp.mower)}
               {worse.length > 0 && ` (${worse.map((n) => t.fitNote[n]).join(", ")})`}
             </p>
+          )}
+          {fit.site.charger && (
+            <div className="flex items-center justify-between gap-2 text-[11px] text-muted">
+              <span className="flex items-center gap-1">
+                <Icon name="zap" className="h-3 w-3 text-accent" />
+                {fit.site.chargerEstimated ? (fit.site.kind === "lawn" ? t.fitCharger.lawn : t.fitCharger.field) : t.fitCharger.placed}
+              </span>
+              {onMoveCharger && !print && (
+                <button type="button" onClick={onMoveCharger} className="shrink-0 font-semibold text-accent hover:underline print:hidden">
+                  {t.fitMoveCharger}
+                </button>
+              )}
+            </div>
           )}
           <p className="text-[10px] leading-snug text-faint">{t.fitSource(date)}</p>
         </>
