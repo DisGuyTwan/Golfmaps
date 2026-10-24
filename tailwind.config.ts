@@ -23,6 +23,7 @@ const config: Config = {
         shimmer: { from: { backgroundPosition: "200% 0" }, to: { backgroundPosition: "-200% 0" } },
         "spin-slow": { to: { transform: "rotate(360deg)" } },
         sheen: { from: { transform: "translateX(-100%)" }, to: { transform: "translateX(100%)" } },
+        scan: { from: { transform: "translateX(-100%)" }, to: { transform: "translateX(250%)" } },
       },
       animation: {
         "fade-up": "fade-up 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both",
@@ -33,6 +34,7 @@ const config: Config = {
         shimmer: "shimmer 2.2s linear infinite",
         "spin-slow": "spin-slow 1.1s linear infinite",
         sheen: "sheen 1.6s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both",
+        scan: "scan 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite",
       },
       // Semantic colors: each one swaps value between light and dark in
       // globals.css, so components need one class instead of a dark: twin.

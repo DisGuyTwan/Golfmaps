@@ -53,6 +53,8 @@ src/components/
                              measure, the photo / satellite count, sod
                              detection and tracing
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)
+  LiveSteps.tsx              the measurement loading live: each source being
+                             read, for how long, and what it found
   MeasurePanel.tsx           results panel + legend; "Select a property" until
                              something is measured, then the detected kind with
                              a Change switch (Golf course | Sod farm | Lawn)
@@ -88,6 +90,7 @@ src/lib/
                 trees, buildings, paving, water; cover inside an outline, pools
                 and paving on a lot (pure, tested)
   detect.ts     what a point is: house lot, sod farm or golf course (pure, tested)
+  live.ts       what's loading, source by source, for the live list and map (pure, tested)
   surface-server.ts  MRNF photo tiles (jpeg-js) + LiDAR cover for /api/surface (route only)
   parcel.ts     Quebec cadastre lot lookup and parsing (pure parts tested)
   types.ts      BBox, CourseMeasurement, SatelliteTurf, SodField, SodMeasurement
@@ -326,9 +329,19 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   the `ui.*` class strings (buttons, h2, label, input, card, note, kpi,
   container). Don't introduce new font sizes or button styles per tab.
 - **Motion has one vocabulary.** Tailwind animations in `tailwind.config.ts`
-  (`fade-up`, `fade-in`, `scale-in`, `tab-in`, `pop`, `sheen`, `spin-slow`);
-  `ui.enter` + `delay(n)` for staggered entrances, `<Pop value>` for numbers
-  that recalculate, `<Loader>` for loading states. Theme and language switches
+  (`fade-up`, `fade-in`, `scale-in`, `tab-in`, `pop`, `sheen`, `spin-slow`,
+  `scan`); `ui.enter` + `delay(n)` for staggered entrances, `<Pop value>` for
+  numbers that recalculate, `<Loader>` only for the map's first load.
+- **Measurements load live, never behind a spinner.** Every lookup is tracked
+  per run (`track(source, id, area)` in the calculator, `live.ts`): the cadastre
+  lot, the crop map, OpenStreetMap, the LiDAR, the aerial photos and the
+  satellite land cover. `LiveSteps` lists them in the panel (what each is
+  reading, its seconds, then what it found, `LiveFinding`) and lingers
+  `LIVE_LINGER_MS` after the last answer; the map sweeps each active source's
+  area (`live-scan`, sky blue `--live` in globals.css) and pulses the point
+  tapped while the property is found (`live-ping`). Results fill in as each
+  source answers (the lot outline first). A new lookup gets a `track` call
+  with its area; don't add spinners or "Loading…" notices. Theme and language switches
   use View Transitions in `preferences.ts` (circle reveal / cross-fade) with a
   fallback. `prefers-reduced-motion` shortens everything (globals.css) and
   print disables all animation, so PDFs never catch a half-faded frame.

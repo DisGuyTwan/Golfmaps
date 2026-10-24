@@ -17,7 +17,10 @@ course, a sod farm or a house lot) and measures it:
 
 In Quebec all three are measured by the same engine: the government's aerial
 photos (about 20 cm) read with the LiDAR, which sees grass, woods, buildings,
-paving and water. If the calculator guesses the wrong kind, **Change** picks
+paving and water. Everything loads live: the panel lists each source as it's
+read (the cadastre lot, the crop map, OpenStreetMap, the LiDAR, the aerial
+photos), how long it's taking and what it found, while the map sweeps the area
+each one is reading and the results fill in as they answer. If the calculator guesses the wrong kind, **Change** picks
 it by hand. Whatever it measures, **Mower fit** rates how hard the property is
 for a robot (slope, trees, separate areas, narrow passages, obstacles) and
 recommends the Kress model that fits it best.

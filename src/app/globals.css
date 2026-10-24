@@ -75,6 +75,73 @@ body {
   background: #aadaff;
 }
 
+/*
+ * Live loading on the map (GolfCourseCalculator `live` and `ping`): the area
+ * each source is reading is outlined and swept while it loads, and the point
+ * tapped pulses while the property there is found. A sky blue that reads on
+ * aerial imagery in either theme, apart from the turf greens and the course's
+ * yellow outline.
+ */
+:root {
+  --live: 125 211 252;
+}
+.live-scan-area {
+  fill: rgb(var(--live) / 0.1);
+  stroke: rgb(var(--live));
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+  vector-effect: non-scaling-stroke;
+  animation: live-march 0.9s linear infinite;
+}
+.live-scan-band {
+  transform-box: view-box;
+  animation: live-sweep 1.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.live-scan stop {
+  stop-color: rgb(var(--live));
+}
+@keyframes live-sweep {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(140px);
+  }
+}
+@keyframes live-march {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+.live-ping span {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgb(var(--live));
+  border-radius: 9999px;
+  animation: live-ring 1.5s ease-out infinite;
+}
+.live-ping span + span {
+  animation-delay: 0.5s;
+}
+.live-ping::after {
+  content: "";
+  position: absolute;
+  inset: 36%;
+  border-radius: 9999px;
+  background: rgb(var(--live));
+  box-shadow: 0 0 0 2px #fff;
+}
+@keyframes live-ring {
+  from {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
 /* Push the layer toggle below the floating top search bar. */
 .leaflet-top.leaflet-right .leaflet-control-layers {
   margin-top: 3.75rem;

@@ -10,6 +10,8 @@ import {
   Rectangle,
   CircleMarker,
   LayersControl,
+  Marker,
+  SVGOverlay,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -55,6 +57,33 @@ function styleFeature(feature?: Feature): L.PathOptions {
   return { ...base, interactive: false };
 }
 
+/** An area a source is reading right now, [[south, west], [north, east]]. */
+export interface LiveScan {
+  key: string;
+  bounds: [[number, number], [number, number]];
+}
+
+/** The pulsing rings at a tapped point (styles in globals.css). */
+const PING_ICON = L.divIcon({ className: "live-ping", html: "<span></span><span></span>", iconSize: [48, 48] });
+
+/** One area being read: outlined, faintly filled, with a band sweeping across it. */
+function ScanOverlay({ scan }: { scan: LiveScan }) {
+  const gradient = `live-scan-${scan.key}`;
+  return (
+    <SVGOverlay bounds={scan.bounds} attributes={{ viewBox: "0 0 100 100", preserveAspectRatio: "none", class: "live-scan" }} interactive={false}>
+      <defs>
+        <linearGradient id={gradient}>
+          <stop offset="0" stopOpacity="0" />
+          <stop offset="0.6" stopOpacity="0.45" />
+          <stop offset="1" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <rect className="live-scan-area" x="0" y="0" width="100" height="100" />
+      <rect className="live-scan-band" x="-40" y="0" width="40" height="100" fill={`url(#${gradient})`} />
+    </SVGOverlay>
+  );
+}
+
 /** A picture laid over the map, e.g. the satellite grass counted inside an outline. */
 export interface MapOverlay {
   url: string;
@@ -74,6 +103,10 @@ export interface GolfMapProps {
   scanBox: [number, number, number, number] | null;
   /** The robot's charger, [lat, lon] (placed or estimated), or null. */
   charger: [number, number] | null;
+  /** Areas being read right now, swept while they load (live loading). */
+  scans: LiveScan[];
+  /** The point tapped or searched, pulsing while the property there is found. */
+  ping: [number, number] | null;
   onMapClick: (latlng: [number, number]) => void;
   onMapReady: (map: L.Map) => void;
 }
@@ -147,6 +180,8 @@ export default function GolfMap({
   overlay,
   scanBox,
   charger,
+  scans,
+  ping,
   onMapClick,
   onMapReady,
 }: GolfMapProps) {
@@ -248,6 +283,12 @@ export default function GolfMap({
           ))}
         </>
       )}
+
+      {scans.map((scan) => (
+        <ScanOverlay key={scan.key} scan={scan} />
+      ))}
+
+      {ping && <Marker position={ping} icon={PING_ICON} interactive={false} keyboard={false} />}
 
       {charger && (
         <CircleMarker

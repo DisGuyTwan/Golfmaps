@@ -40,16 +40,44 @@ const en = {
   selectProperty: "Select a property",
   traceProperty: "Trace the property",
   tapProperty: "Tap the property to measure",
-  detecting: "Finding the property…",
   anyHint: "Tap a property on the map, or search it: the calculator tells a house lot, a sod farm and a golf course apart.",
   kindDetected: (kind: string) => `Detected: ${kind}`,
   kindChosen: (kind: string) => `Measured as: ${kind}`,
   changeKind: "Change",
+  live: {
+    title: "Reading live",
+    ready: "Read",
+    sources: { lot: "Cadastre lot", crop: "Crop map", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Aerial photos", satellite: "Satellite land cover" },
+    reading: {
+      lot: "Finding the lot under the point",
+      crop: "Looking for sod fields",
+      osm: "Buildings, paving and golf courses",
+      lidar: "Slope, trees and roofs",
+      photos: "Grass, trees, paving and water",
+      satellite: "Grass, trees, built and water",
+    },
+    failed: "Unavailable",
+    seconds: (s: string) => `${s} s`,
+    lot: (lot: string | null) => (lot ? `Lot ${lot}` : "Lot found"),
+    noLot: "No lot here",
+    sod: (pct: number) => (pct > 0 ? `${pct}% sod around` : "No sod around"),
+    course: (name: string | null) => name ?? "No golf course here",
+    golf: (fairways: number, outlineOnly: boolean) =>
+      outlineOnly ? "Course outline only" : fairways === 1 ? "1 fairway mapped" : `${fairways} fairways mapped`,
+    mapped: (n: number) => (n === 0 ? "Nothing mapped on the lot" : n === 1 ? "1 building or surface" : `${n} buildings and surfaces`),
+    fields: (n: number) => (n === 0 ? "No sod fields" : n === 1 ? "1 field" : `${n} fields`),
+    surfaces: (pools: number, paved: number) =>
+      pools + paved === 0
+        ? "No pool or paving seen"
+        : [pools ? (pools === 1 ? "1 pool" : `${pools} pools`) : "", paved ? (paved === 1 ? "1 paved area" : `${paved} paved areas`) : ""].filter(Boolean).join(", "),
+    grass: (acres: string) => `${acres} ac of grass`,
+    read: "Read",
+    none: "No data here",
+  },
   clear: "Clear",
   tapFirst: "Tap one corner of the area to scan",
   tapSecond: "Tap the opposite corner of the scan area",
   cancel: "Cancel",
-  measuring: "Measuring…",
   measure: "Measure course in view",
   selectArea: "Select area",
   notFound:
@@ -71,7 +99,6 @@ const en = {
   satTotal: "Estimated turf",
   satSeen: "Grass seen",
   satRange: (low: string, high: string) => `Likely between ${low} and ${high} ac`,
-  satLoading: "Counting the grass inside the outline…",
   satError: "Couldn’t load satellite land cover. Try measuring again, or enter the mowed acreage by hand.",
   satTooLarge: "This outline is too large for the satellite count. Enter the mowed acreage by hand.",
   satNote: (s: { source: "photos" | "worldcover"; year: number | null }) =>
@@ -109,7 +136,6 @@ const en = {
   drivewayWidth: (cars: number, ft: number) => `${cars} car${cars > 1 ? "s" : ""} · ${ft} ft`,
   sqftUnit: "sq ft",
   lawnPaved: "Paving",
-  lawnLoading: "Finding the lot and its buildings…",
   lawnLot: "Lot",
   lawnBuilt: "Buildings",
   lawnTracedOut: "Traced out",
@@ -203,7 +229,6 @@ const en = {
   // Mower fit (site.ts, mowers.ts)
   fitTitle: "Mower fit",
   fitLevel: { simple: "Simple", moderate: "Moderate", complex: "Complex" },
-  fitLoading: "Reading slope and trees from the LiDAR…",
   fitClear: "Open, flat and clear: easy for a robot.",
   fitReason: {
     parts: (n: number, kind: "lawn" | "golf" | "sod") =>
@@ -265,7 +290,6 @@ const en = {
     `Includes ${[pools ? (pools === 1 ? "1 pool" : `${pools} pools`) : "", paved ? (paved === 1 ? "1 paved area" : `${paved} paved areas`) : ""].filter(Boolean).join(" and ")} seen in Quebec’s aerial photos (driveways, patios, decks), which may be a few years old.`,
   lawnPhotosHint: "Tap one that’s really lawn to keep it.",
   lawnPhotosKept: (n: number) => (n === 1 ? "1 area from the photos kept as lawn: tap it again to take it out." : `${n} areas from the photos kept as lawn: tap one again to take it out.`),
-  lawnPhotosLoading: "Looking for pools and paving in the aerial photos…",
   attributionLidar: "LiDAR © NRCan (HRDEM)",
   attributionPhotos: "Aerial photos © Gouvernement du Québec (MRNF), CC BY 4.0",
 
@@ -303,16 +327,44 @@ const fr: UiStrings = {
   selectProperty: "Choisir une propriété",
   traceProperty: "Tracer la propriété",
   tapProperty: "Touchez la propriété à mesurer",
-  detecting: "Recherche de la propriété…",
   anyHint: "Touchez une propriété sur la carte, ou cherchez-la : le calculateur distingue un terrain résidentiel, une gazonnière et un terrain de golf.",
   kindDetected: (kind: string) => `Détecté : ${kind}`,
   kindChosen: (kind: string) => `Mesuré comme : ${kind}`,
   changeKind: "Changer",
+  live: {
+    title: "Lecture en direct",
+    ready: "Lu",
+    sources: { lot: "Lot du cadastre", crop: "Carte des cultures", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Photos aériennes", satellite: "Couverture du sol par satellite" },
+    reading: {
+      lot: "Recherche du lot au point touché",
+      crop: "Recherche de champs de gazon",
+      osm: "Bâtiments, pavé et terrains de golf",
+      lidar: "Pente, arbres et toits",
+      photos: "Gazon, arbres, pavé et eau",
+      satellite: "Gazon, arbres, bâti et eau",
+    },
+    failed: "Indisponible",
+    seconds: (s: string) => `${s.replace(".", ",")} s`,
+    lot: (lot: string | null) => (lot ? `Lot ${lot}` : "Lot trouvé"),
+    noLot: "Aucun lot ici",
+    sod: (pct: number) => (pct > 0 ? `${pct} % de gazon autour` : "Pas de gazon autour"),
+    course: (name: string | null) => name ?? "Aucun terrain de golf ici",
+    golf: (fairways: number, outlineOnly: boolean) =>
+      outlineOnly ? "Contour du terrain seulement" : fairways <= 1 ? `${fairways} allée cartographiée` : `${fairways} allées cartographiées`,
+    mapped: (n: number) => (n === 0 ? "Rien de cartographié sur le terrain" : n === 1 ? "1 bâtiment ou surface" : `${n} bâtiments et surfaces`),
+    fields: (n: number) => (n === 0 ? "Aucun champ de gazon" : n === 1 ? "1 champ" : `${n} champs`),
+    surfaces: (pools: number, paved: number) =>
+      pools + paved === 0
+        ? "Aucune piscine ni surface pavée"
+        : [pools ? (pools === 1 ? "1 piscine" : `${pools} piscines`) : "", paved ? (paved === 1 ? "1 surface pavée" : `${paved} surfaces pavées`) : ""].filter(Boolean).join(", "),
+    grass: (acres: string) => `${acres} ac de gazon`,
+    read: "Lu",
+    none: "Aucune donnée ici",
+  },
   clear: "Effacer",
   tapFirst: "Touchez un coin de la zone à analyser",
   tapSecond: "Touchez le coin opposé de la zone à analyser",
   cancel: "Annuler",
-  measuring: "Mesure en cours…",
   measure: "Mesurer le terrain affiché",
   selectArea: "Choisir une zone",
   notFound:
@@ -334,7 +386,6 @@ const fr: UiStrings = {
   satTotal: "Gazon entretenu estimé",
   satSeen: "Gazon vu",
   satRange: (low: string, high: string) => `Probablement entre ${low} et ${high} ac`,
-  satLoading: "Comptage du gazon dans le contour…",
   satError:
     "Impossible de charger la couverture du sol par satellite. Mesurez de nouveau, ou entrez la superficie tondue à la main.",
   satTooLarge: "Ce contour est trop grand pour le comptage par satellite. Entrez la superficie tondue à la main.",
@@ -373,7 +424,6 @@ const fr: UiStrings = {
   drivewayWidth: (cars: number, ft: number) => `${cars} auto${cars > 1 ? "s" : ""} · ${ft} pi`,
   sqftUnit: "pi²",
   lawnPaved: "Pavé",
-  lawnLoading: "Recherche du terrain et de ses bâtiments…",
   lawnLot: "Terrain",
   lawnBuilt: "Bâtiments",
   lawnTracedOut: "Retiré",
@@ -472,7 +522,6 @@ const fr: UiStrings = {
   // Choix du robot (site.ts, mowers.ts)
   fitTitle: "Choix du robot",
   fitLevel: { simple: "Simple", moderate: "Modéré", complex: "Complexe" },
-  fitLoading: "Lecture de la pente et des arbres (LiDAR)…",
   fitClear: "Dégagé, plat et ouvert : facile pour un robot.",
   fitReason: {
     parts: (n: number, kind: "lawn" | "golf" | "sod") =>
@@ -534,7 +583,6 @@ const fr: UiStrings = {
     `Comprend ${[pools ? (pools === 1 ? "1 piscine" : `${pools} piscines`) : "", paved ? (paved === 1 ? "1 surface pavée" : `${paved} surfaces pavées`) : ""].filter(Boolean).join(" et ")} ${pools + paved === 1 ? "vue" : "vues"} sur les photos aériennes du Québec (entrées, patios, terrasses), qui peuvent dater de quelques années.`,
   lawnPhotosHint: "Touchez une zone qui est en fait de la pelouse pour la garder.",
   lawnPhotosKept: (n: number) => (n === 1 ? "1 zone des photos gardée comme pelouse : touchez-la de nouveau pour la retirer." : `${n} zones des photos gardées comme pelouse : touchez-en une de nouveau pour la retirer.`),
-  lawnPhotosLoading: "Recherche des piscines et surfaces pavées sur les photos aériennes…",
   attributionLidar: "LiDAR © RNCan (MNEHR)",
   attributionPhotos: "Photos aériennes © Gouvernement du Québec (MRNF), CC BY 4.0",
 

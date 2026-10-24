@@ -200,7 +200,8 @@ export default function MowerFit({
   if (!fit && !loading) return null;
 
   const scored = fit?.complexity.reasons.filter((r) => r.points > 0) ?? [];
-  const unscored = fit?.complexity.reasons.filter((r) => r.points === 0) ?? [];
+  // While the LiDAR loads (the panel's live list shows it), "no LiDAR here" isn't known yet.
+  const unscored = fit?.complexity.reasons.filter((r) => r.points === 0 && !(loading && r.key === "noTerrain")) ?? [];
   const rec = fit?.recommendation;
   const runnerUp = rec?.runnerUp;
   // What the next best does worse than the pick (shared caveats are on the pick).
@@ -226,7 +227,6 @@ export default function MowerFit({
         )}
       </div>
 
-      {loading && !print && <Notice tone="info">{t.fitLoading}</Notice>}
 
       {fit && (
         <>

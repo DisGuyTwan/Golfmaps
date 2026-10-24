@@ -42,7 +42,8 @@ import {
 import { fetchParcel, inQuebec } from "@/lib/parcel";
 import { HOUSE_LOT_M2, SOD_FARM_M, SOD_LOOK_M, SOD_SHARE, golfCourseAt, propertyKind, settledByLot, sodShareAround, sodShareInside, type GolfCourse } from "@/lib/detect";
 import { fetchSurface, fitsSurface, photoTurf, surfaceAreas, surfaceCover, surfaceOverlay, type SurfaceGrid } from "@/lib/surface";
-import { TERRAIN_MAX_SPAN_DEG, fetchTerrain, lidarBuildings, terrainStats, type TerrainGrid } from "@/lib/terrain";
+import { NO_SLOPE, TERRAIN_MAX_SPAN_DEG, fetchTerrain, lidarBuildings, terrainStats, type TerrainGrid } from "@/lib/terrain";
+import { beginStep, endStep, type LiveFinding, type LiveSource, type LiveStep } from "@/lib/live";
 import { encodeQuote, type AcreageMode } from "@/lib/quote";
 import {
   getLawn,
@@ -65,7 +66,7 @@ import { reportError } from "@/lib/report-error";
 import { buildShareUrl, decodePolyline, encodePolyline, encodeView } from "@/lib/share";
 import { useLang } from "@/lib/preferences";
 import type { BBox, CourseMeasurement } from "@/lib/types";
-import type { MapOverlay } from "./GolfMap";
+import type { LiveScan, MapOverlay } from "./GolfMap";
 import MeasurePanel from "./MeasurePanel";
 import { useMowerFit } from "./MowerFit";
 import SearchBox, { type PlaceResult } from "./SearchBox";
@@ -217,7 +218,6 @@ export default function GolfCourseCalculator() {
   const [result, setResult] = useState<CourseMeasurement | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<MeasureError | null>(null);
-  const [satLoading, setSatLoading] = useState(false);
   const [satError, setSatError] = useState<SatelliteError | null>(null);
   const [overlay, setOverlay] = useState<MapOverlay | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -231,6 +231,10 @@ export default function GolfCourseCalculator() {
   const [picking, setPicking] = useState<PickKind | null>(null);
   /** The rep picked the kind of property by hand (Change), so the panel shows that kind's tools before any result. */
   const [chosen, setChosen] = useState(false);
+  /** What's being read right now, source by source (live.ts): listed in the panel, swept on the map. */
+  const [live, setLive] = useState<LiveStep[]>([]);
+  /** The point tapped or searched, pulsing on the map while the property there is found. */
+  const [ping, setPing] = useState<[number, number] | null>(null);
   /** Width of the driveway being traced, in feet (one car by default). */
   const [driveWidthFt, setDriveWidthFt] = useState<number>(DRIVEWAY_WIDTHS_FT[0]);
   /** The LiDAR terrain (slope, trees, buildings) for the mower fit is loading. */
@@ -248,15 +252,30 @@ export default function GolfCourseCalculator() {
   const courseName = useCourseName();
   const quoteSettings = useQuoteSettings();
 
-  const startRun = useCallback(() => {
+  /** A new measurement; `keepLive` carries on the live list (detection handing over to the measurement). */
+  const startRun = useCallback((keepLive = false) => {
     runId.current += 1;
+    if (!keepLive) {
+      setLive([]);
+      setPing(null);
+    }
     setOverlay(null);
     setSatError(null);
-    setSatLoading(false);
     setTerrain(null);
     setTerrainLoading(false);
     setCharger(null);
     return runId.current;
+  }, []);
+
+  /**
+   * Marks a source as being read for run `id` (over `area`, swept on the map)
+   * and returns how to mark it answered. A newer run ignores both.
+   */
+  const track = useCallback((source: LiveSource, id: number, area: BBox | null = null) => {
+    if (id === runId.current) setLive((steps) => beginStep(steps, source, area, Date.now()));
+    return (state: "done" | "failed", found: LiveFinding | null = null) => {
+      if (id === runId.current) setLive((steps) => endStep(steps, source, state, found, Date.now()));
+    };
   }, []);
 
   /**
@@ -266,18 +285,21 @@ export default function GolfCourseCalculator() {
   const loadTerrain = useCallback(async (box: BBox | null, id: number, pending?: Promise<TerrainGrid>) => {
     if (!box || box.north - box.south > TERRAIN_MAX_SPAN_DEG || box.east - box.west > TERRAIN_MAX_SPAN_DEG) return null;
     setTerrainLoading(true);
+    const done = track("lidar", id, box);
     try {
       const grid = await (pending ?? fetchTerrain(box));
       if (id !== runId.current) return null;
       setTerrain(grid);
+      done("done", grid.slope.some((v) => v !== NO_SLOPE) ? { kind: "read" } : { kind: "none" });
       return grid;
     } catch (err) {
       if (id === runId.current) reportError("terrain", err);
+      done("failed");
       return null;
     } finally {
       if (id === runId.current) setTerrainLoading(false);
     }
-  }, []);
+  }, [track]);
 
   /**
    * The terrain under a lot, and the buildings on it the LiDAR sees (houses
@@ -310,14 +332,19 @@ export default function GolfCourseCalculator() {
       if (current && id === runId.current) setLawn({ ...current, imagery });
     };
     if (!fitsSurface(box) || !inQuebec((box.south + box.north) / 2, (box.west + box.east) / 2)) return update(null);
+    const done = track("photos", id, box);
     try {
       const grid = await fetchSurface(box);
-      update(grid ? surfaceAreas(grid, lot) : null);
+      const areas = grid ? surfaceAreas(grid, lot) : null;
+      const count = (kind: LawnArea["kind"]) => areas?.filter((a) => a.kind === kind).length ?? 0;
+      done("done", areas ? { kind: "surfaces", pools: count("pool"), paved: count("paving") } : { kind: "none" });
+      update(areas);
     } catch (err) {
       if (id === runId.current) reportError("lawn:surface", err);
+      done("failed");
       update(null);
     }
-  }, []);
+  }, [track]);
 
   /**
    * Counts the grass inside a course's outline (no turf mapped, or traced):
@@ -331,22 +358,26 @@ export default function GolfCourseCalculator() {
       setSatError("tooLarge");
       return;
     }
-    setSatLoading(true);
+    let doneSatellite: ReturnType<typeof track> | null = null;
     try {
       if (photosCover(box)) {
+        const donePhotos = track("photos", id, box);
         try {
           const photos = await fetchSurface(box);
           if (id !== runId.current) return;
           const seen = photos && surfaceCover(photos, outline);
           if (photos && seen && seen.cover.totalM2 > 0 && 1 - seen.cover.unknownM2 / seen.cover.totalM2 >= MIN_PHOTO_COVERAGE) {
             const next = { ...m, satellite: photoTurf(seen.cover) };
+            donePhotos("done", { kind: "grass", acres: next.satellite.grassAcres });
             setResult(next);
             setMeasurement(next);
             setOverlay(photoOverlay(photos, seen.inside, seen.woods));
             return;
           }
+          donePhotos("done", { kind: "none" });
         } catch (err) {
           if (id !== runId.current) return;
+          donePhotos("failed");
           reportError("surface:golf", err);
         }
         if (!fitsSource(box, "worldcover")) {
@@ -354,20 +385,21 @@ export default function GolfCourseCalculator() {
           return;
         }
       }
+      doneSatellite = track("satellite", id, box);
       const grid = await fetchLandGrid("worldcover", box);
       if (id !== runId.current) return;
       const next = { ...m, satellite: satelliteTurf(grid, outline) };
+      doneSatellite("done", { kind: "grass", acres: next.satellite.grassAcres });
       setResult(next);
       setMeasurement(next);
       setOverlay(grassOverlay(grid, outline));
     } catch (err) {
       if (id !== runId.current) return;
+      doneSatellite?.("failed");
       setSatError("failed");
       reportError("landcover:worldcover", err);
-    } finally {
-      if (id === runId.current) setSatLoading(false);
     }
-  }, []);
+  }, [track]);
 
   const showOutline = useCallback(
     (m: CourseMeasurement) => {
@@ -382,17 +414,23 @@ export default function GolfCourseCalculator() {
   );
 
   const runMeasure = useCallback(
-    async (bboxOverride?: BBox) => {
+    async (bboxOverride?: BBox, keepLive = false) => {
       const map = mapRef.current;
       if (!map && !bboxOverride) return;
-      const id = startRun();
+      const id = startRun(keepLive);
       setLoading(true);
       setError(null);
+      const box = bboxOverride ?? viewBBox(map!);
+      const done = track("osm", id, box);
 
       try {
-        const overpassJson = await fetchFairways(bboxOverride ?? viewBBox(map!));
+        const overpassJson = await fetchFairways(box);
         if (id !== runId.current) return;
         const measurement = processOverpassData(overpassJson);
+        done(
+          "done",
+          measurement.found ? { kind: "golf", fairways: measurement.fairway.count, outlineOnly: measurement.boundaryOnly } : { kind: "course", name: null },
+        );
         setResult(measurement);
         setMeasurement(measurement);
         if (measurement.boundaryOnly) void countSatellite(measurement, id);
@@ -400,13 +438,14 @@ export default function GolfCourseCalculator() {
       } catch (err) {
         if (id !== runId.current) return;
         const measureError = toMeasureError(err);
+        done("failed");
         setError(measureError);
         reportError(`measure:${measureError.kind}${measureError.status ? `:${measureError.status}` : ""}`, err);
       } finally {
         if (id === runId.current) setLoading(false);
       }
     },
-    [startRun, countSatellite, loadTerrain],
+    [startRun, track, countSatellite, loadTerrain],
   );
 
   /**
@@ -419,36 +458,40 @@ export default function GolfCourseCalculator() {
     const fields = (getSod()?.fields ?? []).filter((f) => !f.traced);
     const box = geometryBBox(fields.map((f) => f.geometry), 0.0003);
     if (!box || !photosCover(box)) return;
+    const done = track("photos", id, box);
     try {
       const photos = await fetchSurface(box);
       const current = getSod();
-      if (!photos || !current || id !== runId.current) return;
+      if (!photos || !current || id !== runId.current) return done("done", { kind: "none" });
       const acres = new Map<string, number>();
       for (const f of current.fields) {
         if (f.traced) continue;
         const { cover } = surfaceCover(photos, [f.geometry]);
         if (cover.totalM2 > 0 && cover.unknownM2 / cover.totalM2 <= 1 - MIN_PHOTO_COVERAGE) acres.set(f.id, cover.grassM2 * SQ_METERS_TO_ACRES);
       }
+      done("done", acres.size ? { kind: "fields", n: acres.size } : { kind: "none" });
       if (!acres.size) return;
       setSod({ ...current, photos: true, fields: current.fields.map((f) => (acres.has(f.id) ? { ...f, acres: acres.get(f.id)! } : f)) });
     } catch (err) {
       if (id === runId.current) reportError("surface:sod", err);
+      done("failed");
     }
-  }, []);
+  }, [track]);
 
   /** Finds the sod fields in view (or in the scan box) on the crop map; traced fields are kept. */
   const runSod = useCallback(
-    async (bboxOverride?: BBox) => {
+    async (bboxOverride?: BBox, keepLive = false) => {
       const map = mapRef.current;
       if (!map && !bboxOverride) return;
       const bbox = bboxOverride ?? viewBBox(map!);
-      const id = startRun();
+      const id = startRun(keepLive);
       setError(null);
       if (!fitsSource(bbox, "aci")) {
         setError({ kind: "sodTooLarge" });
         return;
       }
       setLoading(true);
+      const done = track("crop", id, bbox);
 
       try {
         const grid = await fetchLandGrid("aci", bbox);
@@ -459,19 +502,21 @@ export default function GolfCourseCalculator() {
           excluded.some(([lat, lon]) => pointInGeometry(lon, lat, f.geometry)) ? { ...f, included: false } : f,
         );
         const traced = (getSod()?.fields ?? []).filter((f) => f.traced);
+        done("done", { kind: "fields", n: detected.length });
         setSod({ fields: [...detected, ...traced], year: grid.year });
         void loadTerrain(geometryBBox([...detected, ...traced].map((f) => f.geometry)), id);
         void measureSodOnPhotos(id);
       } catch (err) {
         if (id !== runId.current) return;
         const kind = err instanceof LandcoverHttpError && err.status === 400 ? "sodTooLarge" : "sodUnreachable";
+        done("failed");
         setError({ kind });
         reportError(`sod:${kind}`, err);
       } finally {
         if (id === runId.current) setLoading(false);
       }
     },
-    [startRun, loadTerrain, measureSodOnPhotos],
+    [startRun, track, loadTerrain, measureSodOnPhotos],
   );
 
   /**
@@ -482,16 +527,20 @@ export default function GolfCourseCalculator() {
     setLawn(next);
     void loadLotTerrain(next.lot, id, terrain);
     void loadLotSurface(next.lot, id);
+    const done = track("osm", id, lotBBox(next.lot));
     try {
       const json = await (nearby ?? fetchFairways(lotBBox(next.lot), "lawn"));
       if (id !== runId.current) return;
-      setLawn({ ...(getLawn() ?? next), mapped: mappedOnLot(json, next.lot), mappedFailed: false });
+      const mapped = mappedOnLot(json, next.lot);
+      done("done", { kind: "mapped", n: mapped.length });
+      setLawn({ ...(getLawn() ?? next), mapped, mappedFailed: false });
     } catch (err) {
       if (id !== runId.current) return;
+      done("failed");
       setLawn({ ...(getLawn() ?? next), mapped: [], mappedFailed: true });
       reportError("lawn:buildings", err);
     }
-  }, [loadLotTerrain, loadLotSurface]);
+  }, [track, loadLotTerrain, loadLotSurface]);
 
   /** The lawn on the cadastre lot at a point: a searched address, a tap or a share link. */
   const runLawn = useCallback(
@@ -502,9 +551,17 @@ export default function GolfCourseCalculator() {
       setLawn(null);
       // Buildings and paving around the point, looked up while the lot loads.
       const { around, nearby, terrain, parcel: lookup } = started?.looks ?? lookAround(lat, lon);
+      // Picked as a lot: the point pulses while the cadastre answers (a detection already did that).
+      const doneLot = started ? null : track("lot", id);
+      if (!started) {
+        setPing([lat, lon]);
+        track("osm", id, around); // Under way already; showLawn ends it.
+      }
       try {
         const parcel = await lookup;
         if (id !== runId.current) return;
+        doneLot?.("done", parcel ? { kind: "lot", lot: parcel.lot } : { kind: "none" });
+        setPing(null);
         if (!parcel) {
           setError({ kind: "noLot" });
           return;
@@ -524,13 +581,15 @@ export default function GolfCourseCalculator() {
         await showLawn(next, id, (inBox && nearby) || undefined, (inBox && terrain) || undefined);
       } catch (err) {
         if (id !== runId.current) return;
+        doneLot?.("failed");
+        setPing(null);
         setError({ kind: "lotUnreachable" });
         reportError("lawn:lot", err);
       } finally {
         if (id === runId.current) setLoading(false);
       }
     },
-    [startRun, showLawn],
+    [startRun, track, showLawn],
   );
 
   /** The lawn on a lot traced by hand (no cadastre here, e.g. Ontario). */
@@ -561,38 +620,64 @@ export default function GolfCourseCalculator() {
       setChosen(false);
       setLoading(true);
       setError(null);
+      setPing([lat, lon]);
       const looks = lookAround(lat, lon);
-      const sodShare = fetchLandGrid("aci", aroundPoint(lat, lon, SOD_LOOK_M)).then(
-        (grid) => sodShareAround(grid, lat, lon, SOD_LOOK_M),
-        () => 0,
+      const doneLot = track("lot", id);
+      // The OpenStreetMap lookup starts now; the golf check or the lawn (showLawn) ends it.
+      const doneOsm = track("osm", id, looks.around);
+      const cropBox = aroundPoint(lat, lon, SOD_LOOK_M);
+      const doneCrop = track("crop", id, cropBox);
+      const sodShare = fetchLandGrid("aci", cropBox).then(
+        (grid) => {
+          const share = sodShareAround(grid, lat, lon, SOD_LOOK_M);
+          doneCrop("done", { kind: "sod", share });
+          return share;
+        },
+        () => {
+          doneCrop("failed");
+          return 0;
+        },
       );
-      const lot = await looks.parcel.catch(() => null);
+      const lot = await looks.parcel.catch(() => {
+        doneLot("failed");
+        return null;
+      });
       if (id !== runId.current) return;
+      doneLot("done", lot ? { kind: "lot", lot: lot.lot } : { kind: "none" });
       const lotM2 = lot ? area({ type: "Feature", geometry: lot.geometry, properties: {} }) : null;
       let kind: AcreageMode = "lawn";
       let course: GolfCourse | null = null;
       if (!settledByLot(lotM2)) {
         const sod = await sodShare;
         if (id !== runId.current) return;
-        if (sod < SOD_SHARE) course = await looks.nearby.then((json) => golfCourseAt(json, lat, lon), () => null);
+        if (sod < SOD_SHARE) {
+          course = await looks.nearby.then(
+            (json) => golfCourseAt(json, lat, lon),
+            () => null,
+          );
+          doneOsm("done", { kind: "course", name: course?.name ?? null });
+        }
         if (id !== runId.current) return;
         kind = propertyKind({ lotM2, sodShare: sod, inGolfCourse: course !== null });
       }
+      // A sod farm doesn't need it.
+      if (kind === "sod") doneOsm("done", { kind: "read" });
+      setPing(null);
       setMode(kind);
       setCourseName(name ?? course?.name ?? null);
       const map = mapRef.current;
       if (kind === "golf" && course) {
         if (map) fitAbovePanel(map, course.geometry);
-        void runMeasure(geometryBBox([course.geometry], 0.001) ?? aroundPoint(lat, lon));
+        void runMeasure(geometryBBox([course.geometry], 0.001) ?? aroundPoint(lat, lon), true);
       } else if (kind === "sod") {
         const farm = aroundPoint(lat, lon, SOD_FARM_M);
         if (map) fitAbovePanel(map, boxPolygon(farm));
-        void runSod(farm);
+        void runSod(farm, true);
       } else {
         await runLawn(lat, lon, [], [], { id, looks });
       }
     },
-    [startRun, runMeasure, runSod, runLawn],
+    [startRun, track, runMeasure, runSod, runLawn],
   );
 
   /**
@@ -611,7 +696,11 @@ export default function GolfCourseCalculator() {
         return;
       }
       const box = geometryBBox([outline], 0);
+      const id = startRun();
+      const done = track("crop", id, box);
       const sod = box && fitsSource(box, "aci") ? await fetchLandGrid("aci", box).then((g) => sodShareInside(g, outline), () => 0) : 0;
+      if (id !== runId.current) return;
+      done("done", { kind: "sod", share: sod });
       if (sod >= SOD_SHARE) {
         setMode("sod");
         startRun();
@@ -622,7 +711,7 @@ export default function GolfCourseCalculator() {
       setMode("golf");
       showOutline(tracedOutlineMeasurement(outline));
     },
-    [showTracedLot, startRun, loadTerrain, showOutline],
+    [showTracedLot, startRun, track, loadTerrain, showOutline],
   );
 
   const measure = mode === "sod" ? runSod : runMeasure;
@@ -961,6 +1050,15 @@ export default function GolfCourseCalculator() {
 
   const totals = useMemo(() => (lawn ? lawnTotals(lawn) : null), [lawn]);
 
+  // The areas being read right now, swept on the map.
+  const scans = useMemo<LiveScan[]>(
+    () =>
+      live
+        .filter((s) => s.state === "active" && s.area)
+        .map((s) => ({ key: s.source, bounds: [[s.area!.south, s.area!.west], [s.area!.north, s.area!.east]] })),
+    [live],
+  );
+
   const mapGeojson = useMemo<FeatureCollection | null>(() => {
     if (mode === "golf") return result?.geojson ?? null;
     if (mode === "lawn") {
@@ -1012,6 +1110,8 @@ export default function GolfCourseCalculator() {
         tracePoints={tracing ? tracePoints : null}
         overlay={mode === "golf" ? overlay : null}
         scanBox={scanBox}
+        scans={scans}
+        ping={ping}
         onMapClick={handleMapClick}
         onMapReady={handleMapReady}
       />
@@ -1042,7 +1142,7 @@ export default function GolfCourseCalculator() {
         onCancelPick={() => setPicking(null)}
         loading={loading}
         error={error}
-        satLoading={satLoading}
+        live={live}
         satError={satError}
         terrainLoading={terrainLoading}
         placingCharger={placingCharger}

@@ -9,6 +9,8 @@ import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { useState } from "react";
 import type { MeasureError, PickKind, SatelliteError, TraceKind } from "./GolfCourseCalculator";
 import { useTerrain } from "@/lib/quote-store";
+import type { LiveStep } from "@/lib/live";
+import LiveSteps from "./LiveSteps";
 import MowerFit from "./MowerFit";
 import QuoteSection from "./QuoteSection";
 import { Icon } from "./icons";
@@ -23,7 +25,8 @@ interface MeasurePanelProps {
   lawnTotals: LawnTotals | null;
   loading: boolean;
   error: MeasureError | null;
-  satLoading: boolean;
+  /** What's being read right now, source by source (live.ts). */
+  live: LiveStep[];
   /** The LiDAR terrain for the mower fit is loading. */
   terrainLoading: boolean;
   /** The next tap places the robot's charger. */
@@ -97,7 +100,7 @@ export default function MeasurePanel({
   lawnTotals,
   loading,
   error,
-  satLoading,
+  live,
   terrainLoading,
   placingCharger,
   onMoveCharger,
@@ -295,12 +298,8 @@ export default function MeasurePanel({
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
               <button onClick={() => onStartPick("property")} disabled={loading} className={`${ui.btnPrimary} grow basis-48`}>
-                {loading ? (
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                ) : (
-                  <Icon name="pin" />
-                )}
-                {loading ? t.detecting : t.selectProperty}
+                <Icon name="pin" />
+                {t.selectProperty}
               </button>
               <button onClick={() => onStartTrace("property")} disabled={loading} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
                 <Icon name="pen" />
@@ -313,12 +312,8 @@ export default function MeasurePanel({
           <div className="flex flex-wrap gap-2">
             {/* Detected as a lawn, the next tap still detects (a course, a farm); picked by hand, it stays a lot. */}
             <button onClick={() => onStartPick(chosen ? "lot" : "property")} disabled={loading} className={`${ui.btnPrimary} grow basis-48`}>
-              {loading ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              ) : (
-                <Icon name="home" />
-              )}
-              {loading ? t.measuring : chosen ? t.selectLot : t.selectProperty}
+              <Icon name="home" />
+              {chosen ? t.selectLot : t.selectProperty}
             </button>
             <button onClick={() => onStartTrace("lot")} disabled={loading} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
               <Icon name="pen" />
@@ -345,12 +340,8 @@ export default function MeasurePanel({
               disabled={loading}
               className={`${ui.btnPrimary} grow basis-48`}
             >
-              {loading ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              ) : (
-                <Icon name={mode === "sod" ? "sprout" : "ruler"} />
-              )}
-              {loading ? t.measuring : mode === "sod" ? t.findSod : t.measure}
+              <Icon name={mode === "sod" ? "sprout" : "ruler"} />
+              {mode === "sod" ? t.findSod : t.measure}
             </button>
             <button
               onClick={onStartSelect}
@@ -373,6 +364,9 @@ export default function MeasurePanel({
           </div>
         )}
 
+        {/* What's loading, live: each source as it's read and what it found (the map sweeps the same areas). */}
+        <LiveSteps lang={lang} steps={live} />
+
         {errorText && (
           <Notice tone="error">{errorText}</Notice>
         )}
@@ -380,7 +374,6 @@ export default function MeasurePanel({
         {/* While a tool takes taps, the results fold away so the map stays visible. */}
         {tracing || selecting || picking || placingCharger || neutral ? null : mode === "lawn" ? (
           <>
-            {loading && <Notice tone="info">{t.lawnLoading}</Notice>}
             {lawn?.lotSource === "cadastre" && lotLooksOdd(lawn.lot) && lawnTotals && (
               <Notice tone="warn">{t.lawnOddLot(sq(lawnTotals.lotSqft))}</Notice>
             )}
@@ -400,7 +393,6 @@ export default function MeasurePanel({
               <div className="space-y-1 text-[11px]">
                 <p className="text-muted">{lawn.lotNumber ? t.lawnLotNumber(lawn.lotNumber) : lawn.lotSource === "traced" ? t.lawnLotTraced : null}</p>
                 {!!lawnTotals?.lidarCount && <p className="text-muted">{t.lawnLidar(lawnTotals.lidarCount)}</p>}
-                {lawn.imagery === undefined && !loading && <p className="text-muted">{t.lawnPhotosLoading}</p>}
                 {!!lawnTotals && lawnTotals.photoPools + lawnTotals.photoPaved > 0 && (
                   <p className="text-muted">
                     {t.lawnPhotos(lawnTotals.photoPools, lawnTotals.photoPaved)} {t.lawnPhotosHint}
@@ -426,7 +418,6 @@ export default function MeasurePanel({
                 {result?.outlineTraced ? t.outlineTraced : t.boundaryOnly}
               </Notice>
             )}
-            {satLoading && <Notice tone="info">{t.satLoading}</Notice>}
             {satError && <Notice tone="error">{satError === "tooLarge" ? t.satTooLarge : t.satError}</Notice>}
 
             {outlineOnly ? (
