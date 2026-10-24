@@ -27,8 +27,8 @@ export const SURFACE = { other: 0, hard: 1, water: 2, tree: 3, building: 4, none
 /** Web Mercator zooms read: 19 is about 21 cm a pixel in southern Quebec, each step down doubles it. */
 const MAX_ZOOM = 19;
 const MIN_ZOOM = 15;
-/** Most pixels classified in one request (about 1,600 × 1,600): a course reads at zoom 17 (85 cm), a farm at 15-16. */
-const MAX_PIXELS = 2_500_000;
+/** Most pixels classified in one request (2,000 × 2,000): a course up to about 1.6 km reads at zoom 17 (85 cm), a farm at 15-16. */
+const MAX_PIXELS = 4_000_000;
 /** Largest box /api/surface reads (degrees per side): about 3 km, a 36-hole course or a farm. */
 export const SURFACE_MAX_SPAN_DEG = 0.04;
 
