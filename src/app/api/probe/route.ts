@@ -20,13 +20,17 @@ const HOSTS = [
   "overpass.kumi.systems",
 ];
 
-const TILE = "https://servicesmatriciels.mern.gouv.qc.ca/erdas-iws/ogc/wmts/Imagerie_Continue/Imagerie_GQ/default/GoogleMapsCompatibleExt2:epsg:3857";
+const LAYERS: Record<string, string> = {
+  gq: "https://servicesmatriciels.mern.gouv.qc.ca/erdas-iws/ogc/wmts/Imagerie_Continue/Imagerie_GQ/default/GoogleMapsCompatibleExt2:epsg:3857",
+  ieqm: "https://servicesmatriciels.mern.gouv.qc.ca/erdas-iws/ogc/wmts/Inventaire_Ecoforestier/Inventaire_Ecoforestier/default/GoogleMapsCompatibleExt2:epsg:3857",
+};
 
 export async function GET(request: Request) {
   const q = new URL(request.url).searchParams;
   if (q.get("z")) {
     // Several imagery tiles at once: z, x0..x1, y0..y1 (at most 36).
     const [z, x0, x1, y0, y1] = ["z", "x0", "x1", "y0", "y1"].map((k) => Number(q.get(k)));
+    const TILE = LAYERS[q.get("layer") ?? "gq"] ?? LAYERS.gq;
     const jobs: Promise<{ x: number; y: number; status: number; base64: string }>[] = [];
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
