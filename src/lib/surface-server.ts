@@ -8,7 +8,7 @@
  */
 import jpeg from "jpeg-js";
 import { classifySurface, latOfY, lonOfX, mercX, mercY, surfaceZoom, type SurfaceGrid } from "./surface";
-import { COVER } from "./terrain";
+import { COVER, terrainCellM } from "./terrain";
 import { readTerrain } from "./terrain-server";
 import type { BBox } from "./types";
 
@@ -55,8 +55,10 @@ export async function readSurface(bbox: BBox): Promise<SurfaceGrid | null> {
   const worker = async () => {
     for (let next = todo.pop(); next; next = todo.pop()) tiles.push({ tx: next[0], ty: next[1], data: await readTile(z, next[0], next[1]) });
   };
-  // The LiDAR for what stands on the ground; without it every pixel counts as open ground.
-  const [, terrain] = await Promise.all([Promise.all(Array.from({ length: PARALLEL }, worker)), readTerrain(bbox).catch(() => null)]);
+  // The LiDAR for what stands on the ground (at 2 m or finer, where roofs and crowns are told apart); without it
+  // every pixel counts as open ground.
+  const lidar = readTerrain(bbox, Math.min(terrainCellM(bbox), 2)).catch(() => null);
+  const [, terrain] = await Promise.all([Promise.all(Array.from({ length: PARALLEL }, worker)), lidar]);
 
   const rgb = new Uint8Array(width * height * 3);
   const valid = new Uint8Array(width * height);

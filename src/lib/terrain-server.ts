@@ -219,8 +219,7 @@ async function readInto(url: string, level: number, out: NativeRaster): Promise<
 }
 
 /** Slope and cover for a box (at most TERRAIN_MAX_SPAN_DEG a side), from the HRDEM mosaic. */
-export async function readTerrain(bbox: BBox): Promise<TerrainGrid> {
-  const cellM = terrainCellM(bbox);
+export async function readTerrain(bbox: BBox, cellM = terrainCellM(bbox)): Promise<TerrainGrid> {
   const level = Math.log2(cellM);
   // The box's extent in EPSG:3979 (corners and edge midpoints: Lambert bends the edges), plus 2 cells for the slope kernel.
   const lats = [bbox.south, (bbox.south + bbox.north) / 2, bbox.north];
