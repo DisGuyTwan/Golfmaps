@@ -131,11 +131,20 @@ export function classAcres(grid: LandGrid, mask: Uint8Array): Map<number, number
  */
 export const TURF_PER_GRASS = 0.59;
 export const TURF_RANGE: readonly [number, number] = [0.79, 1.26];
+/**
+ * The same for the grass seen in Quebec's aerial photos (surface.ts): on the
+ * 4 Quebec courses with fairways, greens, tees and rough mapped (Mont-Cascades,
+ * Memphrémagog, Milby, 9Chatel), maintained turf was 54-92 % of it; the photos
+ * see paths, sand, ponds and woods the 10 m satellite cover blurs into grass.
+ */
+export const PHOTO_TURF_PER_GRASS = 0.66;
+export const PHOTO_TURF_RANGE: readonly [number, number] = [0.82, 1.39];
 
-/** Maintained turf estimated from the satellite grass, with its likely range. */
+/** Maintained turf estimated from the grass seen, with its likely range. */
 export function estimatedTurf(s: SatelliteTurf): { acres: number; low: number; high: number } {
-  const acres = s.grassAcres * TURF_PER_GRASS;
-  return { acres, low: acres * TURF_RANGE[0], high: acres * TURF_RANGE[1] };
+  const [k, [lo, hi]] = s.source === "photos" ? [PHOTO_TURF_PER_GRASS, PHOTO_TURF_RANGE] : [TURF_PER_GRASS, TURF_RANGE];
+  const acres = s.grassAcres * k;
+  return { acres, low: acres * lo, high: acres * hi };
 }
 
 /**
@@ -153,6 +162,7 @@ export function satelliteTurf(grid: LandGrid, outline: (Polygon | MultiPolygon)[
   const builtAcres = get(WC.built);
   const waterAcres = get(WC.water, WC.wetland, WC.mangroves);
   return {
+    source: "worldcover",
     grassAcres,
     treesAcres,
     builtAcres,

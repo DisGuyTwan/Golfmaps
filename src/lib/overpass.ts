@@ -53,12 +53,19 @@ out skel qt;`;
  * Everything on a residential lot that isn't lawn and that OpenStreetMap may
  * have: buildings (house, garage, shed), swimming pools, parking (areas,
  * multipolygons, spaces), paved areas, and service roads mapped as lines
- * (driveways, parking aisles), which lawn.ts widens into strips.
+ * (driveways, parking aisles), which lawn.ts widens into strips. Plus the
+ * golf course whose outline holds the box's middle (the point tapped or
+ * searched), so detect.ts can tell a course from a lot: a course's outline
+ * can be far from a point inside it, so it's looked up with is_in, not the box.
  */
 function buildLawnQuery({ south, west, north, east }: BBox): string {
   const bbox = `${south},${west},${north},${east}`;
+  const middle = `${((south + north) / 2).toFixed(6)},${((west + east) / 2).toFixed(6)}`;
   return `[out:json][timeout:25];
+is_in(${middle})->.here;
 (
+  way(pivot.here)["leisure"="golf_course"];
+  relation(pivot.here)["leisure"="golf_course"];
   way["building"](${bbox});
   relation["building"](${bbox});
   way["leisure"="swimming_pool"](${bbox});
@@ -246,7 +253,8 @@ export const DIRECT_AFTER_MS = 1500;
  * finish, so its answer is cached for next time.
  */
 export function fetchFairways(bbox: BBox, kind: OverpassQuery = "golf"): Promise<unknown> {
-  const query = kind === "golf" ? "" : `&q=${kind}`;
+  // v=2: the lawn lookup also holds the golf course around its middle (answers cached before don't).
+  const query = kind === "golf" ? "" : `&q=${kind}&v=2`;
   return new Promise((resolve, reject) => {
     const direct = new AbortController();
     let done = false;

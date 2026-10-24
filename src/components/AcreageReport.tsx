@@ -129,6 +129,7 @@ export default function AcreageReport() {
                 <>
                   <p>{t.reportSodAt(q.sodPct)}</p>
                   {sod.year != null && sod.fields.some((f) => !f.traced) && <p>{t.sodSource(sod.year)}</p>}
+                  {sod.photos && <p>{t.sodPhotos}</p>}
                 </>
               ) : m && m.boundaryOnly ? (
                 <>
@@ -136,7 +137,7 @@ export default function AcreageReport() {
                   {sat ? (
                     <>
                       <p>{t.reportGrassAt(q.grassPct)}</p>
-                      <p>{t.satNote(sat.year)}</p>
+                      <p>{t.satNote(sat)}</p>
                     </>
                   ) : (
                     <p>{t.needsOverride}</p>
@@ -152,8 +153,9 @@ export default function AcreageReport() {
               {q.override !== null && <p>{t.reportOverride(formatAcres(q.override, lang))}</p>}
               <p>
                 {t.attribution}
-                {sat && <> · {t.attributionWorldCover}</>}
+                {sat && <> · {sat.source === "photos" ? t.attributionPhotos : t.attributionWorldCover}</>}
                 {isSod && sod?.year != null && <> · {t.attributionAci}</>}
+                {isSod && sod?.photos && <> · {t.attributionPhotos}</>}
                 {terrain && <> · {t.attributionLidar}</>}
               </p>
             </div>

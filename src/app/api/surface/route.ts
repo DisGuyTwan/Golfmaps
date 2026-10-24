@@ -3,11 +3,12 @@ import { SURFACE_MAX_SPAN_DEG, type SurfaceGridJson } from "@/lib/surface";
 import { readSurface } from "@/lib/surface-server";
 
 /**
- * Pools and paving (driveways, patios, decks) on a lot, read from the Quebec
- * government's aerial photos and the LiDAR: a small class grid (see
- * SurfaceGridJson). The photos change only when the mosaic is updated, so a
- * 200 stays on Vercel's CDN for 30 days; "no photos here" (outside Quebec)
- * for a day; errors are never cached.
+ * What covers a property (grass, trees, buildings, paving, water), read from
+ * the Quebec government's aerial photos and the LiDAR: a class grid (see
+ * SurfaceGridJson), 20 cm cells on a lot, coarser on a course or a farm.
+ * The photos change only when the mosaic is updated, so a 200 stays on
+ * Vercel's CDN for 30 days; "no photos here" (outside Quebec) for a day;
+ * errors are never cached.
  */
 export const maxDuration = 60;
 
@@ -18,8 +19,7 @@ export async function GET(request: Request) {
   }
   const started = Date.now();
   try {
-    const debug = new URL(request.url).searchParams.get("debug") === "rgb"; // TEMPORARY: tuning on real courses
-    const grid = await readSurface(bbox, debug);
+    const grid = await readSurface(bbox);
     const timing = { "Server-Timing": `surface;dur=${Date.now() - started}` };
     if (!grid) {
       return Response.json({ error: "No aerial photos here" }, { status: 404, headers: { "Cache-Control": "public, s-maxage=86400", ...timing } });
@@ -30,7 +30,6 @@ export async function GET(request: Request) {
       height: grid.height,
       cellM: grid.cellM,
       classes: Buffer.from(grid.classes).toString("base64"),
-      ...(grid.rgb ? { rgb: Buffer.from(grid.rgb).toString("base64") } : {}),
     };
     return Response.json(body, { headers: { "Cache-Control": "public, s-maxage=2592000, stale-while-revalidate=31536000", ...timing } });
   } catch (err) {

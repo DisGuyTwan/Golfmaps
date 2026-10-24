@@ -3,23 +3,33 @@
 Live at <https://calculator.prodig-e.com>.
 
 A completely free web app for quoting robotic mower jobs. It has three tabs:
-**Acreage**, **Incentives** and **ROI**. Search for a course (or pan to it), and it measures the turf acreage from OpenStreetMap — broken down by
-fairway, green, tee and rough, net of trees, buildings and parking. When a
-course isn't mapped in detail, it counts the grass inside its outline from
-satellite land cover instead (or inside an outline you trace). Switch the
-Acreage tab to **Sod farm** and it finds a sod producer's fields on Agriculture
-Canada's yearly crop map, which you can edit by tapping fields out or tracing
-new ones. Switch it to **Lawn**, type a residential address, and it measures the
-lawn on that lot in square feet. Whatever it measures, **Mower fit** rates how
-hard the property is for a robot (slope, trees, separate areas, narrow
-passages, obstacles) and recommends the Kress model that fits it best.
+**Acreage**, **Incentives** and **ROI**. On the Acreage tab, search a place or
+tap a property on the map and the calculator works out what it is (a golf
+course, a sod farm or a house lot) and measures it:
+
+- a **golf course**: the turf from OpenStreetMap, broken down by fairway,
+  green, tee and rough, net of trees, buildings and parking; when only the
+  course's outline is mapped (or you trace one), the grass seen inside it;
+- a **sod farm**: its fields on Agriculture Canada's yearly crop map, which you
+  can edit by tapping fields out or tracing new ones;
+- a **house lot**: the lawn on the cadastre lot, in square feet, net of the
+  house, pool, driveway and patios.
+
+In Quebec all three are measured by the same engine: the government's aerial
+photos (about 20 cm) read with the LiDAR, which sees grass, woods, buildings,
+paving and water. If the calculator guesses the wrong kind, **Change** picks
+it by hand. Whatever it measures, **Mower fit** rates how hard the property is
+for a robot (slope, trees, separate areas, narrow passages, obstacles) and
+recommends the Kress model that fits it best.
 
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite
 tiles, the public Overpass API, Photon for search, ESA WorldCover and
 Agriculture Canada's Annual Crop Inventory for land cover, NRCan's HRDEM LiDAR
-for slope and trees, and Statistics Canada for the gas price. Six small Vercel
-functions cache course lookups, land cover, terrain, cadastre lots and the gas
-price and collect client errors in the runtime logs.
+for slope and trees, the Quebec government's aerial photos (MRNF, CC BY 4.0)
+for what covers a property, and Statistics Canada for the gas price. Seven
+small Vercel functions cache course lookups, land cover, terrain, aerial photo
+surfaces, cadastre lots and the gas price and collect client errors in the
+runtime logs.
 
 The tabs work together: measure a course, choose what's actually mowed, and
 **Send to ROI** sizes the zero-turn crew and the Voyager fleet for those acres;
@@ -97,10 +107,32 @@ least often, so the app is deliberately careful about it:
   is rough and quietly inflate a quote). It counts the **satellite grass inside
   the outline** instead: see below.
 
+### What kind of property it is
+
+There's no switch to set first. A tap on the map (or **Select a property**, or a
+search) looks up three things at once: the Quebec cadastre lot, Agriculture
+Canada's crop map around the point, and the golf course outline around it in
+OpenStreetMap. A lot smaller than a house's 5,000 m² is a lawn right away (a
+house on a fairway or by the fields included). On a bigger lot: a sod farm when
+at least 30% of the crop map within 150 m is sod, a golf course when an
+OpenStreetMap course outline holds the point, else a lawn on a big lot. A
+search that finds a golf course measures it directly. **Trace the property**
+sorts a traced shape the same way. The panel says what it found; **Change**
+picks another kind by hand.
+
 ### Courses that aren't mapped in detail
 
 Many courses have only their outline in OpenStreetMap, and some aren't there at
-all. For those, the app reads [ESA WorldCover](https://esa-worldcover.org/)
+all. In Quebec, the app measures the outline on the government's aerial photos
+with the LiDAR (about 85 cm a pixel for a course): grass, woods, buildings,
+paths, sand and ponds each counted apart, single trees over the grass counted
+as grass. Turf is estimated at **66% of the grass seen**, likely between 0.82
+and 1.39 times that: on the 4 Quebec courses whose fairways, greens, tees and
+rough are fully mapped, turf was 54-92% of the grass the photos see (the rest
+is meadow, native and buffer areas). Club de Golf Rive Sud, outline only, comes
+out at about 62 acres (51 to 86).
+
+Elsewhere, or where the photos don't cover the outline, the app reads [ESA WorldCover](https://esa-worldcover.org/)
 (10 m satellite land cover, 2021) inside the outline: the **grassland** cells
 are painted green over the satellite image, and the panel shows grass, trees,
 built and water separately. If the course isn't in OSM, **Trace the course
@@ -129,17 +161,21 @@ CORS headers), which stitches the 3° tiles and keeps each window on the CDN for
 
 ## Sod farms
 
-The **Golf course | Sod farm** switch at the top of the Acreage panel turns it
-into a sod field measurer:
+A tap or a search on a sod farm (or **Change** to **Sod farm**) turns the
+Acreage panel into a sod field measurer:
 
-1. Search the farm or its address (it frames the area and searches right away),
-   or pan to it and tap **Find sod fields in view** (or **Select area**).
+1. Search the farm or its address, or tap it on the map: the fields within
+   about 1.2 km are found right away. **Find sod fields in view** (or **Select
+   area**) searches again wherever the map is.
 2. The app reads Agriculture and Agri-Food Canada's
    [Annual Crop Inventory](https://open.canada.ca/data/en/dataset/ba2645d5-4458-414d-b196-6303ac06c1c9)
    (newest year first: 2025, then 2024), which has its own **Sod** class, through
    `/api/landcover?src=aci`. It cuts the sod pixels into fields, fills small
    misread gaps inside a field and drops specks under 1 acre. Its 30 m pixels
-   put field edges within about 15 m.
+   put field edges within about 15 m, so in Quebec each detected field is then
+   measured on the aerial photos with the LiDAR: farm roads, hedgerows,
+   buildings and water inside it come out; bare ground (a field just
+   harvested) still counts.
 3. **Tap a field** to leave it out of the quote (it turns grey and dashed), tap
    again to put it back. **Trace a field** adds one the map missed; traced
    fields are measured exactly.
@@ -150,9 +186,9 @@ into a sod field measurer:
 
 ## Residential lawns
 
-The **Lawn** switch measures a residential lawn in **square feet**:
+A house lot is measured as a residential lawn in **square feet**:
 
-1. Search the address (or tap **Select a lot**, then tap the property). In
+1. Search the address (or tap the house on the map). In
    Quebec, the app looks up the lot under that point in the provincial cadastre
    (cadastre allégé, through `/api/parcel`) and frames it on the map. Outside
    Quebec (Ontario has no open lot data), **Trace the lot** instead.

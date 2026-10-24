@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import area from "@turf/area";
 import dynamic from "next/dynamic";
 import type * as L from "leaflet";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import { UI, type MeasureErrorKind } from "@/lib/i18n";
 import { OverpassHttpError, bboxParam, fetchFairways, parseBBoxParam } from "@/lib/overpass";
-import { TURF_COLORS, courseOutline, processOverpassData, tracedOutlineMeasurement } from "@/lib/area";
+import { SQ_METERS_TO_ACRES, TURF_COLORS, courseOutline, processOverpassData, tracedOutlineMeasurement } from "@/lib/area";
 import {
   LandcoverHttpError,
   WC,
@@ -39,7 +40,8 @@ import {
   type LawnMeasurement,
 } from "@/lib/lawn";
 import { fetchParcel, inQuebec } from "@/lib/parcel";
-import { fetchSurface, fitsSurface, surfaceAreas } from "@/lib/surface";
+import { HOUSE_LOT_M2, SOD_FARM_M, SOD_LOOK_M, SOD_SHARE, golfCourseAt, propertyKind, settledByLot, sodShareAround, sodShareInside, type GolfCourse } from "@/lib/detect";
+import { fetchSurface, fitsSurface, photoTurf, surfaceAreas, surfaceCover, surfaceOverlay, type SurfaceGrid } from "@/lib/surface";
 import { TERRAIN_MAX_SPAN_DEG, fetchTerrain, lidarBuildings, terrainStats, type TerrainGrid } from "@/lib/terrain";
 import { encodeQuote, type AcreageMode } from "@/lib/quote";
 import {
@@ -91,10 +93,36 @@ export interface MeasureError {
 export type SatelliteError = "failed" | "tooLarge";
 
 /**
- * What a trace is for: a golf course outline, a sod field, a residential lot,
- * an area that isn't lawn, or a driveway (a line, widened to the chosen width).
+ * What a trace is for: any property (its kind found from its size and the
+ * crop map), a golf course outline, a sod field, a residential lot, an area
+ * that isn't lawn, or a driveway (a line, widened to the chosen width).
  */
-export type TraceKind = "outline" | "field" | "lot" | "remove" | "driveway";
+export type TraceKind = "property" | "outline" | "field" | "lot" | "remove" | "driveway";
+
+/** What the next tap picks: the property under it (any kind), or a house lot. */
+export type PickKind = "property" | "lot";
+
+/**
+ * The lookups at a point that every kind of property needs, started at once:
+ * what OpenStreetMap has around it (buildings, paving, and the golf course
+ * holding it), the LiDAR, and the cadastre lot (Quebec).
+ */
+function lookAround(lat: number, lon: number) {
+  const around = aroundPoint(lat, lon);
+  const nearby = fetchFairways(around, "lawn");
+  nearby.catch(() => {}); // Handled by whoever uses it, or unused.
+  const terrain = inQuebec(lat, lon) ? fetchTerrain(around) : null;
+  terrain?.catch(() => {}); // Likewise, by loadTerrain.
+  const parcel = inQuebec(lat, lon) ? fetchParcel(lat, lon) : Promise.resolve(null);
+  parcel.catch(() => {}); // Likewise, by runLawn.
+  return { around, nearby, terrain, parcel };
+}
+type Lookups = ReturnType<typeof lookAround>;
+
+const boxPolygon = ({ south, west, north, east }: BBox): Polygon => ({
+  type: "Polygon",
+  coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]],
+});
 
 /** Traced areas (lx=) and driveways (ld=, "polyline:width in mm") from a share link, as lawn removals. */
 function linkedRemovals(areas: string | null, driveways: string | null): LawnArea[] {
@@ -152,18 +180,34 @@ function viewBBox(map: L.Map): BBox {
   return { south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() };
 }
 
-/** The grass counted inside the outline, painted green over the satellite image. */
-function grassOverlay(grid: LandGrid, outline: (Polygon | MultiPolygon)[]): MapOverlay {
-  const hex = TURF_COLORS.grass;
-  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  const pixels = overlayPixels(grid, polygonMask(grid, outline), [WC.grass], [rgb[0], rgb[1], rgb[2], 120]);
+const GRASS_RGB = [1, 3, 5].map((i) => parseInt(TURF_COLORS.grass.slice(i, i + 2), 16)) as [number, number, number];
+
+/** RGBA pixels over a box, as a picture laid on the map. */
+function overlayOf(pixels: Uint8ClampedArray<ArrayBuffer>, width: number, height: number, bbox: BBox): MapOverlay {
   const canvas = document.createElement("canvas");
-  canvas.width = grid.width;
-  canvas.height = grid.height;
-  canvas.getContext("2d")!.putImageData(new ImageData(pixels, grid.width, grid.height), 0, 0);
-  const { south, west, north, east } = grid.bbox;
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext("2d")!.putImageData(new ImageData(pixels, width, height), 0, 0);
+  const { south, west, north, east } = bbox;
   return { url: canvas.toDataURL(), bounds: [[south, west], [north, east]] };
 }
+
+/** The grass counted inside the outline, painted green over the satellite image. */
+function grassOverlay(grid: LandGrid, outline: (Polygon | MultiPolygon)[]): MapOverlay {
+  const pixels = overlayPixels(grid, polygonMask(grid, outline), [WC.grass], [...GRASS_RGB, 120]);
+  return overlayOf(pixels, grid.width, grid.height, grid.bbox);
+}
+
+/** Inside the outline, from the photos: grass green, paving, water and roofs in their tints, woods left clear. */
+function photoOverlay(grid: SurfaceGrid, inside: Uint8Array, woods: Uint8Array): MapOverlay {
+  return overlayOf(surfaceOverlay(grid, inside, woods, GRASS_RGB) as Uint8ClampedArray<ArrayBuffer>, grid.width, grid.height, grid.bbox);
+}
+
+/** True when a box's middle is in Quebec, where the aerial photos are. */
+const photosCover = (box: BBox) => fitsSurface(box) && inQuebec((box.south + box.north) / 2, (box.west + box.east) / 2);
+
+/** Below this share of an outline seen in the photos (edge of the mosaic), the satellite count is used instead. */
+const MIN_PHOTO_COVERAGE = 0.9;
 
 export default function GolfCourseCalculator() {
   const lang = useLang();
@@ -183,8 +227,10 @@ export default function GolfCourseCalculator() {
   >(null);
   const [tracing, setTracing] = useState<TraceKind | null>(null);
   const [tracePoints, setTracePoints] = useState<[number, number][]>([]);
-  /** Lawn: the next tap picks the lot under it. */
-  const [picking, setPicking] = useState(false);
+  /** The next tap picks the property (or, in lawn mode, the lot) under it. */
+  const [picking, setPicking] = useState<PickKind | null>(null);
+  /** The rep picked the kind of property by hand (Change), so the panel shows that kind's tools before any result. */
+  const [chosen, setChosen] = useState(false);
   /** Width of the driveway being traced, in feet (one car by default). */
   const [driveWidthFt, setDriveWidthFt] = useState<number>(DRIVEWAY_WIDTHS_FT[0]);
   /** The LiDAR terrain (slope, trees, buildings) for the mower fit is loading. */
@@ -273,16 +319,41 @@ export default function GolfCourseCalculator() {
     }
   }, []);
 
-  /** Counts the satellite grass inside a course's outline (no turf mapped, or traced). */
+  /**
+   * Counts the grass inside a course's outline (no turf mapped, or traced):
+   * on the aerial photos with the LiDAR in Quebec, the engine every
+   * measurement shares, else on satellite land cover.
+   */
   const countSatellite = useCallback(async (m: CourseMeasurement, id: number) => {
     const outline = courseOutline(m);
     const box = geometryBBox(outline);
-    if (!box || !fitsSource(box, "worldcover")) {
+    if (!box || (!photosCover(box) && !fitsSource(box, "worldcover"))) {
       setSatError("tooLarge");
       return;
     }
     setSatLoading(true);
     try {
+      if (photosCover(box)) {
+        try {
+          const photos = await fetchSurface(box);
+          if (id !== runId.current) return;
+          const seen = photos && surfaceCover(photos, outline);
+          if (photos && seen && seen.cover.totalM2 > 0 && 1 - seen.cover.unknownM2 / seen.cover.totalM2 >= MIN_PHOTO_COVERAGE) {
+            const next = { ...m, satellite: photoTurf(seen.cover) };
+            setResult(next);
+            setMeasurement(next);
+            setOverlay(photoOverlay(photos, seen.inside, seen.woods));
+            return;
+          }
+        } catch (err) {
+          if (id !== runId.current) return;
+          reportError("surface:golf", err);
+        }
+        if (!fitsSource(box, "worldcover")) {
+          setSatError("failed");
+          return;
+        }
+      }
       const grid = await fetchLandGrid("worldcover", box);
       if (id !== runId.current) return;
       const next = { ...m, satellite: satelliteTurf(grid, outline) };
@@ -338,6 +409,33 @@ export default function GolfCourseCalculator() {
     [startRun, countSatellite, loadTerrain],
   );
 
+  /**
+   * Measures the detected sod fields on the aerial photos (Quebec): the crop
+   * map's 30 m fields take in farm roads, hedgerows, buildings and ditches,
+   * which the photos and the LiDAR leave out. Bare ground (a field just
+   * harvested) still counts. A failure keeps the crop map's acres.
+   */
+  const measureSodOnPhotos = useCallback(async (id: number) => {
+    const fields = (getSod()?.fields ?? []).filter((f) => !f.traced);
+    const box = geometryBBox(fields.map((f) => f.geometry), 0.0003);
+    if (!box || !photosCover(box)) return;
+    try {
+      const photos = await fetchSurface(box);
+      const current = getSod();
+      if (!photos || !current || id !== runId.current) return;
+      const acres = new Map<string, number>();
+      for (const f of current.fields) {
+        if (f.traced) continue;
+        const { cover } = surfaceCover(photos, [f.geometry]);
+        if (cover.totalM2 > 0 && cover.unknownM2 / cover.totalM2 <= 1 - MIN_PHOTO_COVERAGE) acres.set(f.id, cover.grassM2 * SQ_METERS_TO_ACRES);
+      }
+      if (!acres.size) return;
+      setSod({ ...current, photos: true, fields: current.fields.map((f) => (acres.has(f.id) ? { ...f, acres: acres.get(f.id)! } : f)) });
+    } catch (err) {
+      if (id === runId.current) reportError("surface:sod", err);
+    }
+  }, []);
+
   /** Finds the sod fields in view (or in the scan box) on the crop map; traced fields are kept. */
   const runSod = useCallback(
     async (bboxOverride?: BBox) => {
@@ -363,6 +461,7 @@ export default function GolfCourseCalculator() {
         const traced = (getSod()?.fields ?? []).filter((f) => f.traced);
         setSod({ fields: [...detected, ...traced], year: grid.year });
         void loadTerrain(geometryBBox([...detected, ...traced].map((f) => f.geometry)), id);
+        void measureSodOnPhotos(id);
       } catch (err) {
         if (id !== runId.current) return;
         const kind = err instanceof LandcoverHttpError && err.status === 400 ? "sodTooLarge" : "sodUnreachable";
@@ -372,7 +471,7 @@ export default function GolfCourseCalculator() {
         if (id === runId.current) setLoading(false);
       }
     },
-    [startRun, loadTerrain],
+    [startRun, loadTerrain, measureSodOnPhotos],
   );
 
   /**
@@ -396,20 +495,15 @@ export default function GolfCourseCalculator() {
 
   /** The lawn on the cadastre lot at a point: a searched address, a tap or a share link. */
   const runLawn = useCallback(
-    async (lat: number, lon: number, traced: LawnArea[] = [], kept: [number, number][] = []) => {
-      const id = startRun();
+    async (lat: number, lon: number, traced: LawnArea[] = [], kept: [number, number][] = [], started?: { id: number; looks: Lookups }) => {
+      const id = started?.id ?? startRun();
       setLoading(true);
       setError(null);
       setLawn(null);
-      // Buildings and paving around the point, looked up while the lot loads
-      // (outside Quebec there's no cadastre lot, so nothing to look up).
-      const around = aroundPoint(lat, lon);
-      const nearby = inQuebec(lat, lon) ? fetchFairways(around, "lawn") : null;
-      nearby?.catch(() => {}); // Handled by showLawn, or unused when the lot is bigger.
-      const terrain = inQuebec(lat, lon) ? fetchTerrain(around) : null;
-      terrain?.catch(() => {}); // Likewise, by loadTerrain.
+      // Buildings and paving around the point, looked up while the lot loads.
+      const { around, nearby, terrain, parcel: lookup } = started?.looks ?? lookAround(lat, lon);
       try {
-        const parcel = await fetchParcel(lat, lon);
+        const parcel = await lookup;
         if (id !== runId.current) return;
         if (!parcel) {
           setError({ kind: "noLot" });
@@ -453,6 +547,82 @@ export default function GolfCourseCalculator() {
       }
     },
     [startRun, showLawn],
+  );
+
+  /**
+   * The property at a point (a tap, or a place searched), whatever it is:
+   * detect.ts tells a house lot, a sod farm and a golf course apart from the
+   * cadastre lot, the crop map and OpenStreetMap's course outlines, and it's
+   * measured as that. A house lot doesn't wait on the slower lookups.
+   */
+  const selectProperty = useCallback(
+    async (lat: number, lon: number, name: string | null = null) => {
+      const id = startRun();
+      setChosen(false);
+      setLoading(true);
+      setError(null);
+      const looks = lookAround(lat, lon);
+      const sodShare = fetchLandGrid("aci", aroundPoint(lat, lon, SOD_LOOK_M)).then(
+        (grid) => sodShareAround(grid, lat, lon, SOD_LOOK_M),
+        () => 0,
+      );
+      const lot = await looks.parcel.catch(() => null);
+      if (id !== runId.current) return;
+      const lotM2 = lot ? area({ type: "Feature", geometry: lot.geometry, properties: {} }) : null;
+      let kind: AcreageMode = "lawn";
+      let course: GolfCourse | null = null;
+      if (!settledByLot(lotM2)) {
+        const sod = await sodShare;
+        if (id !== runId.current) return;
+        if (sod < SOD_SHARE) course = await looks.nearby.then((json) => golfCourseAt(json, lat, lon), () => null);
+        if (id !== runId.current) return;
+        kind = propertyKind({ lotM2, sodShare: sod, inGolfCourse: course !== null });
+      }
+      setMode(kind);
+      setCourseName(name ?? course?.name ?? null);
+      const map = mapRef.current;
+      if (kind === "golf" && course) {
+        if (map) fitAbovePanel(map, course.geometry);
+        void runMeasure(geometryBBox([course.geometry], 0.001) ?? aroundPoint(lat, lon));
+      } else if (kind === "sod") {
+        const farm = aroundPoint(lat, lon, SOD_FARM_M);
+        if (map) fitAbovePanel(map, boxPolygon(farm));
+        void runSod(farm);
+      } else {
+        await runLawn(lat, lon, [], [], { id, looks });
+      }
+    },
+    [startRun, runMeasure, runSod, runLawn],
+  );
+
+  /**
+   * A property traced by hand, its kind found like a tapped one: a lot under
+   * a house lot's size is a lawn; bigger, a sod field when the crop map has
+   * sod in most of it, else a course or grounds outline measured on the
+   * photos (golf).
+   */
+  const traceProperty = useCallback(
+    async (points: [number, number][]) => {
+      const outline = tracedPolygon(points);
+      setChosen(false);
+      if (area({ type: "Feature", geometry: outline, properties: {} }) < HOUSE_LOT_M2) {
+        setMode("lawn");
+        void showTracedLot(outline);
+        return;
+      }
+      const box = geometryBBox([outline], 0);
+      const sod = box && fitsSource(box, "aci") ? await fetchLandGrid("aci", box).then((g) => sodShareInside(g, outline), () => 0) : 0;
+      if (sod >= SOD_SHARE) {
+        setMode("sod");
+        startRun();
+        setSod({ fields: [tracedField(points, "t1")], year: null });
+        void loadTerrain(box, runId.current);
+        return;
+      }
+      setMode("golf");
+      showOutline(tracedOutlineMeasurement(outline));
+    },
+    [showTracedLot, startRun, loadTerrain, showOutline],
   );
 
   const measure = mode === "sod" ? runSod : runMeasure;
@@ -575,40 +745,37 @@ export default function GolfCourseCalculator() {
     (place: PlaceResult) => {
       const map = mapRef.current;
       if (!map) return;
-      setCourseName(place.primary);
-      // A lawn: zoom onto the house and look up the lot under the address.
-      if (mode === "lawn") {
-        map.setView([place.lat, place.lon], 19);
-        void runLawn(place.lat, place.lon);
+      // A golf course found by name: frame it and measure the course in view.
+      if (place.isGolf) {
+        setChosen(false);
+        setMode("golf");
+        setCourseName(place.primary);
+        if (place.bbox) {
+          const [south, west, north, east] = place.bbox;
+          map.fitBounds(
+            [
+              [south, west],
+              [north, east],
+            ],
+            { maxZoom: 17, padding: [40, 40] },
+          );
+        } else {
+          map.setView([place.lat, place.lon], 16);
+        }
+        map.once("moveend", () => {
+          void runMeasure();
+        });
         return;
       }
-      // A farm spreads wider than a course: frame it a step further out.
-      const maxZoom = mode === "sod" ? 15 : 17;
-
-      if (place.bbox) {
-        const [south, west, north, east] = place.bbox;
-        map.fitBounds(
-          [
-            [south, west],
-            [north, east],
-          ],
-          { maxZoom, padding: [40, 40] },
-        );
-      } else {
-        map.setView([place.lat, place.lon], maxZoom - 1);
-      }
-
-      // Auto-measure once the map settles: on a golf course, or anywhere for a sod farm.
-      if (mode === "sod" || place.isGolf) {
-        map.once("moveend", () => {
-          void measure();
-        });
-      }
+      // Anything else (an address, a farm, a business): the property under it, whatever it is.
+      map.setView([place.lat, place.lon], 18);
+      void selectProperty(place.lat, place.lon, place.primary);
     },
-    [mode, measure, runLawn],
+    [runMeasure, selectProperty],
   );
 
   const handleStartSelect = useCallback(() => {
+    setPicking(null);
     setSelecting(true);
     setFirstCorner(null);
     setScanBox(null);
@@ -621,7 +788,7 @@ export default function GolfCourseCalculator() {
 
   const handleStartTrace = useCallback((kind: TraceKind) => {
     setSelecting(false);
-    setPicking(false);
+    setPicking(null);
     setFirstCorner(null);
     setTracing(kind);
     setTracePoints([]);
@@ -640,7 +807,9 @@ export default function GolfCourseCalculator() {
       if (tapped.length < (tracing === "driveway" ? 2 : 3)) return;
       // Rounded like a share link stores them (≈ 1 m), so a reopened link measures the same shape.
       const points = tapped.map(([lat, lon]): [number, number] => [Math.round(lat * 1e5) / 1e5, Math.round(lon * 1e5) / 1e5]);
-      if (tracing === "outline") {
+      if (tracing === "property") {
+        void traceProperty(points);
+      } else if (tracing === "outline") {
         setScanBox(null);
         showOutline(tracedOutlineMeasurement(tracedPolygon(points)));
       } else if (tracing === "lot") {
@@ -663,7 +832,7 @@ export default function GolfCourseCalculator() {
       setTracing(null);
       setTracePoints([]);
     },
-    [tracing, showOutline, showTracedLot, driveWidthFt],
+    [tracing, showOutline, showTracedLot, traceProperty, driveWidthFt],
   );
 
   const handleMapClick = useCallback(
@@ -689,8 +858,9 @@ export default function GolfCourseCalculator() {
       }
 
       if (picking) {
-        setPicking(false);
-        void runLawn(latlng[0], latlng[1]);
+        setPicking(null);
+        if (picking === "lot") void runLawn(latlng[0], latlng[1]);
+        else void selectProperty(latlng[0], latlng[1]);
         return;
       }
 
@@ -711,6 +881,13 @@ export default function GolfCourseCalculator() {
         setFirstCorner(null);
         setSelecting(false);
         void measure(bbox);
+        return;
+      }
+
+      // Nothing measured yet (and no kind picked by hand): a tap picks the property under it.
+      const shown = mode === "golf" ? result !== null : mode === "sod" ? getSod() !== null : getLawn() !== null;
+      if (!shown && !chosen) {
+        if (!loading) void selectProperty(latlng[0], latlng[1]);
         return;
       }
 
@@ -747,7 +924,7 @@ export default function GolfCourseCalculator() {
         fields: current.fields.map((f) => (f.id === hit.id ? { ...f, included: !f.included } : f)),
       });
     },
-    [placingCharger, tracing, tracePoints, finishTrace, picking, runLawn, selecting, firstCorner, measure, mode],
+    [placingCharger, tracing, tracePoints, finishTrace, picking, runLawn, selectProperty, selecting, firstCorner, measure, mode, result, chosen, loading],
   );
 
   const resetView = useCallback(() => {
@@ -758,7 +935,7 @@ export default function GolfCourseCalculator() {
     setScanBox(null);
     setFirstCorner(null);
     setSelecting(false);
-    setPicking(false);
+    setPicking(null);
     setTracing(null);
     setTracePoints([]);
   }, [startRun]);
@@ -769,10 +946,12 @@ export default function GolfCourseCalculator() {
     setSod(null);
     setLawn(null);
     setCourseName(null);
+    setChosen(false);
   }, [resetView]);
 
   const handleModeChange = useCallback(
     (next: AcreageMode) => {
+      setChosen(true);
       if (next === mode) return;
       resetView();
       setMode(next);
@@ -827,7 +1006,7 @@ export default function GolfCourseCalculator() {
       <GolfMap
         lang={lang}
         geojson={mapGeojson}
-        capturing={selecting || picking || placingCharger || tracing !== null}
+        capturing={selecting || picking !== null || placingCharger || tracing !== null}
         charger={fit?.site.charger ? [fit.site.charger[1], fit.site.charger[0]] : null}
         firstCorner={firstCorner}
         tracePoints={tracing ? tracePoints : null}
@@ -841,9 +1020,7 @@ export default function GolfCourseCalculator() {
         onSelect={handleSearchSelect}
         getBias={getSearchBias}
         lang={lang}
-        placeholder={
-          mode === "sod" ? UI[lang].sodSearchPlaceholder : mode === "lawn" ? UI[lang].lawnSearchPlaceholder : undefined
-        }
+        placeholder={UI[lang].searchAnyPlaceholder}
       />
 
       <MeasurePanel
@@ -854,14 +1031,15 @@ export default function GolfCourseCalculator() {
         lawn={mode === "lawn" ? lawn : null}
         lawnTotals={mode === "lawn" ? totals : null}
         picking={picking}
+        chosen={chosen}
         driveWidthFt={driveWidthFt}
         onDriveWidth={setDriveWidthFt}
-        onStartPick={() => {
+        onStartPick={(kind) => {
           setSelecting(false);
           setTracing(null);
-          setPicking(true);
+          setPicking(kind);
         }}
-        onCancelPick={() => setPicking(false)}
+        onCancelPick={() => setPicking(null)}
         loading={loading}
         error={error}
         satLoading={satLoading}
@@ -871,7 +1049,7 @@ export default function GolfCourseCalculator() {
         onMoveCharger={() => {
           setSelecting(false);
           setTracing(null);
-          setPicking(false);
+          setPicking(null);
           setPlacingCharger(true);
         }}
         onCancelCharger={() => setPlacingCharger(false)}

@@ -37,7 +37,7 @@ describe("quoteAcres", () => {
     expect(quoteAcres(null, DEFAULT_QUOTE)).toBeNull();
   });
   it("an outline-only course counts the turf estimated from satellite grass, never the outline", () => {
-    const satellite = { grassAcres: 100, treesAcres: 40, builtAcres: 5, waterAcres: 3, otherAcres: 2, outlineAcres: 150 } as SatelliteTurf;
+    const satellite = { source: "worldcover", grassAcres: 100, treesAcres: 40, builtAcres: 5, waterAcres: 3, otherAcres: 2, outlineAcres: 150 } as SatelliteTurf;
     const outlineOnly = { ...m, boundaryOnly: true, courseAcres: 150, satellite };
     // 100 ac of grass → 59 ac of estimated turf → 80% of it mowed by robot.
     expect(quoteAcres(outlineOnly, DEFAULT_QUOTE)).toBeCloseTo(47.2, 6);

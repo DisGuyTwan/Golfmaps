@@ -23,7 +23,8 @@ import type { MultiPolygon, Polygon } from "geojson";
 import { labelRegions, polygonMask, regionGeometry, type GridShape } from "./landcover";
 import type { LawnArea } from "./lawn";
 import { COVER, straighten } from "./terrain";
-import type { BBox } from "./types";
+import { SQ_METERS_TO_ACRES } from "./area";
+import type { BBox, SatelliteTurf } from "./types";
 
 export const SURFACE = { other: 0, hard: 1, water: 2, tree: 3, building: 4, none: 255 } as const;
 
@@ -338,6 +339,21 @@ export function surfaceCover(grid: SurfaceGrid, outline: (Polygon | MultiPolygon
     else cover.grassM2 += cell;
   }
   return { cover, inside, woods };
+}
+
+/** A course's cover as acres, for the outline-only estimate (landcover.ts estimatedTurf). */
+export function photoTurf(cover: SurfaceCover): SatelliteTurf {
+  const ac = (m2: number) => m2 * SQ_METERS_TO_ACRES;
+  return {
+    source: "photos",
+    grassAcres: ac(cover.grassM2),
+    treesAcres: ac(cover.woodsM2),
+    builtAcres: ac(cover.builtM2 + cover.pavedM2),
+    waterAcres: ac(cover.waterM2),
+    otherAcres: ac(cover.unknownM2),
+    outlineAcres: ac(cover.totalM2),
+    year: null,
+  };
 }
 
 /** RGBA for the map: grass painted `grass`, paving, water and roofs in their own tints, woods and the outside clear. */

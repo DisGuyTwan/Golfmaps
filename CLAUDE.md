@@ -14,8 +14,10 @@ tools (Quebec, Ontario, federal) and an "ROI" tab comparing a Kress
 Voyager with a zero-turn crew. Every tab is in English (default) and Quebec
 French, with light and dark themes. The tabs are connected (measured acres →
 ROI sizing; the Incentives profile → ROI's net investment) and every tab has a
-share link and a client PDF. Every measurement gets a mower fit: how hard
-the property is for a robot and which Kress model fits. No API keys and no
+share link and a client PDF. The kind of property (course, farm or
+lot) is detected from where the rep taps or what they search, and one engine
+(aerial photos and LiDAR) measures all three. Every measurement gets a mower
+fit: how hard the property is for a robot and which Kress model fits. No API keys and no
 database: seven small route handlers (Overpass cache, land cover, LiDAR terrain,
 aerial photo surfaces, Quebec cadastre lot, gas price, client error log) run on
 Vercel; everything
@@ -32,8 +34,9 @@ src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
                   ESA WorldCover (src=worldcover) or AAFC crop inventory (src=aci)
   api/terrain/    slope and cover (ground, low plants, trees, buildings) from
                   NRCan's HRDEM LiDAR as a small lat/lon grid (CDN 30 days)
-  api/surface/    pools and paving on a lot from Quebec's aerial photos and the
-                  LiDAR, as a small class grid (CDN 30 days)
+  api/surface/    what covers a property (grass, trees, buildings, paving,
+                  water) from Quebec's aerial photos and the LiDAR, as a class
+                  grid (CDN 30 days): 20 cm on a lot, 85 cm on a course
   api/parcel/     the Quebec cadastre lot at a point (CDN 1 week), for lawns
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
@@ -45,11 +48,14 @@ src/components/
                              after hydration; styles and timeline in app/boot.css)
   AppTabs.tsx                tab bar (Acreage | Incentives | ROI) + FR/EN and
                              light/dark buttons; tab in the URL hash
-  GolfCourseCalculator.tsx   top-level state, orchestrates fetch → measure, the
-                             satellite count, sod detection and tracing
+  GolfCourseCalculator.tsx   top-level state: detects the property at a tap or
+                             a search (selectProperty), orchestrates fetch →
+                             measure, the photo / satellite count, sod
+                             detection and tracing
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)
-  MeasurePanel.tsx           results panel + legend, Golf course | Sod farm | Lawn
-                             switch
+  MeasurePanel.tsx           results panel + legend; "Select a property" until
+                             something is measured, then the detected kind with
+                             a Change switch (Golf course | Sod farm | Lawn)
   MowerFit.tsx               mower fit card (score, reasons, mowing frequency,
                              recommended Kress model and units); useMowerFit()
                              for the panel, PDF and Send to ROI
@@ -78,8 +84,10 @@ src/lib/
                 between zones, against a square of the same area; one unit's
                 share when several split it (pure, tested)
   mowers.ts     the 12 Kress models quoted and the fit / recommendation (pure, tested)
-  surface.ts    pools and paving from aerial photo pixels: classes, areas on a lot
-                (pure, tested)
+  surface.ts    the measuring engine: aerial photo pixels + LiDAR → grass,
+                trees, buildings, paving, water; cover inside an outline, pools
+                and paving on a lot (pure, tested)
+  detect.ts     what a point is: house lot, sod farm or golf course (pure, tested)
   surface-server.ts  MRNF photo tiles (jpeg-js) + LiDAR cover for /api/surface (route only)
   parcel.ts     Quebec cadastre lot lookup and parsing (pure parts tested)
   types.ts      BBox, CourseMeasurement, SatelliteTurf, SodField, SodMeasurement
@@ -114,8 +122,37 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   rough is counted net of what's drawn over it (`netAcres`: fairways, greens,
   tees, bunkers, water, woods, buildings), since mappers often draw rough under
   everything and the plain sum overcounted rough by 50%.
-- **Outline-only courses count satellite grass instead.** For `boundaryOnly`
-  (or an outline traced by hand, `outlineTraced`), the calculator reads ESA
+- **The kind of property is detected, not picked.** A tap (or "Select a
+  property", or a search that isn't a golf course) runs `selectProperty`: the
+  cadastre lot, the crop map around the point and the Overpass lawn lookup
+  (which also holds the golf course around the point, `is_in`) start at once.
+  `detect.ts` decides: a lot under `HOUSE_LOT_M2` (5,000 m²) is a lawn without
+  waiting for the rest; else sod when `SOD_SHARE` (30 %) of the crop map within
+  `SOD_LOOK_M` is sod, a golf course when an OSM course outline holds the
+  point, else a lawn (a big lot). A search Photon calls a golf course measures
+  the course directly. "Trace the property" sorts a traced shape the same way
+  (lawn under 5,000 m², sod when the crop map says so, else a course outline).
+  The panel says what was detected; Change switches by hand (`chosen`), and
+  each kind's own buttons then stay in that kind. Links still carry `a=`.
+- **One engine measures every kind.** `surface.ts` classifies the MRNF photos
+  with the LiDAR (see the lawn notes for the photos and the colour rules): a
+  lot at 20 cm (zoom 19), a course at about 85 cm (17), a farm coarser, within
+  `MAX_PIXELS` (4 M) and 0.04° a side; the LiDAR is read at 2 m or finer so
+  roofs and crowns stay apart. Canopy patches of `WOODS_M2` (1,000 m²) or more
+  are woods; smaller ones are single trees over grass, counted as grass. Water
+  is clear blue (pools) or ground the LiDAR reads dead flat over 200 m²
+  (ponds: the ground model is flattened over water, and dark water reads as
+  shade in the photos). Paving must be grey (G − B under 8) or bright (sand,
+  concrete): on courses, summer-dried rough and ranges aren't green but stay
+  yellow, and the plain "not green" rule took 24 % of Memphrémagog's rough.
+- **Outline-only courses count the grass seen instead.** For `boundaryOnly`
+  (or an outline traced by hand, `outlineTraced`), the calculator measures the
+  outline on the photos in Quebec (`photoTurf`, `source: "photos"`): grass
+  seen × `PHOTO_TURF_PER_GRASS` (0.66), likely range `PHOTO_TURF_RANGE`
+  (0.82–1.39×), from the 4 fully mapped Quebec courses (Mont-Cascades,
+  Memphrémagog, Milby, 9Chatel: turf was 54-92 % of the grass seen; Château
+  Bromont was left out, most of its rough isn't mapped). Outside Quebec, or
+  where under 90 % of the outline has photos, it reads ESA
   WorldCover inside the outline (`satelliteTurf` in `landcover.ts`); class 30
   (grassland) is the grass seen, and `estimatedTurf` takes `TURF_PER_GRASS`
   (0.59) of it, with `TURF_RANGE` (0.79–1.26×) as the likely range. Those are
@@ -134,7 +171,10 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   gaps under 1 ac and drops specks under 1 ac; acres come from the cells, the
   outline (d3-contour) is for display. Tapping a field toggles `included`;
   traced fields are measured with turf. The quote takes `sodPct` (90% default)
-  of the included fields. Switching modes clears the results, name and override.
+  of the included fields. In Quebec, detected fields are then measured on the
+  photos (`measureSodOnPhotos`: the field's grass and bare ground, without the
+  roads, hedgerows, buildings and water the 30 m map takes in; `sod.photos`).
+  Switching modes clears the results, name and override.
 - **Residential lawns are the third mode** (`a=lawn`), in **square feet only**
   (`formatSqft`), with no ROI (`acresForQuote` returns null: the ROI tab is
   commercial). The lot comes from the Quebec cadastre allégé at a point

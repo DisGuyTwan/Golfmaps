@@ -35,6 +35,16 @@ const en = {
   sodPanelTitle: "Sod field acreage",
   modeGroup: "What to measure",
   modes: { golf: "Golf course", sod: "Sod farm", lawn: "Lawn" },
+  anyPanelTitle: "Measure a property",
+  searchAnyPlaceholder: "Search an address, a golf course or a farm",
+  selectProperty: "Select a property",
+  traceProperty: "Trace the property",
+  tapProperty: "Tap the property to measure",
+  detecting: "Finding the property…",
+  anyHint: "Tap a property on the map, or search it: the calculator tells a house lot, a sod farm and a golf course apart.",
+  kindDetected: (kind: string) => `Detected: ${kind}`,
+  kindChosen: (kind: string) => `Measured as: ${kind}`,
+  changeKind: "Change",
   clear: "Clear",
   tapFirst: "Tap one corner of the area to scan",
   tapSecond: "Tap the opposite corner of the scan area",
@@ -45,8 +55,8 @@ const en = {
   notFound:
     "No golf course found in view. Search a course above, or pan/zoom so the course fills the screen, then measure again. If the course isn’t in OpenStreetMap, trace its outline.",
   boundaryOnly:
-    "Only this course’s outline is mapped in OpenStreetMap, not its fairways, greens and tees. The turf is estimated from satellite land cover inside the outline instead.",
-  outlineTraced: "Course outline traced by hand. The turf is estimated from satellite land cover inside it.",
+    "Only this course’s outline is mapped in OpenStreetMap, not its fairways, greens and tees. The turf is estimated from the grass seen inside the outline instead.",
+  outlineTraced: "Course outline traced by hand. The turf is estimated from the grass seen inside it.",
   traceOutline: "Trace the course outline",
   traceField: "Trace a field",
   traceHint: "Tap each corner on the satellite image. Tap the first point again, or Done, to close the shape.",
@@ -59,13 +69,15 @@ const en = {
   satBuilt: "Built",
   satWater: "Water",
   satTotal: "Estimated turf",
-  satSeen: "Grass seen by satellite",
+  satSeen: "Grass seen",
   satRange: (low: string, high: string) => `Likely between ${low} and ${high} ac`,
-  satLoading: "Counting grass from satellite land cover…",
+  satLoading: "Counting the grass inside the outline…",
   satError: "Couldn’t load satellite land cover. Try measuring again, or enter the mowed acreage by hand.",
   satTooLarge: "This outline is too large for the satellite count. Enter the mowed acreage by hand.",
-  satNote: (year: number) =>
-    `Grass seen in ESA WorldCover ${year} (10 m satellite land cover), with trees, buildings, roads and water left out. It also takes in hay, meadows and native areas: on 45 fully mapped courses in Ontario, Quebec and nearby states, maintained turf was 59% of it, and most fell within the range shown.`,
+  satNote: (s: { source: "photos" | "worldcover"; year: number | null }) =>
+    s.source === "photos"
+      ? "Grass seen in Quebec’s aerial photos (about 85 cm) with the LiDAR: woods, buildings, paths, parking, sand and ponds left out, single trees over the grass counted as grass. It also takes in meadows and native areas: on 4 fully mapped Quebec courses, maintained turf was 54% to 92% of it (66% typical)."
+      : `Grass seen in ESA WorldCover ${s.year} (10 m satellite land cover), with trees, buildings, roads and water left out. It also takes in hay, meadows and native areas: on 45 fully mapped courses in Ontario, Quebec and nearby states, maintained turf was 59% of it, and most fell within the range shown.`,
   grassPct: "Turf mowed by robot (%)",
   grassPctHint: "Estimated turf still holds greens, tees and some rough that robots don’t mow.",
 
@@ -81,6 +93,7 @@ const en = {
   sodTapHint: "Tap a field on the map to leave it out of the quote, or to put it back.",
   sodSource: (year: number) =>
     `Detected fields: Agriculture and Agri-Food Canada, Annual Crop Inventory ${year}. Its 30 m pixels put field edges within about 15 m; traced fields are measured exactly.`,
+  sodPhotos: "Detected fields measured on Quebec’s aerial photos with the LiDAR: roads, buildings, trees and water inside them left out.",
   sodPct: "Sod being mowed (%)",
   sodPctHint: "Fields just harvested or reseeded aren’t mowed.",
 
@@ -254,7 +267,7 @@ const en = {
   lawnPhotosKept: (n: number) => (n === 1 ? "1 area from the photos kept as lawn: tap it again to take it out." : `${n} areas from the photos kept as lawn: tap one again to take it out.`),
   lawnPhotosLoading: "Looking for pools and paving in the aerial photos…",
   attributionLidar: "LiDAR © NRCan (HRDEM)",
-  attributionPhotos: "Pools and paving: aerial photos © Gouvernement du Québec (MRNF), CC BY 4.0",
+  attributionPhotos: "Aerial photos © Gouvernement du Québec (MRNF), CC BY 4.0",
 
   errorTitle: "Something went wrong.",
   errorBody:
@@ -285,6 +298,16 @@ const fr: UiStrings = {
   sodPanelTitle: "Superficie des champs de gazon",
   modeGroup: "Quoi mesurer",
   modes: { golf: "Terrain de golf", sod: "Gazonnière", lawn: "Pelouse" },
+  anyPanelTitle: "Mesurer une propriété",
+  searchAnyPlaceholder: "Chercher une adresse, un golf ou une ferme",
+  selectProperty: "Choisir une propriété",
+  traceProperty: "Tracer la propriété",
+  tapProperty: "Touchez la propriété à mesurer",
+  detecting: "Recherche de la propriété…",
+  anyHint: "Touchez une propriété sur la carte, ou cherchez-la : le calculateur distingue un terrain résidentiel, une gazonnière et un terrain de golf.",
+  kindDetected: (kind: string) => `Détecté : ${kind}`,
+  kindChosen: (kind: string) => `Mesuré comme : ${kind}`,
+  changeKind: "Changer",
   clear: "Effacer",
   tapFirst: "Touchez un coin de la zone à analyser",
   tapSecond: "Touchez le coin opposé de la zone à analyser",
@@ -295,8 +318,8 @@ const fr: UiStrings = {
   notFound:
     "Aucun terrain de golf trouvé dans la vue. Cherchez un terrain ci-dessus, ou déplacez la carte pour que le terrain remplisse l’écran, puis mesurez de nouveau. Si le terrain n’est pas dans OpenStreetMap, tracez son contour.",
   boundaryOnly:
-    "Seul le contour de ce terrain est cartographié dans OpenStreetMap, pas ses allées, verts et départs. Le gazon est plutôt estimé à partir de la couverture du sol par satellite à l’intérieur du contour.",
-  outlineTraced: "Contour du terrain tracé à la main. Le gazon est estimé à partir de la couverture du sol par satellite à l’intérieur.",
+    "Seul le contour de ce terrain est cartographié dans OpenStreetMap, pas ses allées, verts et départs. Le gazon est plutôt estimé à partir du gazon vu à l’intérieur du contour.",
+  outlineTraced: "Contour du terrain tracé à la main. Le gazon est estimé à partir du gazon vu à l’intérieur.",
   traceOutline: "Tracer le contour du terrain",
   traceField: "Tracer un champ",
   traceHint: "Touchez chaque coin sur l’image satellite. Touchez de nouveau le premier point, ou Terminé, pour fermer la forme.",
@@ -309,14 +332,16 @@ const fr: UiStrings = {
   satBuilt: "Bâti",
   satWater: "Eau",
   satTotal: "Gazon entretenu estimé",
-  satSeen: "Gazon vu par satellite",
+  satSeen: "Gazon vu",
   satRange: (low: string, high: string) => `Probablement entre ${low} et ${high} ac`,
-  satLoading: "Comptage du gazon à partir de la couverture du sol par satellite…",
+  satLoading: "Comptage du gazon dans le contour…",
   satError:
     "Impossible de charger la couverture du sol par satellite. Mesurez de nouveau, ou entrez la superficie tondue à la main.",
   satTooLarge: "Ce contour est trop grand pour le comptage par satellite. Entrez la superficie tondue à la main.",
-  satNote: (year: number) =>
-    `Gazon vu dans ESA WorldCover ${year} (couverture du sol par satellite, 10 m), sans les arbres, bâtiments, routes et plans d’eau. Il inclut aussi du foin, des prés et des zones naturelles : sur 45 terrains entièrement cartographiés en Ontario, au Québec et dans les États voisins, le gazon entretenu en représentait 59 %, et la plupart se situaient dans la fourchette indiquée.`,
+  satNote: (s: { source: "photos" | "worldcover"; year: number | null }) =>
+    s.source === "photos"
+      ? "Gazon vu sur les photos aériennes du Québec (environ 85 cm) avec le LiDAR : boisés, bâtiments, sentiers, stationnements, sable et étangs exclus, arbres isolés au-dessus du gazon comptés comme gazon. Il inclut aussi des prés et des zones naturelles : sur 4 terrains du Québec entièrement cartographiés, le gazon entretenu en représentait de 54 % à 92 % (66 % en général)."
+      : `Gazon vu dans ESA WorldCover ${s.year} (couverture du sol par satellite, 10 m), sans les arbres, bâtiments, routes et plans d’eau. Il inclut aussi du foin, des prés et des zones naturelles : sur 45 terrains entièrement cartographiés en Ontario, au Québec et dans les États voisins, le gazon entretenu en représentait 59 %, et la plupart se situaient dans la fourchette indiquée.`,
   grassPct: "Gazon tondu par robot (%)",
   grassPctHint: "Le gazon entretenu estimé inclut encore les verts, les départs et une partie de l’herbe longue que les robots ne tondent pas.",
 
@@ -332,6 +357,7 @@ const fr: UiStrings = {
   sodTapHint: "Touchez un champ sur la carte pour l’exclure de la soumission, ou pour le remettre.",
   sodSource: (year: number) =>
     `Champs détectés : Agriculture et Agroalimentaire Canada, Inventaire annuel des cultures ${year}. Ses pixels de 30 m placent les bords des champs à environ 15 m près; les champs tracés sont mesurés exactement.`,
+  sodPhotos: "Champs détectés mesurés sur les photos aériennes du Québec avec le LiDAR : routes, bâtiments, arbres et eau à l’intérieur exclus.",
   sodPct: "Gazon en tonte (%)",
   sodPctHint: "Les champs fraîchement récoltés ou ressemés ne sont pas tondus.",
 
@@ -510,7 +536,7 @@ const fr: UiStrings = {
   lawnPhotosKept: (n: number) => (n === 1 ? "1 zone des photos gardée comme pelouse : touchez-la de nouveau pour la retirer." : `${n} zones des photos gardées comme pelouse : touchez-en une de nouveau pour la retirer.`),
   lawnPhotosLoading: "Recherche des piscines et surfaces pavées sur les photos aériennes…",
   attributionLidar: "LiDAR © RNCan (MNEHR)",
-  attributionPhotos: "Piscines et pavé : photos aériennes © Gouvernement du Québec (MRNF), CC BY 4.0",
+  attributionPhotos: "Photos aériennes © Gouvernement du Québec (MRNF), CC BY 4.0",
 
   errorTitle: "Une erreur est survenue.",
   errorBody:

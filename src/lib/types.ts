@@ -50,19 +50,24 @@ export interface CourseMeasurement {
   /** True when the outline was traced by hand (the course isn't in OSM). */
   outlineTraced: boolean;
   /**
-   * Grass counted inside the outline from satellite land cover, for courses
-   * with no mapped turf (boundary-only or traced). null when not run or failed.
+   * Grass counted inside the outline, for courses with no mapped turf
+   * (boundary-only or traced): from the aerial photos in Quebec, else from
+   * satellite land cover. null when not run or failed.
    */
   satellite: SatelliteTurf | null;
 }
 
-/** What covers the inside of a course outline (ESA WorldCover), in acres. */
+/**
+ * What covers the inside of a course outline, in acres: from Quebec's aerial
+ * photos and the LiDAR (surface.ts), or from ESA WorldCover elsewhere.
+ */
 export interface SatelliteTurf {
-  /** WorldCover "grassland": fairways, rough, greens, tees, range. */
+  source: "photos" | "worldcover";
+  /** Grass: fairways, rough, greens, tees, range (and single trees over it, from the photos). */
   grassAcres: number;
-  /** Trees and shrubs. */
+  /** Trees and shrubs (woods, from the photos). */
   treesAcres: number;
-  /** Buildings, roads, parking. */
+  /** Buildings, roads, paths, parking (and sand, from the photos). */
   builtAcres: number;
   /** Water and wetland. */
   waterAcres: number;
@@ -70,8 +75,8 @@ export interface SatelliteTurf {
   otherAcres: number;
   /** All cells inside the outline. */
   outlineAcres: number;
-  /** Year of the land cover. */
-  year: number;
+  /** Year of the land cover (the photos' mosaic has no single year). */
+  year: number | null;
 }
 
 /** One sod field: detected from the crop inventory or traced by hand. */
@@ -92,4 +97,6 @@ export interface SodMeasurement {
   fields: SodField[];
   /** Crop inventory year the detected fields come from; null if none were detected. */
   year: number | null;
+  /** True once the detected fields were measured on the aerial photos (roads, trees, buildings and water inside left out). */
+  photos?: boolean;
 }

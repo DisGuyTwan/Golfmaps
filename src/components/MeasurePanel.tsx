@@ -6,7 +6,8 @@ import { estimatedTurf } from "@/lib/landcover";
 import { DRIVEWAY_WIDTHS_FT, formatSqft, lotLooksOdd, photoAreas, type LawnMeasurement, type LawnTotals } from "@/lib/lawn";
 import type { AcreageMode } from "@/lib/quote";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
-import type { MeasureError, SatelliteError, TraceKind } from "./GolfCourseCalculator";
+import { useState } from "react";
+import type { MeasureError, PickKind, SatelliteError, TraceKind } from "./GolfCourseCalculator";
 import { useTerrain } from "@/lib/quote-store";
 import MowerFit from "./MowerFit";
 import QuoteSection from "./QuoteSection";
@@ -34,8 +35,10 @@ interface MeasurePanelProps {
   awaitingSecondCorner: boolean;
   tracing: TraceKind | null;
   tracePointCount: number;
-  /** Lawn: waiting for the tap that picks a lot. */
-  picking: boolean;
+  /** Waiting for the tap that picks a property (any kind) or, in lawn mode, a lot. */
+  picking: PickKind | null;
+  /** The rep picked the kind of property by hand (Change), rather than the calculator detecting it. */
+  chosen: boolean;
   /** Width (ft) for the driveway being traced. */
   driveWidthFt: number;
   onDriveWidth: (ft: number) => void;
@@ -47,7 +50,7 @@ interface MeasurePanelProps {
   onUndoPoint: () => void;
   onFinishTrace: () => void;
   onCancelTrace: () => void;
-  onStartPick: () => void;
+  onStartPick: (kind: PickKind) => void;
   onCancelPick: () => void;
   onClear: () => void;
   getShareUrl: () => string;
@@ -119,8 +122,12 @@ export default function MeasurePanel({
   onCancelPick,
   onClear,
   getShareUrl,
+  chosen,
 }: MeasurePanelProps) {
   const t = UI[lang];
+  const [changing, setChanging] = useState(false);
+  // Nothing measured and no kind picked by hand: the calculator detects what the property is.
+  const neutral = !result && !sod && !lawn && !chosen;
   const terrain = useTerrain();
   const ac = (acres: number) => formatAcres(acres, lang);
   const errorText = error
@@ -140,8 +147,8 @@ export default function MeasurePanel({
   const offerOutline = mode === "golf" && ((!!result && (!result.found || outlineOnly)) || error !== null);
   const sq = (n: number) => formatSqft(n, lang);
   const num = (n: number) => formatSqft(n, lang, false);
-  const modeIcon = MODES.find((m) => m.id === mode)!.icon;
-  const title = mode === "sod" ? t.sodPanelTitle : mode === "lawn" ? t.lawnPanelTitle : t.panelTitle;
+  const modeIcon = neutral ? "map" : MODES.find((m) => m.id === mode)!.icon;
+  const title = neutral ? t.anyPanelTitle : mode === "sod" ? t.sodPanelTitle : mode === "lawn" ? t.lawnPanelTitle : t.panelTitle;
   // Lawn: say so when OSM has no building on the lot, so the rep traces the house out.
   const lawnNoBuilding =
     !!lawn &&
@@ -166,9 +173,12 @@ export default function MeasurePanel({
             <Icon name={modeIcon} className="h-[18px] w-[18px] text-accent" />
             {title}
           </h2>
-          {(result || sod || lawn) && (
+          {(result || sod || lawn || chosen) && (
             <button
-              onClick={onClear}
+              onClick={() => {
+                setChanging(false);
+                onClear();
+              }}
               className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-faint transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
             >
               <Icon name="close" className="h-3.5 w-3.5" />
@@ -177,13 +187,31 @@ export default function MeasurePanel({
           )}
         </div>
 
+        {!neutral && !tracing && (
+          <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
+            <span>{chosen ? t.kindChosen(t.modes[mode]) : t.kindDetected(t.modes[mode])}</span>
+            <button
+              type="button"
+              aria-expanded={changing}
+              onClick={() => setChanging((open) => !open)}
+              className="font-semibold text-accent underline-offset-2 hover:underline"
+            >
+              {t.changeKind}
+            </button>
+          </p>
+        )}
+
+        {changing && !neutral && !tracing && (
         <div role="group" aria-label={t.modeGroup} className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-surface-2 p-1">
           {MODES.map(({ id, icon }) => (
             <button
               key={id}
               type="button"
               aria-pressed={mode === id}
-              onClick={() => onModeChange(id)}
+              onClick={() => {
+                setChanging(false);
+                onModeChange(id);
+              }}
               className={`inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md text-xs font-semibold transition-all duration-200 active:scale-[0.98] ${
                 mode === id ? "bg-brand text-white shadow-sm" : "text-muted hover:text-ink"
               }`}
@@ -193,6 +221,7 @@ export default function MeasurePanel({
             </button>
           ))}
         </div>
+        )}
 
         {tracing ? (
           <div className="space-y-2">
@@ -245,7 +274,7 @@ export default function MeasurePanel({
           </div>
         ) : picking ? (
           <div className="space-y-2">
-            <Notice tone="info">{t.tapLot}</Notice>
+            <Notice tone="info">{picking === "property" ? t.tapProperty : t.tapLot}</Notice>
             <button onClick={onCancelPick} className={`${ui.btnSecondary} w-full`}>
               <Icon name="close" />
               {t.cancel}
@@ -262,9 +291,27 @@ export default function MeasurePanel({
               {t.cancel}
             </button>
           </div>
+        ) : neutral ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => onStartPick("property")} disabled={loading} className={`${ui.btnPrimary} grow basis-48`}>
+                {loading ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <Icon name="pin" />
+                )}
+                {loading ? t.detecting : t.selectProperty}
+              </button>
+              <button onClick={() => onStartTrace("property")} disabled={loading} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
+                <Icon name="pen" />
+                {t.traceProperty}
+              </button>
+            </div>
+            <p className="text-[11px] text-muted">{t.anyHint}</p>
+          </div>
         ) : mode === "lawn" ? (
           <div className="flex flex-wrap gap-2">
-            <button onClick={onStartPick} disabled={loading} className={`${ui.btnPrimary} grow basis-48`}>
+            <button onClick={() => onStartPick("lot")} disabled={loading} className={`${ui.btnPrimary} grow basis-48`}>
               {loading ? (
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
               ) : (
@@ -330,7 +377,7 @@ export default function MeasurePanel({
         )}
 
         {/* While a tool takes taps, the results fold away so the map stays visible. */}
-        {tracing || selecting || picking || placingCharger ? null : mode === "lawn" ? (
+        {tracing || selecting || picking || placingCharger || neutral ? null : mode === "lawn" ? (
           <>
             {loading && <Notice tone="info">{t.lawnLoading}</Notice>}
             {lawn?.lotSource === "cadastre" && lotLooksOdd(lawn.lot) && lawnTotals && (
@@ -401,7 +448,7 @@ export default function MeasurePanel({
                         {t.courseBoundary}: {ac(result?.courseAcres ?? 0)} ac
                       </span>
                     </p>
-                    <p className="text-faint">{t.satNote(sat.year)}</p>
+                    <p className="text-faint">{t.satNote(sat)}</p>
                   </div>
                 )}
               </>
@@ -482,6 +529,7 @@ export default function MeasurePanel({
                 {leftOut.length > 0 && <p className="text-muted">{t.sodLeftOut(leftOut.length, ac(sumAcres(leftOut)))}</p>}
                 <p className="text-muted">{t.sodTapHint}</p>
                 {sod.year != null && detected.length > 0 && <p className="text-faint">{t.sodSource(sod.year)}</p>}
+                {sod.photos && <p className="text-faint">{t.sodPhotos}</p>}
               </div>
             )}
 
@@ -492,8 +540,9 @@ export default function MeasurePanel({
 
         <p className="text-center text-[10px] text-faint">
           {t.attribution}
-          {mode === "golf" && sat && <> · {t.attributionWorldCover}</>}
+          {mode === "golf" && sat && <> · {sat.source === "photos" ? t.attributionPhotos : t.attributionWorldCover}</>}
           {mode === "sod" && sod?.year != null && <> · {t.attributionAci}</>}
+          {mode === "sod" && sod?.photos && <> · {t.attributionPhotos}</>}
           {mode === "lawn" && lawn?.lotSource === "cadastre" && <> · {t.attributionCadastre}</>}
           {terrain && <> · {t.attributionLidar}</>}
           {mode === "lawn" && !!lawn?.imagery && <> · {t.attributionPhotos}</>}
