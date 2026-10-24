@@ -263,9 +263,10 @@ export interface Complexity {
 /**
  * Scores the property: each difficulty adds 1-3 points, 0-2 is simple, 3-5
  * moderate, 6 or more complex. Thresholds are the robots' practical limits:
- * 40 % slope for most Kress models, tree cover that blocks RTK satellite
- * signal, passages around a robot's width, and the extra time a typical robot
- * would spend in turns, broken stripes and edges, or driving (coverage.ts).
+ * 20° (36 %) of slope for every Kress robot without four-wheel drive, tree
+ * cover that blocks RTK satellite signal, passages around a robot's width,
+ * and the extra time a typical robot would spend in turns, broken stripes and
+ * edges, or driving (coverage.ts).
  */
 export function complexity(site: Site): Complexity {
   const reasons: Reason[] = [];
@@ -284,7 +285,7 @@ export function complexity(site: Site): Complexity {
     add("obstacles", shape.obstacles >= 6 ? 2 : shape.obstacles >= 3 ? 1 : 0, shape.obstacles);
   }
   if (terrain && terrain.coverage >= 0.5) {
-    if (terrain.over40 > 0.02) add("steep", 3, terrain.over40);
+    if (terrain.over36 > 0.02) add("steep", 3, terrain.over36);
     else add("slope", terrain.over25 > 0.05 ? 2 : terrain.slopeP90 > 15 ? 1 : 0, terrain.slopeP90);
     add("canopy", terrain.canopy > 0.4 ? 3 : terrain.canopy > 0.2 ? 2 : terrain.canopy > 0.1 ? 1 : 0, terrain.canopy);
   } else {

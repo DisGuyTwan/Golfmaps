@@ -6,6 +6,10 @@
  * run time per charge, so `passageM`, `speedMS`, `turnS` and `runtimeMin` are
  * estimates (body size, typical RTK robots, battery size): they shape the
  * extra time a property costs (coverage.ts), not the rated areas.
+ * Slope limits are what Kress dealers see in practice rather than the
+ * listings (40 % for most models): only the EyePilot 4x4 robots hold slopes
+ * over 20° (36 %), so every other model's limit is 36 % (the Voyager KR804's
+ * 47 %, 25°, as Kress gives it).
  * The fit is on capability. List prices conflict between sources (and sales
  * run all season), so `listUsd` is only a rough order used to break ties
  * between robots that fit equally well, never shown.
@@ -13,6 +17,7 @@
 import { overhead, type Overhead, type Pace } from "./coverage";
 import { ROI_DEFAULTS } from "./roi";
 import type { Site } from "./site";
+import type { TerrainStats } from "./terrain";
 
 export const MOWERS_AS_OF = "2026-10-24";
 
@@ -58,19 +63,19 @@ const EYEPILOT = { ...RESIDENTIAL, vision: true, zeroTrim: true };
 
 export const MOWERS: Mower[] = [
   // RTKn: RTK satellite positioning, no camera; the KR161 and KR172 bump into obstacles rather than avoid them.
-  { ...RESIDENTIAL, id: "KR161", line: "rtkn", areaM2: ac(0.25), maxAreaM2: ac(0.25), maxSlopePct: 40, cutWidthCm: 20, minCutMm: 40, runtimeMin: 50, avoidance: false, listUsd: 1500 },
-  { ...RESIDENTIAL, id: "KR172", line: "rtkn", areaM2: ac(0.5), maxAreaM2: ac(0.7), maxSlopePct: 40, cutWidthCm: 20, minCutMm: 40, runtimeMin: 60, avoidance: false, listUsd: 1700 },
-  { ...RESIDENTIAL, id: "KR173", line: "rtkn", areaM2: ac(0.75), maxAreaM2: ac(1.2), maxSlopePct: 40, cutWidthCm: 20, minCutMm: 40, runtimeMin: 70, listUsd: 2000 },
-  { ...RESIDENTIAL, id: "KR174", line: "rtkn", areaM2: ac(1.2), maxAreaM2: ac(1.7), maxSlopePct: 40, cutWidthCm: 22, minCutMm: 40, runtimeMin: 90, listUsd: 2700 },
+  { ...RESIDENTIAL, id: "KR161", line: "rtkn", areaM2: ac(0.25), maxAreaM2: ac(0.25), maxSlopePct: 36, cutWidthCm: 20, minCutMm: 40, runtimeMin: 50, avoidance: false, listUsd: 1500 },
+  { ...RESIDENTIAL, id: "KR172", line: "rtkn", areaM2: ac(0.5), maxAreaM2: ac(0.7), maxSlopePct: 36, cutWidthCm: 20, minCutMm: 40, runtimeMin: 60, avoidance: false, listUsd: 1700 },
+  { ...RESIDENTIAL, id: "KR173", line: "rtkn", areaM2: ac(0.75), maxAreaM2: ac(1.2), maxSlopePct: 36, cutWidthCm: 20, minCutMm: 40, runtimeMin: 70, listUsd: 2000 },
+  { ...RESIDENTIAL, id: "KR174", line: "rtkn", areaM2: ac(1.2), maxAreaM2: ac(1.7), maxSlopePct: 36, cutWidthCm: 22, minCutMm: 40, runtimeMin: 90, listUsd: 2700 },
   // EyePilot: camera plus RTK, ZeroTrim; the KR276 lists 130 min per charge (10 Ah).
-  { ...EYEPILOT, id: "KR272", line: "eyepilot", areaM2: ac(0.5), maxAreaM2: ac(0.5), maxSlopePct: 40, cutWidthCm: 22, minCutMm: 40, runtimeMin: 75, listUsd: 2500 },
-  { ...EYEPILOT, id: "KR276", line: "eyepilot", areaM2: ac(1.5), maxAreaM2: ac(1.5), maxSlopePct: 40, cutWidthCm: 24, minCutMm: 40, runtimeMin: 130, listUsd: 3600 },
-  // EyePilot 4x4: four motors, slopes to 84 %.
+  { ...EYEPILOT, id: "KR272", line: "eyepilot", areaM2: ac(0.5), maxAreaM2: ac(0.5), maxSlopePct: 36, cutWidthCm: 22, minCutMm: 40, runtimeMin: 75, listUsd: 2500 },
+  { ...EYEPILOT, id: "KR276", line: "eyepilot", areaM2: ac(1.5), maxAreaM2: ac(1.5), maxSlopePct: 36, cutWidthCm: 24, minCutMm: 40, runtimeMin: 130, listUsd: 3600 },
+  // EyePilot 4x4: four motors, slopes to 84 % (40°): the only ones for slopes over 20°.
   { ...EYEPILOT, id: "KR282", line: "eyepilot4x4", areaM2: ac(0.5), maxAreaM2: ac(0.5), maxSlopePct: 84, cutWidthCm: 24, minCutMm: 40, runtimeMin: 75, fourWheel: true, listUsd: 3000 },
   { ...EYEPILOT, id: "KR284", line: "eyepilot4x4", areaM2: ac(1), maxAreaM2: ac(1), maxSlopePct: 84, cutWidthCm: 24, minCutMm: 40, runtimeMin: 100, fourWheel: true, listUsd: 3600 },
   { ...EYEPILOT, id: "KR286", line: "eyepilot4x4", areaM2: ac(2.5), maxAreaM2: ac(2.5), maxSlopePct: 84, cutWidthCm: 24, minCutMm: 40, runtimeMin: 130, fourWheel: true, listUsd: 4300 },
   // MasterSeries: 62 cm, cuts down to 10 mm (fairways), 2 h per charge, 1.5 m/s; 18 % slope at the boundary.
-  { ...RESIDENTIAL, id: "KR238", line: "masterseries", areaM2: ac(20), maxAreaM2: ac(20), maxSlopePct: 40, cutWidthCm: 62, minCutMm: 10, passageM: 1.5, speedMS: 1.5, turnS: 10, runtimeMin: 120, commercial: true, listUsd: 40000 },
+  { ...RESIDENTIAL, id: "KR238", line: "masterseries", areaM2: ac(20), maxAreaM2: ac(20), maxSlopePct: 36, cutWidthCm: 62, minCutMm: 10, passageM: 1.5, speedMS: 1.5, turnS: 10, runtimeMin: 120, commercial: true, listUsd: 40000 },
   // Voyager: up to 7 or 19 acres (about 8 h) per charge at 5.6 mph. Slope: Kress gives 20° (about 36 %) for the KR800 and 25° (about 47 %) for the KR804.
   { ...RESIDENTIAL, id: "KR800", line: "voyager", areaM2: ac(7), maxAreaM2: ac(7), maxSlopePct: 36, cutWidthCm: 102, minCutMm: 38, passageM: 2, speedMS: 2.5, turnS: 12, runtimeMin: 480, commercial: true, listUsd: 62000 },
   { ...RESIDENTIAL, id: "KR804", line: "voyager", areaM2: ac(19), maxAreaM2: ac(19), maxSlopePct: 47, cutWidthCm: 152, minCutMm: 38, passageM: 2.5, speedMS: 2.5, turnS: 12, runtimeMin: 480, commercial: true, listUsd: 84000 },
@@ -103,7 +108,6 @@ function paceOf(m: Mower): Pace {
 /** Why a robot fits less well, or why it doesn't fit at all. */
 export type FitNote =
   | "atLimit"
-  | "tooSmall"
   | "tooSteep"
   | "slopeGrip"
   | "treesNoVision"
@@ -113,9 +117,9 @@ export type FitNote =
 
 export interface Fit {
   mower: Mower;
-  /** Units needed for the area (always 1 for a lawn). */
+  /** Units needed for the area. */
   units: number;
-  /** False when it can't do the job (too steep, too small, can't cut fairways). */
+  /** False when it can't do the job: parts of the site are past its slope limit. */
   fits: boolean;
   /** Lower is better. */
   penalty: number;
@@ -136,14 +140,22 @@ export function capacityM2(mower: Mower): number {
 
 /** Share of the area above a robot's slope limit that rules it out: a few patches can be left to a trimmer. */
 const STEEP_SHARE = 0.02;
+/** Home robots one lawn can get before the commercial ones are worth a look too. */
+const MAX_LAWN_UNITS = 3;
 /** A layout can't make a robot faster than about this much of its rating. */
 const MIN_FACTOR = 0.9;
+
+/** Share of the site steeper than a robot's slope limit (the LiDAR shares are at 36, 47 and 84 %). */
+function overLimit(terrain: TerrainStats, limitPct: number): number {
+  return limitPct >= 84 ? terrain.over84 : limitPct >= 47 ? terrain.over47 : limitPct >= 36 ? terrain.over36 : terrain.over25;
+}
 
 /**
  * How well one robot fits a site. The area it has to keep up with is the
  * site's area times the extra time the layout costs this robot (turns, broken
  * stripes, edges, driving from the charger and between areas), so a ragged
- * lawn far from the charger can need the next size up.
+ * lawn far from the charger can need the next size up. A lawn bigger than a
+ * home robot's largest area gets several (each mowing part of it).
  */
 export function fitMower(site: Site, mower: Mower): Fit {
   const notes: FitNote[] = [];
@@ -154,20 +166,15 @@ export function fitMower(site: Site, mower: Mower): Fit {
   const layout = site.coverage ? overhead(site.coverage, paceOf(mower)) : null;
   const work = layout && { ...layout, hours: (layout.hours * site.areaM2) / site.coverage!.areaM2 };
   const effective = site.areaM2 * Math.max(MIN_FACTOR, work?.factor ?? 1);
-  const units = site.kind === "lawn" ? 1 : Math.max(1, Math.ceil(effective / capacityM2(mower)));
+  const home = site.kind === "lawn" && !mower.commercial;
+  const units = Math.max(1, Math.ceil(effective / (home ? mower.maxAreaM2 : capacityM2(mower))));
 
-  if (site.kind === "lawn") {
-    if (effective > mower.maxAreaM2) {
-      fits = false;
-      notes.push("tooSmall");
-    } else if (effective > mower.areaM2) {
-      penalty += 1;
-      notes.push("atLimit");
-    }
+  if (home && effective / units > mower.areaM2) {
+    penalty += 1;
+    notes.push("atLimit");
   }
   if (terrain && terrain.coverage >= 0.5) {
-    const over = mower.maxSlopePct >= 84 ? terrain.over84 : terrain.over40;
-    if (over > STEEP_SHARE || (mower.maxSlopePct < 40 && terrain.over25 > 0.1)) {
+    if (overLimit(terrain, mower.maxSlopePct) > STEEP_SHARE) {
       fits = false;
       notes.push("tooSteep");
     } else if (terrain.over25 > 0.05 && !mower.fourWheel) {
@@ -198,12 +205,16 @@ export function fitMower(site: Site, mower: Mower): Fit {
   return { mower, units, fits, penalty, notes, work };
 }
 
-/** The robots a recommendation chooses from for each kind of site. */
+/**
+ * The robots a recommendation chooses from for each kind of site. A lawn gets
+ * home robots (several on a big one); past three of the biggest, the
+ * commercial ones are compared too.
+ */
 function candidates(site: Site): Mower[] {
   if (site.kind === "lawn") {
     const residential = MOWERS.filter((m) => !m.commercial);
     const biggest = Math.max(...residential.map((m) => m.maxAreaM2));
-    return site.areaM2 <= biggest ? residential : MOWERS.filter((m) => m.commercial);
+    return site.areaM2 <= MAX_LAWN_UNITS * biggest ? residential : MOWERS;
   }
   if (site.kind === "sod") return MOWERS.filter((m) => m.line === "voyager");
   return MOWERS.filter((m) => m.commercial);

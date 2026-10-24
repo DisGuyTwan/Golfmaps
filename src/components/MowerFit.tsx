@@ -7,7 +7,7 @@ import { MOWERS_AS_OF, mowerName, recommend, type Fit, type Recommendation } fro
 import { acresForQuote, lawnQuoteSqft, type AcreageMode, type QuoteSettings } from "@/lib/quote";
 import { useCharger, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
 import { complexity, golfSite, lawnSite, sodSite, type Complexity, type Level, type Reason, type Site } from "@/lib/site";
-import type { TerrainGrid } from "@/lib/terrain";
+import { slopeDeg, type TerrainGrid } from "@/lib/terrain";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { Icon } from "./icons";
 import { Notice, toneClass } from "./ui";
@@ -101,7 +101,7 @@ function useCopy(lang: Lang) {
       case "steep":
         return t.fitReason.steep(pct(r.value));
       case "slope":
-        return t.fitReason.slope(num(r.value));
+        return t.fitReason.slope(num(r.value), num(slopeDeg(r.value)));
       case "canopy":
         return t.fitReason.canopy(pct(r.value));
       case "obstacles":
@@ -118,7 +118,7 @@ function useCopy(lang: Lang) {
     const terrain = site.terrain;
     if (site.kind === "lawn") out.push(t.fitRated(formatSqft(m.areaM2 * SQ_M_TO_SQ_FT, lang)));
     if (m.vision && terrain && terrain.canopy > 0.1) out.push(t.fitWhy.vision);
-    if (m.fourWheel && terrain && terrain.over25 > 0.02) out.push(t.fitWhy.fourWheel);
+    if (m.fourWheel && terrain && terrain.coverage >= 0.5 && terrain.over25 > 0.02) out.push(t.fitWhy.fourWheel);
     if (m.zeroTrim && site.shape && site.shape.edgePer100 > 25) out.push(t.fitWhy.zeroTrim);
     if (m.avoidance && site.shape && site.shape.obstacles >= 3) out.push(t.fitWhy.avoidance);
     if (site.kind === "golf" && site.fairwayM2 > 0 && m.minCutMm <= 15) out.push(t.fitWhy.fairway);
@@ -127,14 +127,17 @@ function useCopy(lang: Lang) {
     return out;
   };
 
-  const units = (fit: Fit, site: Site) => (site.kind === "lawn" ? "" : ` · ${t.fitUnits(fit.units)}`);
+  // A lawn usually takes one robot: say so only when it takes more.
+  const units = (fit: Fit, site: Site) => (site.kind === "lawn" && fit.units === 1 ? "" : ` · ${t.fitUnits(fit.units)}`);
   const date = new Date(`${MOWERS_AS_OF}T12:00:00`).toLocaleDateString(locale, { dateStyle: "long" });
-  return { t, reason, why, units, date };
+  // Quebec French puts a space before a colon.
+  const colon = lang === "fr" ? " : " : ": ";
+  return { t, reason, why, units, date, colon };
 }
 
 /** One recommended robot: name, units, why, and what to check on site. */
 function Pick({ label, fit, site, lang }: { label: string; fit: Fit; site: Site; lang: Lang }) {
-  const { t, why, units } = useCopy(lang);
+  const { t, why, units, colon } = useCopy(lang);
   return (
     <div className="rounded-lg bg-accent-soft px-3 py-2 print:border print:border-line">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-accent-ink/80">{label}</div>
@@ -152,7 +155,10 @@ function Pick({ label, fit, site, lang }: { label: string; fit: Fit; site: Site;
       </ul>
       {fit.notes.length > 0 && (
         <p className="mt-1 text-[11px] text-accent-ink/80">
-          <span className="font-semibold">{t.fitCheck}: </span>
+          <span className="font-semibold">
+            {t.fitCheck}
+            {colon}
+          </span>
           {fit.notes.map((n) => t.fitNote[n]).join(", ")}
         </p>
       )}
@@ -178,7 +184,7 @@ export default function MowerFit({
   onMoveCharger?: () => void;
 }) {
   const fit = useMowerFit();
-  const { t, reason, date } = useCopy(lang);
+  const { t, reason, units, date, colon } = useCopy(lang);
   if (!fit && !loading) return null;
 
   const scored = fit?.complexity.reasons.filter((r) => r.points > 0) ?? [];
@@ -231,8 +237,12 @@ export default function MowerFit({
           {rec?.rough && <Pick label={t.fitRough} fit={rec.rough} site={{ ...fit.site, fairwayM2: 0 }} lang={lang} />}
           {runnerUp && (
             <p className="text-[11px] text-muted">
-              <span className="font-semibold">{t.fitAlso}: </span>
+              <span className="font-semibold">
+                {t.fitAlso}
+                {colon}
+              </span>
               {mowerName(runnerUp.mower)}
+              {units(runnerUp, fit.site)}
               {worse.length > 0 && ` (${worse.map((n) => t.fitNote[n]).join(", ")})`}
             </p>
           )}

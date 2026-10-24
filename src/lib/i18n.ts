@@ -198,8 +198,8 @@ const en = {
     narrow: (ft: string, m: string) => `Narrowest passage ${ft} ft (${m} m)`,
     shapes: (pct: string) => `Irregular shapes: about ${pct}% more time in turns and edges`,
     travel: (pct: string, far: string) => `Driving: about ${pct}% more time, up to ${far} from the charger`,
-    steep: (pct: string) => `${pct}% of it steeper than 40%`,
-    slope: (pct: string) => `Slopes up to about ${pct}%`,
+    steep: (pct: string) => `${pct}% of it steeper than 20° (36%): four-wheel drive only`,
+    slope: (pct: string, deg: string) => `Slopes up to about ${pct}% (${deg}°)`,
     canopy: (pct: string) => `${pct}% under trees (weaker GPS signal)`,
     obstacles: (n: number) => `${n} obstacles to go around`,
     noTerrain: "No LiDAR here: slope and trees not checked",
@@ -209,7 +209,7 @@ const en = {
   fitCheck: "Check on site",
   fitRough: "For the rough",
   fitFairways: "For the fairways",
-  fitNone: "No Kress robot can mow all of it: parts are steeper than 84%. Plan a trimmer for those.",
+  fitNone: "No Kress robot can mow all of it: parts are steeper than 40° (84%). Plan a trimmer for those.",
   fitUnits: (n: number) => (n === 1 ? "1 unit" : `${n} units`),
   fitHours: (h: string, each: boolean) => `About ${h} h ${each ? "per unit " : ""}for a full mow, turns and driving included`,
   fitCharger: {
@@ -222,7 +222,7 @@ const en = {
   fitRated: (area: string) => `Rated for ${area} every 48 h`,
   fitWhy: {
     vision: "EyePilot camera holds its position under trees",
-    fourWheel: "Four-wheel drive, slopes up to 84%",
+    fourWheel: "Four-wheel drive: holds slopes over 20°, up to 40° (84%)",
     zeroTrim: "ZeroTrim cuts to the edge: less trimming",
     avoidance: "Steers around obstacles",
     fairway: "Cuts down to 10 mm: fairway height",
@@ -230,7 +230,6 @@ const en = {
   },
   fitNote: {
     atLimit: "at its limit (mows every 72 h)",
-    tooSmall: "too small",
     tooSteep: "too steep",
     slopeGrip: "less grip on wet slopes",
     treesNoVision: "no camera: can drift under trees",
@@ -441,8 +440,8 @@ const fr: UiStrings = {
     narrow: (ft: string, m: string) => `Passage le plus étroit : ${ft} pi (${m} m)`,
     shapes: (pct: string) => `Formes irrégulières : environ ${pct} % de temps en plus (virages et bordures)`,
     travel: (pct: string, far: string) => `Déplacements : environ ${pct} % de temps en plus, jusqu’à ${far} de la station`,
-    steep: (pct: string) => `${pct} % plus raide que 40 %`,
-    slope: (pct: string) => `Pentes jusqu’à environ ${pct} %`,
+    steep: (pct: string) => `${pct} % plus raide que 20° (36 %) : quatre roues motrices seulement`,
+    slope: (pct: string, deg: string) => `Pentes jusqu’à environ ${pct} % (${deg}°)`,
     canopy: (pct: string) => `${pct} % sous les arbres (signal GPS plus faible)`,
     obstacles: (n: number) => `${n} obstacles à contourner`,
     noTerrain: "Pas de LiDAR ici : pente et arbres non vérifiés",
@@ -452,7 +451,7 @@ const fr: UiStrings = {
   fitCheck: "À vérifier sur place",
   fitRough: "Pour l’herbe longue",
   fitFairways: "Pour les allées",
-  fitNone: "Aucun robot Kress ne peut tout tondre : certaines parties dépassent 84 % de pente. Prévoyez un coupe-bordure pour celles-ci.",
+  fitNone: "Aucun robot Kress ne peut tout tondre : certaines parties dépassent 40° (84 %) de pente. Prévoyez un coupe-bordure pour celles-ci.",
   fitUnits: (n: number) => (n === 1 ? "1 unité" : `${n} unités`),
   fitHours: (h: string, each: boolean) => `Environ ${h} h ${each ? "par unité " : ""}par tonte complète, virages et déplacements compris`,
   fitCharger: {
@@ -465,7 +464,7 @@ const fr: UiStrings = {
   fitRated: (area: string) => `Conçu pour ${area} aux 48 h`,
   fitWhy: {
     vision: "Caméra EyePilot : garde sa position sous les arbres",
-    fourWheel: "Quatre roues motrices, pentes jusqu’à 84 %",
+    fourWheel: "Quatre roues motrices : tient les pentes de plus de 20°, jusqu’à 40° (84 %)",
     zeroTrim: "ZeroTrim coupe jusqu’au bord : moins de taille",
     avoidance: "Contourne les obstacles",
     fairway: "Coupe jusqu’à 10 mm : hauteur d’allée",
@@ -473,7 +472,6 @@ const fr: UiStrings = {
   },
   fitNote: {
     atLimit: "à sa limite (tonte aux 72 h)",
-    tooSmall: "trop petit",
     tooSteep: "trop raide",
     slopeGrip: "moins d’adhérence en pente mouillée",
     treesNoVision: "sans caméra : peut dériver sous les arbres",

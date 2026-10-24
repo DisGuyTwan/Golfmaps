@@ -70,6 +70,12 @@ const HIGH_M = 2;
 const ROOF_SMOOTH_M = 0.5;
 /** Smooth high patches smaller than this (m²) are flat-topped hedges or crowns, not buildings. */
 const MIN_BUILDING_M2 = 25;
+/**
+ * Smooth high patches standing taller than this (m, median) are a forest's
+ * canopy, not roofs: a mature stand reads smooth at 1 m, 20-28 m up on Mont
+ * Saint-Bruno, while houses stand 3-12 m and a five-storey building about 17.
+ */
+const MAX_BUILDING_M = 18;
 
 /** 3 × 3 mean of the finite heights around each cell; cells with no data stay NaN. */
 function smooth3(r: NativeRaster): Float32Array {
@@ -99,14 +105,54 @@ function smooth3(r: NativeRaster): Float32Array {
   return out;
 }
 
+/** Under trees and low plants, slope is a plane fitted over about this many metres (see slopePct). */
+const CANOPY_SLOPE_M = 9;
+
+/**
+ * Slope (%) of the least-squares plane through the k × k heights around each
+ * `only` cell, written into `out`; cells with a missing height in reach (or
+ * too near the edge) keep what `out` has.
+ */
+function planeSlope(r: NativeRaster, k: number, out: Float32Array, only: Uint8Array): void {
+  const { width: w, height: h, data, cellM } = r;
+  const half = (k - 1) / 2;
+  let sumX2 = 0;
+  for (let d = -half; d <= half; d++) sumX2 += d * d;
+  sumX2 *= k;
+  for (let y = half; y < h - half; y++) {
+    for (let x = half; x < w - half; x++) {
+      const i = y * w + x;
+      if (!only[i]) continue;
+      let sx = 0, sy = 0, ok = true;
+      for (let dy = -half; dy <= half && ok; dy++) {
+        for (let dx = -half; dx <= half; dx++) {
+          const v = data[(y + dy) * w + x + dx];
+          if (!Number.isFinite(v)) {
+            ok = false;
+            break;
+          }
+          sx += dx * v;
+          sy += dy * v;
+        }
+      }
+      if (ok) out[i] = (Math.hypot(sx, sy) / (sumX2 * cellM)) * 100;
+    }
+  }
+}
+
 /**
  * Slope in percent (rise over run × 100), Horn's 3 × 3 method as most GIS
  * do, on heights first averaged over 3 × 3 cells: the 1 m LiDAR is a few cm
  * noisy, enough to read a flat lawn as 10-20 % from one cell to the next.
  * Edge cells reuse their own height for the missing neighbours; a cell next
  * to missing data has no slope (NaN).
+ * Under trees and low plants (`cover`), the bare-earth model is interpolated
+ * from the few pulses that reach the ground, so there the slope is a plane
+ * fitted over about 9 m instead: a wooded hillside still reads steep, a
+ * wooded flat lot no longer reads 15 % (1-2 m cells only; coarser cells
+ * already average that much).
  */
-export function slopePct(dtm: NativeRaster): Float32Array {
+export function slopePct(dtm: NativeRaster, cover?: Uint8Array): Float32Array {
   const { width: w, height: h, cellM } = dtm;
   const data = smooth3(dtm);
   const out = new Float32Array(w * h);
@@ -121,8 +167,17 @@ export function slopePct(dtm: NativeRaster): Float32Array {
       out[r * w + c] = Math.hypot(dx, dy) * 100;
     }
   }
+  const k = 2 * Math.round(CANOPY_SLOPE_M / cellM / 2) + 1;
+  if (cover && k > 3) {
+    const covered = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) covered[i] = cover[i] === COVER.tree || cover[i] === COVER.low ? 1 : 0;
+    planeSlope(dtm, k, out, covered);
+  }
   return out;
 }
+
+/** A slope in percent as degrees: 36 % is 20°, 84 % is 40°. */
+export const slopeDeg = (pct: number) => (Math.atan(pct / 100) * 180) / Math.PI;
 
 /** 3 × 3 binary filter: a cell is on when at least `min` of its 9 cells (itself included) are. */
 function neighbourhood(on: Uint8Array, w: number, h: number, min: number): Uint8Array {
@@ -147,7 +202,8 @@ const dilate = (on: Uint8Array, w: number, h: number) => neighbourhood(on, w, h,
 /**
  * What stands on each cell: ground, low plants, trees or buildings. Roofs and
  * crowns are both high; roofs are smooth planes (a small Laplacian in the
- * surface model) in patches the size of a building, crowns are rough. Only
+ * surface model) in patches the size of a building and a building's height,
+ * crowns are rough (or, in a dense forest, too tall to be a roof). Only
  * told apart at 1-2 m cells; coarser grids (golf courses) call everything high
  * a tree, which is what matters on turf.
  */
@@ -180,7 +236,10 @@ export function coverClasses(dtm: NativeRaster, dsm: NativeRaster): Uint8Array {
   const minCells = MIN_BUILDING_M2 / (cellM * cellM);
   const kept = new Uint8Array(w * h);
   for (const cells of labelRegions(opened, w, h).regions) {
-    if (cells.length >= minCells) for (const i of cells) kept[i] = 1;
+    if (cells.length < minCells) continue;
+    const heights = cells.map((i) => dsm.data[i] - dtm.data[i]).sort((a, b) => a - b);
+    if (heights[heights.length >> 1] > MAX_BUILDING_M) continue;
+    for (const i of cells) kept[i] = 1;
   }
   // Grow back over the roof edges (rough where the roof meets the wall), then close small gaps.
   const grown = dilate(kept, w, h);
@@ -242,9 +301,14 @@ export interface TerrainStats {
   /** Median and 90th percentile slope (%). */
   slopeP50: number;
   slopeP90: number;
-  /** Steeper than 25 % (hard going), 40 % (most Kress robots' limit) and 84 % (EyePilot 4×4's). */
+  /**
+   * Steeper than 25 % (14°, hard going), 36 % (20°: the limit of every Kress
+   * robot without four-wheel drive), 47 % (25°, the Voyager KR804's) and 84 %
+   * (40°, the EyePilot 4x4's).
+   */
   over25: number;
-  over40: number;
+  over36: number;
+  over47: number;
   over84: number;
   /** Under tree crowns: weaker satellite signal for RTK robots. */
   canopy: number;
@@ -252,36 +316,27 @@ export interface TerrainStats {
 
 /** Steep cells only count in patches at least this big (m²): a bank, not a curb, a wall's foot or a bed's edge. */
 const MIN_STEEP_M2 = 8;
-/** Open ground (m²) enough to read a slope from, however much of the shape is under trees. */
-const MIN_OPEN_M2 = 40;
 
 /**
  * Slope and canopy under a shape, or null when the LiDAR doesn't cover it.
- * Slope is read where the LiDAR sees the ground (no trees or low plants on
- * it) when there's enough of it (a quarter of the shape, or MIN_OPEN_M2):
- * under crowns the bare-earth model is interpolated from few points and reads
- * steeper than it is.
+ * Every cell counts, wooded or open: on a wooded hillside the trees stand on
+ * the slope the robot has to climb (the route already reads slope under trees
+ * over a wider window, see slopePct).
  */
 export function terrainStats(grid: TerrainGrid, geoms: (Polygon | MultiPolygon)[]): TerrainStats | null {
   const mask = polygonMask(grid, geoms);
-  let inside = 0, withData = 0, canopy = 0, open = 0;
+  let inside = 0, canopy = 0;
+  const counted = new Uint8Array(mask.length);
+  const slopes: number[] = [];
   for (let i = 0; i < mask.length; i++) {
     if (!mask[i]) continue;
     inside++;
     if (grid.slope[i] === NO_SLOPE) continue;
-    withData++;
-    if (grid.cover[i] === COVER.tree) canopy++;
-    if (grid.cover[i] === COVER.ground) open++;
-  }
-  if (!withData) return null;
-  const openOnly = open >= 0.25 * withData || open * grid.cellM * grid.cellM >= MIN_OPEN_M2;
-  const counted = new Uint8Array(mask.length);
-  const slopes: number[] = [];
-  for (let i = 0; i < mask.length; i++) {
-    if (!mask[i] || grid.slope[i] === NO_SLOPE || (openOnly && grid.cover[i] !== COVER.ground)) continue;
     counted[i] = 1;
     slopes.push(grid.slope[i]);
+    if (grid.cover[i] === COVER.tree) canopy++;
   }
+  if (!slopes.length) return null;
   slopes.sort((a, b) => a - b);
   const pct = (q: number) => slopes[Math.min(slopes.length - 1, Math.floor(q * slopes.length))];
   const minCells = Math.max(1, MIN_STEEP_M2 / (grid.cellM * grid.cellM));
@@ -294,13 +349,14 @@ export function terrainStats(grid: TerrainGrid, geoms: (Polygon | MultiPolygon)[
     return n / slopes.length;
   };
   return {
-    coverage: withData / inside,
+    coverage: slopes.length / inside,
     slopeP50: pct(0.5),
     slopeP90: pct(0.9),
     over25: steeper(25),
-    over40: steeper(40),
+    over36: steeper(36),
+    over47: steeper(47),
     over84: steeper(84),
-    canopy: canopy / withData,
+    canopy: canopy / slopes.length,
   };
 }
 
@@ -400,7 +456,8 @@ export function decodeTerrain(json: TerrainGridJson): TerrainGrid {
 /** Slope and cover for a box through /api/terrain (CDN-cached; the LiDAR doesn't change). */
 export async function fetchTerrain(bbox: BBox): Promise<TerrainGrid> {
   const key = [bbox.south, bbox.west, bbox.north, bbox.east].map((v) => v.toFixed(5)).join(",");
-  const response = await fetch(`/api/terrain?bbox=${key}`, { signal: AbortSignal.timeout(45000) });
+  // v: the slope under trees changed (Oct 2026); a new key skips grids the CDN cached before.
+  const response = await fetch(`/api/terrain?bbox=${key}&v=2`, { signal: AbortSignal.timeout(45000) });
   if (!response.ok) throw new Error(`Terrain request failed (HTTP ${response.status})`);
   return decodeTerrain((await response.json()) as TerrainGridJson);
 }

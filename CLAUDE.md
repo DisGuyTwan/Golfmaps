@@ -164,9 +164,14 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   (1-3 points per difficulty; 0-2 simple, 3-5 moderate, 6+ complex) and
   `mowers.ts` ranks the 12 Kress models quoted (KR161/172/173/174,
   KR272/276, KR282/284/286, KR238, KR800/804; keep to that list unless told
-  otherwise): fits first (area, slope limit), then fewest penalties (no
-  camera under trees, no 4x4 on slopes, no ZeroTrim on edgy lawns, passages),
-  then `listUsd × units`. `listUsd` is a rough order only, never shown:
+  otherwise): fits first (slope limit), then fewest penalties (no camera
+  under trees, no 4x4 on slopes, no ZeroTrim on edgy lawns, passages, each
+  extra unit), then `listUsd × units`. Slope limits are the dealer's rule, not
+  Kress's listings: only the EyePilot 4x4 (KR282/284/286) take slopes over 20°
+  (36 %), up to 84 %; every other model stops at 36 % (KR804 47 %). A lawn
+  gets home robots only, several when it's bigger than one (units on
+  `maxAreaM2`); commercial models join only past three of the biggest
+  (`MAX_LAWN_UNITS`), so a steep 3-acre lot gets 2 × KR286, never a KR238. `listUsd` is a rough order only, never shown:
   prices conflict between sources. The area a robot must keep up with is the
   site's area × the layout's extra time for that robot (`coverage.ts`
   `overhead`: stripes in each zone's best direction, turns, hops around
@@ -184,16 +189,21 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   file's whole tile index (15 MB), so `terrain-server.ts` parses the BigTIFF
   header once per instance and range-reads only the index entries and LZW
   tiles under the box (decoded with geotiff's `getDecoder`). Slope is smoothed
-  over 3 × 3 cells (1 m LiDAR noise reads as 10-20 %), read on open ground
-  when there's enough (under crowns the DTM is interpolated), and steep shares
+  over 3 × 3 cells (1 m LiDAR noise reads as 10-20 %); under trees and low
+  plants, where the DTM is interpolated, it's a plane fitted over about 9 m
+  (`CANOPY_SLOPE_M`). Every cell counts, wooded or not: reading open ground
+  only called a wooded mountain lot "about 20 %" and recommended a KR238
+  (the route's `v=2` param skips grids the CDN cached before). Steep shares
   only count patches of 8 m² or more. Roofs are smooth, crowns rough
-  (`coverClasses`, 1-2 m cells only); LiDAR buildings are straightened
-  (Douglas-Peucker, ¾ cell) and taken off a lawn unless an OSM building
+  (`coverClasses`, 1-2 m cells only); a smooth patch over 18 m
+  (`MAX_BUILDING_M`) is a forest canopy, not a roof (Mont Saint-Bruno's reads
+  smooth at 20-28 m and came out as buildings). LiDAR buildings are
+  straightened (Douglas-Peucker, ¾ cell) and taken off a lawn unless an OSM building
   already covers 30 % of one. `lawn.lidar` is undefined while loading, null
   where there's no LiDAR, [] when it found none: the "no building" notice only
   shows once both OSM and the LiDAR have answered and found nothing. Don't drop
-  the smoothing or the patch filter: flat lawns then read as steep and get a
-  4x4.
+  the smoothing, the plane fit under trees or the patch filter: flat lawns
+  then read as steep and get a 4x4.
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in

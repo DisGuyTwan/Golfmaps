@@ -8,6 +8,7 @@ import {
   decodeTerrain,
   fromLambert,
   lidarBuildings,
+  slopeDeg,
   slopePct,
   terrainCellM,
   terrainStats,
@@ -54,6 +55,34 @@ describe("slope", () => {
     const gap = raster(10, 10, (c, r) => (c === 5 && r === 5 ? NaN : 0));
     expect(Number.isNaN(slopePct(gap)[5 * 10 + 4])).toBe(true);
   });
+
+  // Under crowns the ground model is interpolated from few pulses: ±30 cm of noise here.
+  const noise = (c: number, r: number) => ((((c * 73856093) ^ (r * 19349663)) >>> 0) % 1000) / 1000 * 0.6 - 0.3;
+  const size = 40;
+  const wooded = new Uint8Array(size * size).fill(COVER.tree);
+  const interior = (s: Float32Array) => {
+    const out: number[] = [];
+    for (let r = 8; r < size - 8; r++) for (let c = 8; c < size - 8; c++) out.push(s[r * size + c]);
+    return out.sort((a, b) => a - b);
+  };
+
+  it("reads a wooded flat lot as flat through the noise under the trees", () => {
+    const flat = raster(size, size, (c, r) => 20 + noise(c, r));
+    const open = interior(slopePct(flat));
+    const under = interior(slopePct(flat, wooded));
+    const p90 = (v: number[]) => v[Math.floor(0.9 * v.length)];
+    expect(p90(open)).toBeGreaterThan(5);
+    expect(p90(under)).toBeLessThan(p90(open) / 3);
+  });
+
+  it("still reads a wooded hillside as steep (45 %, about 24°)", () => {
+    const hill = raster(size, size, (c, r) => 0.45 * c + noise(c, r));
+    const under = interior(slopePct(hill, wooded));
+    expect(under[Math.floor(0.5 * under.length)]).toBeCloseTo(45, -0.5);
+    expect(under[0]).toBeGreaterThan(36);
+    expect(slopeDeg(36.4)).toBeCloseTo(20, 1);
+    expect(slopeDeg(84)).toBeCloseTo(40, 0);
+  });
 });
 
 describe("cover", () => {
@@ -78,6 +107,13 @@ describe("cover", () => {
     expect(count(crown, COVER.tree)).toBeGreaterThanOrEqual(90);
     expect(count(crown, COVER.building)).toBe(0);
     expect(count(hedge, COVER.low)).toBe(30);
+  });
+
+  it("calls a smooth canopy 25 m up a forest, not a roof", () => {
+    const forest = raster(size, size, (c, r) => (roof(c, r) ? 45 : 20));
+    const canopy = coverClasses(dtm, forest);
+    expect(canopy[10 * size + 10]).toBe(COVER.tree);
+    expect(canopy.includes(COVER.building)).toBe(false);
   });
 
   it("calls everything high a tree on coarse grids", () => {
@@ -113,14 +149,14 @@ describe("terrain stats", () => {
     const stats = terrainStats(grid, [box])!;
     expect(stats.slopeP50).toBe(30);
     expect(stats.over25).toBe(1);
-    expect(stats.over40).toBe(0);
+    expect(stats.over36).toBe(0);
     expect(stats.coverage).toBe(1);
     const empty = { ...grid, slope: new Uint8Array(grid.slope.length).fill(NO_SLOPE) };
     expect(terrainStats(empty, [box])).toBeNull();
   });
 });
 
-describe("steep patches and open ground", () => {
+describe("steep patches and wooded slopes", () => {
   // A 20 × 20 cell grid of 1 m cells, all ground at 5 % slope.
   const w = 20, h = 20;
   const bbox = { south: 45.5853, west: -73.4447, north: 45.5853 + h / 111320, east: -73.4447 + w / (111320 * Math.cos((45.5853 * Math.PI) / 180)) };
@@ -134,24 +170,26 @@ describe("steep patches and open ground", () => {
 
   it("counts a bank but not a curb", () => {
     const curb = grid((s) => [0, 1, 2].forEach((c) => (s[5 * w + c] = 60)));
-    expect(terrainStats(curb, [all])!.over40).toBe(0);
+    expect(terrainStats(curb, [all])!.over36).toBe(0);
     const bank = grid((s) => {
       for (let r = 10; r < 13; r++) for (let c = 0; c < 4; c++) s[r * w + c] = 60;
     });
-    expect(terrainStats(bank, [all])!.over40).toBeCloseTo(12 / 400, 5);
+    expect(terrainStats(bank, [all])!.over36).toBeCloseTo(12 / 400, 5);
+    expect(terrainStats(bank, [all])!.over84).toBe(0);
   });
 
-  it("reads slope on the open ground when crowns hide part of it", () => {
+  it("counts the slope under the trees: a wooded hillside above a graded lawn", () => {
     const shaded = grid((s, c) => {
-      for (let i = 0; i < 150; i++) {
-        s[i] = 30;
+      for (let i = 0; i < 300; i++) {
+        s[i] = 45;
         c[i] = COVER.tree;
       }
     });
     const stats = terrainStats(shaded, [all])!;
-    expect(stats.canopy).toBeCloseTo(150 / 400, 5);
-    expect(stats.slopeP90).toBe(5);
-    expect(stats.over25).toBe(0);
+    expect(stats.canopy).toBeCloseTo(300 / 400, 5);
+    expect(stats.slopeP90).toBe(45);
+    expect(stats.over36).toBeCloseTo(300 / 400, 5);
+    expect(stats.over47).toBe(0);
   });
 });
 

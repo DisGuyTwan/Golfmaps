@@ -189,9 +189,12 @@ hard the property is for a robot and which Kress model to quote:
 - **Terrain** comes from Natural Resources Canada's HRDEM mosaic: 1 m LiDAR
   bare-earth and surface models (`/api/terrain` reads just the tiles under the
   property from the Cloud Optimized GeoTIFFs on AWS; CDN 30 days). Slope is
-  read over 3 m where the LiDAR sees open ground, and only patches of 8 m² or
-  more count as steep (a bank, not a curb). What stands on the ground is low
-  plants, trees (rough crowns) or buildings (smooth roofs).
+  read over 3 m on open ground and over about 9 m under trees (the bare earth
+  there is interpolated from few pulses), so a wooded hillside reads as steep
+  and a wooded flat lot as flat; only patches of 8 m² or more count as steep
+  (a bank, not a curb). What stands on the ground is low plants, trees (rough
+  crowns, or anything smooth taller than 18 m: a forest canopy) or buildings
+  (smooth roofs).
 - **Shape** (lawns): separate lawn areas, the narrowest passage a robot must
   drive through (from the distance to the nearest edge) and islands to go
   around.
@@ -210,12 +213,16 @@ hard the property is for a robot and which Kress model to quote:
   (3-5), Complex (6+), with the reasons listed.
 - The **recommendation** chooses among the twelve Kress models quoted: RTKn
   KR161, KR172, KR173, KR174; EyePilot KR272, KR276; EyePilot 4x4 KR282, KR284,
-  KR286; MasterSeries KR238; Voyager KR800 and KR804. A robot has to keep up
-  with the area times the extra time the layout costs it, so a ragged lawn far
-  from the charger can need the next size up; then the fewest drawbacks win
-  (no camera under trees, no 4x4 on slopes over 40%, no ZeroTrim on lawns that
-  are mostly edges, a passage narrower than the robot), then the lowest
-  outlay. On a course with fairways in the quote, the MasterSeries takes the
+  KR286; MasterSeries KR238; Voyager KR800 and KR804. Only the EyePilot 4x4
+  robots take slopes over 20° (36%), up to 40° (84%); a property with more
+  than 2% of its area past a robot's limit rules that robot out (the Voyager
+  KR804's limit is 25°). A robot has to keep up with the area times the extra
+  time the layout costs it, so a ragged lawn far from the charger can need the
+  next size up, and a lawn bigger than one robot gets several (home robots
+  only, up to three of the biggest; past that the commercial ones are compared
+  too). Then the fewest drawbacks win (no camera under trees, no 4x4 on slopes
+  over 14°, no ZeroTrim on lawns that are mostly edges, a passage narrower
+  than the robot, each extra unit), then the lowest outlay. On a course with fairways in the quote, the MasterSeries takes the
   fairways (it cuts to 10 mm) and the best robot the rest, usually a Voyager;
   a sod farm gets a Voyager. The card says about how many hours a full mow
   takes. Send to ROI carries the recommended Voyager size to the ROI tab.

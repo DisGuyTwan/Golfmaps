@@ -250,6 +250,7 @@ export async function readTerrain(bbox: BBox): Promise<TerrainGrid> {
     }
   }
   await Promise.all(reads);
-  return toLatLonGrid(dtm, slopePct(dtm), coverClasses(dtm, dsm), bbox);
+  const cover = coverClasses(dtm, dsm);
+  return toLatLonGrid(dtm, slopePct(dtm, cover), cover, bbox);
 }
 

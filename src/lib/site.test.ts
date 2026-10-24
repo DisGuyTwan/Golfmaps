@@ -45,7 +45,7 @@ describe("lawn shape", () => {
   });
 });
 
-const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, over40: 0, over84: 0, canopy: 0.05 };
+const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, over36: 0, over47: 0, over84: 0, canopy: 0.05 };
 
 describe("complexity", () => {
   const lawn = (shape: Polygon | MultiPolygon, terrain: TerrainStats | null): Site => {
@@ -61,7 +61,7 @@ describe("complexity", () => {
 
   it("calls a shaded, steep yard in two parts complex, worst reason first", () => {
     const yards: MultiPolygon = { type: "MultiPolygon", coordinates: [[ring(0, 0, 20, 8)], [ring(0, 20, 20, 12)]] };
-    const c = complexity(lawn(yards, { ...flat, over25: 0.2, over40: 0.05, canopy: 0.5 }));
+    const c = complexity(lawn(yards, { ...flat, over25: 0.2, over36: 0.05, canopy: 0.5 }));
     expect(c.level).toBe("complex");
     expect(c.reasons[0].points).toBe(3);
     expect(c.reasons.map((r) => r.key)).toEqual(expect.arrayContaining(["steep", "canopy", "parts"]));

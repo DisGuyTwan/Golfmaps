@@ -5,7 +5,7 @@ import type { ShapeStats, Site } from "./site";
 import type { TerrainStats } from "./terrain";
 
 const ACRE = 4046.86;
-const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, over40: 0, over84: 0, canopy: 0.05 };
+const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, over36: 0, over47: 0, over84: 0, canopy: 0.05 };
 const shape = (areaM2: number, patch: Partial<ShapeStats> = {}): ShapeStats => ({
   areaM2,
   parts: 1,
@@ -38,6 +38,10 @@ describe("Kress lineup data", () => {
       expect(m.passageM).toBeGreaterThan(m.cutWidthCm / 100);
     }
   });
+  it("leaves slopes over 20° (36 %) to the EyePilot 4x4 (and 25° to the Voyager KR804)", () => {
+    expect(MOWERS.filter((m) => m.maxSlopePct > 36).map((m) => m.id).sort()).toEqual(["KR282", "KR284", "KR286", "KR804"]);
+    expect(MOWERS.filter((m) => m.maxSlopePct > 47).every((m) => m.fourWheel)).toBe(true);
+  });
   it("sizes a Voyager by the week, like the ROI tab (5 days, once a week)", () => {
     expect(capacityM2(MOWERS.find((m) => m.id === "KR800")!) / ACRE).toBeCloseTo(35, 3);
   });
@@ -62,8 +66,8 @@ describe("residential lawns", () => {
     expect(r.fits.find((f) => f.mower.id === "KR172")?.notes).toContain("treesNoVision");
   });
 
-  it("only offers a 4×4 when part of the lawn is steeper than 40 %", () => {
-    const r = recommend(lawn(0.4 * ACRE, { ...flat, over25: 0.2, over40: 0.06 }));
+  it("only offers a 4×4 when part of the lawn is steeper than 20° (36 %)", () => {
+    const r = recommend(lawn(0.4 * ACRE, { ...flat, over25: 0.2, over36: 0.06 }));
     expect(r.best?.mower.fourWheel).toBe(true);
     expect(r.fits.filter((f) => f.fits).every((f) => f.mower.maxSlopePct >= 84)).toBe(true);
   });
@@ -88,8 +92,27 @@ describe("residential lawns", () => {
     expect(recommend(lawn(area)).best?.mower.id).toBe("KR172");
   });
 
+  it("gives a steep, wooded 3-acre lot on a mountain two KR286s, never a commercial robot", () => {
+    // Lot 2 420 141 (Saint-Bruno): 131,702 sq ft of lawn, 80 % under trees, 4 areas, 12 obstacles.
+    const mountain: TerrainStats = { coverage: 1, slopeP50: 19, slopeP90: 42, over25: 0.35, over36: 0.16, over47: 0.06, over84: 0, canopy: 0.8 };
+    const site: Site = { ...lawn(131702 / 10.7639, mountain, { parts: 4, obstacles: 12 }), parts: 4 };
+    const r = recommend(site);
+    expect(r.best?.mower.id).toBe("KR286");
+    expect(r.best?.units).toBe(2);
+    expect(r.fits.some((f) => f.mower.commercial)).toBe(false);
+    expect(r.fits.filter((f) => f.fits).every((f) => f.mower.fourWheel)).toBe(true);
+  });
+
+  it("keeps a big lawn on home robots up to three of the biggest, then compares the commercial ones", () => {
+    const estate = recommend(lawn(6 * ACRE));
+    expect(estate.best?.mower.commercial).toBe(false);
+    expect(estate.best!.units).toBeGreaterThan(1);
+    expect(estate.fits.some((f) => f.mower.commercial)).toBe(false);
+    expect(recommend(lawn(9 * ACRE)).fits.some((f) => f.mower.commercial)).toBe(true);
+  });
+
   it("recommends nothing when even a 4×4 can't climb it", () => {
-    const r = recommend(lawn(0.3 * ACRE, { ...flat, over25: 0.6, over40: 0.4, over84: 0.1 }));
+    const r = recommend(lawn(0.3 * ACRE, { ...flat, over25: 0.6, over36: 0.4, over47: 0.3, over84: 0.1 }));
     expect(r.best).toBeNull();
   });
 });
