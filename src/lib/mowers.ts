@@ -159,7 +159,7 @@ const LIMIT_LOAD = 0.9;
 const tooMuch = (site: Site, steepShare: number) => steepShare > Math.min(STEEP_SHARE, TRIMMER_M2 / Math.max(1, site.areaM2));
 
 /** Share of the site steeper than any robot can climb (40°), when it's more than a trimmer's few patches; 0 otherwise. */
-export function trimmerShare(site: Site): number {
+function trimmerShare(site: Site): number {
   const t = site.terrain;
   return t && t.coverage >= 0.5 && tooMuch(site, t.over84) ? t.over84 : 0;
 }

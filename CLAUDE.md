@@ -47,8 +47,9 @@ src/components/
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)
   MeasurePanel.tsx           results panel + legend, Golf course | Sod farm | Lawn
                              switch
-  MowerFit.tsx               mower fit card (score, reasons, recommended Kress model);
-                             useMowerFit() for the panel, PDF and Send to ROI
+  MowerFit.tsx               mower fit card (score, reasons, mowing frequency,
+                             recommended Kress model and units); useMowerFit()
+                             for the panel, PDF and Send to ROI
   QuoteSection.tsx           acres for the quote: categories, % rough (or %
                              satellite grass, or % sod), override, Send to ROI,
                              PDF report, Copy link
