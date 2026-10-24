@@ -86,7 +86,6 @@ export class OverpassHttpError extends Error {
   }
 }
 
-const REQUEST_TIMEOUT_MS = 30000;
 /** Largest scan box the cache route accepts (degrees per side), a whole course with margin. */
 const MAX_BBOX_SPAN_DEG = 0.3;
 
@@ -110,91 +109,107 @@ export function parseBBoxParam(value: string | null): BBox | null {
   return { south, west, north, east };
 }
 
-/**
- * Browser fallback: POSTs the golf query to each Overpass mirror in turn and
- * returns the raw OSM JSON from the first that answers. The query is sent
- * form-encoded as `data=...` (the endpoint's documented POST format).
- */
-async function fetchFromMirrors(bbox: BBox, kind: OverpassQuery): Promise<unknown> {
-  const body = `data=${encodeURIComponent(buildQuery(kind, bbox))}`;
-  let lastError: unknown = new Error("No Overpass mirror was tried");
-
-  for (const url of OVERPASS_ENDPOINTS) {
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      });
-      if (!response.ok) throw new OverpassHttpError(response.status);
-      return await response.json();
-    } catch (err) {
-      lastError = err;
-      // A bad query fails the same way everywhere; otherwise try the next mirror.
-      if (err instanceof OverpassHttpError && err.status === 400) break;
-    }
-  }
-
-  throw lastError;
+/** One mirror's part in a hedged lookup, for the route's Server-Timing header and logs. */
+export interface MirrorAttempt {
+  host: string;
+  /** When this mirror was asked, in ms after the lookup began. */
+  at: number;
+  /** How long it took to answer, fail or be cancelled (ms). */
+  ms: number;
+  /** "ok", an HTTP status, "timeout", "error", or "cancelled" when another mirror answered first. */
+  result: string;
 }
 
 /**
- * Server version: hedged requests. Starts the first mirror, then the next one
- * if no answer came within `hedgeMs` (or straight away if a mirror fails),
- * resolves with the first good answer and cancels the rest. A slow mirror then
- * costs seconds, not the whole budget. A 400 (bad or too-large query) fails
- * the same way everywhere, so it rejects at once.
+ * Hedged requests. Starts the first mirror, then the next one if no answer
+ * came within `hedgeMs` (or straight away if a mirror fails), resolves with
+ * the first good answer and cancels the rest. A slow mirror then costs
+ * seconds, not the whole budget. A 400 (bad or too-large query) fails the
+ * same way everywhere, so it rejects at once. Runs on the server (the cache
+ * route) and in the browser (when the route is slow or down), so it sticks to
+ * one AbortController per request (no AbortSignal.any, missing on older
+ * iPads). `signal` cancels the whole lookup; `attempts`, when given, receives
+ * one entry per mirror asked.
  */
 export function fetchFromMirrorsHedged(
   bbox: BBox,
   {
-    hedgeMs = 8000,
+    hedgeMs = 2500,
     timeoutMs = 50000,
     headers = {} as Record<string, string>,
     endpoints = OVERPASS_ENDPOINTS,
     kind = "golf" as OverpassQuery,
+    signal = undefined as AbortSignal | undefined,
+    attempts = [] as MirrorAttempt[],
   } = {},
 ): Promise<unknown> {
   const body = `data=${encodeURIComponent(buildQuery(kind, bbox))}`;
-  const deadline = Date.now() + timeoutMs;
+  const started = Date.now();
+  const deadline = started + timeoutMs;
 
   return new Promise((resolve, reject) => {
     const controllers: AbortController[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const pending = new Set<MirrorAttempt>();
     let next = 0;
     let running = 0;
     let done = false;
     let lastError: unknown = new Error("No Overpass mirror answered");
     let hedge: ReturnType<typeof setTimeout> | undefined;
 
+    const end = (attempt: MirrorAttempt, result: string) => {
+      if (!pending.delete(attempt)) return;
+      attempt.ms = Date.now() - started - attempt.at;
+      attempt.result = result;
+    };
     const settle = (finish: () => void) => {
       if (done) return;
       done = true;
       clearTimeout(hedge);
+      for (const t of timers) clearTimeout(t);
+      for (const a of [...pending]) end(a, "cancelled");
       for (const c of controllers) c.abort();
+      signal?.removeEventListener("abort", onAbort);
       finish();
     };
+    const onAbort = () => settle(() => reject(new DOMException("Lookup cancelled", "AbortError")));
+    if (signal?.aborted) return onAbort();
+    signal?.addEventListener("abort", onAbort);
 
     const launch = () => {
       clearTimeout(hedge);
       if (done || next >= endpoints.length) return;
       const url = endpoints[next++];
+      const attempt: MirrorAttempt = { host: new URL(url).host, at: Date.now() - started, ms: 0, result: "" };
+      attempts.push(attempt);
+      pending.add(attempt);
       const controller = new AbortController();
       controllers.push(controller);
+      let timedOut = false;
+      timers.push(
+        setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, Math.max(1000, deadline - Date.now())),
+      );
       running += 1;
       fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded", ...headers },
         body,
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(Math.max(1000, deadline - Date.now()))]),
+        signal: controller.signal,
       })
         .then(async (response) => {
           if (!response.ok) throw new OverpassHttpError(response.status);
           return response.json();
         })
-        .then((json) => settle(() => resolve(json)))
+        .then((json) => {
+          end(attempt, "ok");
+          settle(() => resolve(json));
+        })
         .catch((err) => {
           if (done) return;
+          end(attempt, err instanceof OverpassHttpError ? String(err.status) : timedOut ? "timeout" : "error");
           lastError = err;
           if (err instanceof OverpassHttpError && err.status === 400) return settle(() => reject(err));
           running -= 1;
@@ -208,25 +223,74 @@ export function fetchFromMirrorsHedged(
   });
 }
 
+/** Attempts as a Server-Timing header, so a lookup's mirrors show in the browser's network panel. */
+export function serverTiming(attempts: MirrorAttempt[]): string {
+  return attempts.map((a, i) => `m${i};desc="${a.host} ${a.result} from ${a.at} ms";dur=${a.ms}`).join(", ");
+}
+
+/**
+ * How long the browser waits on the cache route before also asking the
+ * mirrors itself. A cached lookup (or a quick mirror) answers well within it;
+ * past it, the mirrors are usually queueing the route's shared server
+ * addresses, and this browser's own address gets its own place in line.
+ */
+export const DIRECT_AFTER_MS = 3000;
+
 /**
  * Fetches the golf features for a scan box (or, with kind "lawn", what isn't
- * lawn on a residential lot). Goes through this app's cache route first
- * (/api/overpass: shared CDN cache, so a course measured once is instant and
- * survives busy mirrors), then falls back to calling the mirrors straight from
- * the browser if the route is down or every mirror refused it.
+ * lawn on a residential lot). Asks this app's cache route first (/api/overpass:
+ * shared CDN cache, so a course measured once is instant and survives busy
+ * mirrors). If it hasn't answered within DIRECT_AFTER_MS, or fails, the
+ * browser also asks the mirrors directly, and the first answer wins. The route
+ * is left to finish so its answer is cached for next time.
  */
-export async function fetchFairways(bbox: BBox, kind: OverpassQuery = "golf"): Promise<unknown> {
-  try {
-    const query = kind === "golf" ? "" : `&q=${kind}`;
-    const response = await fetch(`/api/overpass?bbox=${bboxParam(bbox)}${query}`, {
-      signal: AbortSignal.timeout(65000),
+export function fetchFairways(bbox: BBox, kind: OverpassQuery = "golf"): Promise<unknown> {
+  const query = kind === "golf" ? "" : `&q=${kind}`;
+  const route = fetch(`/api/overpass?bbox=${bboxParam(bbox)}${query}`, { signal: AbortSignal.timeout(65000) }).then(
+    async (response) => {
+      if (!response.ok) throw new OverpassHttpError(response.status);
+      return response.json() as Promise<unknown>;
+    },
+  );
+
+  return new Promise((resolve, reject) => {
+    const direct = new AbortController();
+    let done = false;
+    let routeFailed = false;
+    let directFailed = false;
+    let directError: unknown;
+    const win = (json: unknown) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      direct.abort();
+      resolve(json);
+    };
+    const fail = (err: unknown) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      direct.abort();
+      reject(err);
+    };
+    let directStarted = false;
+    const startDirect = () => {
+      if (done || directStarted) return;
+      directStarted = true;
+      fetchFromMirrorsHedged(bbox, { kind, signal: direct.signal }).then(win, (err) => {
+        directFailed = true;
+        directError = err;
+        if (routeFailed) fail(err);
+      });
+    };
+    const timer = setTimeout(startDirect, DIRECT_AFTER_MS);
+
+    route.then(win, (err) => {
+      // Too large or malformed fails the same way directly; don't retry it.
+      if (err instanceof OverpassHttpError && err.status === 400) return fail(err);
+      routeFailed = true;
+      if (directFailed) fail(directError);
+      else startDirect();
     });
-    if (response.ok) return await response.json();
-    // Too large or malformed fails the same way directly; don't retry it.
-    if (response.status === 400) throw new OverpassHttpError(400);
-  } catch (err) {
-    if (err instanceof OverpassHttpError) throw err;
-    // Route unreachable or timed out: fall through to the mirrors.
-  }
-  return fetchFromMirrors(bbox, kind);
+  });
 }
