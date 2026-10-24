@@ -153,6 +153,26 @@ describe("lotLooksOdd", () => {
   });
 });
 
+describe("buildings from the LiDAR", () => {
+  const shed = rect(22, 2, 6, 5); // a shed OSM doesn't have
+  const houseFromLidar = rect(8.5, 22, 12, 10.5); // the mapped house as the LiDAR sees it, a little offset
+
+  it("takes a building only the LiDAR sees off the lawn", () => {
+    const base = lawnTotals(measurement());
+    const t = lawnTotals({ ...measurement(), lidar: [{ id: "l1", kind: "building", geometry: shed }] });
+    expect(t.lidarCount).toBe(1);
+    expect(t.builtSqft - base.builtSqft).toBeCloseTo(sqft(shed), -1);
+    expect(base.lawnSqft - t.lawnSqft).toBeCloseTo(sqft(shed), -1);
+  });
+
+  it("leaves a house OSM already has to OSM's outline", () => {
+    const base = lawnTotals(measurement());
+    const t = lawnTotals({ ...measurement(), lidar: [{ id: "l1", kind: "building", geometry: houseFromLidar }] });
+    expect(t.lidarCount).toBe(0);
+    expect(t.builtSqft).toBeCloseTo(base.builtSqft, 5);
+  });
+});
+
 describe("driveways and paving", () => {
   it("widens a line into a strip of the right area, bends included", () => {
     const straight = stripAlong([at(0, 0), at(20, 0)], 3.5)!;

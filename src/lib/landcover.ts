@@ -17,6 +17,13 @@ import type { BBox, SatelliteTurf, SodField } from "./types";
 export type LandSource = "worldcover" | "aci";
 
 /** A classified raster window. `bbox` is the outer edge of the cells. */
+/** What every lat/lon grid here shares: its box and size, row-major from the north-west corner. */
+export interface GridShape {
+  bbox: BBox;
+  width: number;
+  height: number;
+}
+
 export interface LandGrid {
   source: LandSource;
   /** Year the land cover describes (WorldCover 2021, crop inventory 2025, …). */
@@ -69,7 +76,7 @@ function polygonsOf(geoms: (Polygon | MultiPolygon)[]): Position[][][] {
  * 1 for each cell whose center falls inside any of the polygons (holes
  * respected), else 0. Scanline fill, one pass per polygon and row.
  */
-export function polygonMask(grid: LandGrid, geoms: (Polygon | MultiPolygon)[]): Uint8Array {
+export function polygonMask(grid: GridShape, geoms: (Polygon | MultiPolygon)[]): Uint8Array {
   const { bbox, width, height } = grid;
   const cellW = (bbox.east - bbox.west) / width;
   const cellH = (bbox.north - bbox.south) / height;
@@ -160,7 +167,7 @@ export function satelliteTurf(grid: LandGrid, outline: (Polygon | MultiPolygon)[
  * Labels 4-connected regions where `on[i]` is 1. Returns the label per cell
  * (0 = off) and, per label, its cells' indices.
  */
-function label(on: Uint8Array, width: number, height: number): { labels: Int32Array; regions: number[][] } {
+export function labelRegions(on: Uint8Array, width: number, height: number): { labels: Int32Array; regions: number[][] } {
   const labels = new Int32Array(width * height);
   const regions: number[][] = [];
   const stack: number[] = [];
@@ -230,7 +237,7 @@ function deepestCell(cells: number[], labels: Int32Array, id: number, width: num
 }
 
 /** Outline of one labelled region as a lon/lat (Multi)Polygon, via marching squares. */
-function regionGeometry(grid: LandGrid, cells: number[]): Polygon | MultiPolygon {
+export function regionGeometry(grid: GridShape, cells: number[]): Polygon | MultiPolygon {
   const { bbox, width, height } = grid;
   let minR = Infinity, maxR = -1, minC = Infinity, maxC = -1;
   for (const i of cells) {
@@ -291,7 +298,7 @@ export function findSodFields(
   // Fill small gaps fully enclosed by sod (they don't touch the window's edge).
   const off = new Uint8Array(on.length);
   for (let i = 0; i < on.length; i++) off[i] = on[i] ? 0 : 1;
-  for (const cells of label(off, width, height).regions) {
+  for (const cells of labelRegions(off, width, height).regions) {
     const touchesEdge = cells.some((i) => {
       const r = Math.floor(i / width);
       const c = i - r * width;
@@ -300,7 +307,7 @@ export function findSodFields(
     if (!touchesEdge && regionAcres(cells) < fillGapAcres) for (const i of cells) on[i] = 1;
   }
 
-  const { labels, regions } = label(on, width, height);
+  const { labels, regions } = labelRegions(on, width, height);
   return regions
     .map((cells, k) => ({ cells, id: k + 1, acres: regionAcres(cells) }))
     .filter((r) => r.acres >= minAcres)

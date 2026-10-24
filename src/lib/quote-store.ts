@@ -4,6 +4,8 @@ import { useSyncExternalStore } from "react";
 import type { IncentiveInputs } from "./incentives";
 import { DEFAULT_QUOTE, decodeQuote, type AcreageMode, type QuoteSettings } from "./quote";
 import type { LawnMeasurement } from "./lawn";
+import type { VoyagerModel } from "./roi";
+import type { TerrainGrid } from "./terrain";
 import type { CourseMeasurement, SodMeasurement } from "./types";
 
 /**
@@ -11,8 +13,10 @@ import type { CourseMeasurement, SodMeasurement } from "./types";
  * - the Acreage tab's mode (golf course, sod farm or residential lawn), its
  *   last measurement, sod fields or lawn, the property name and quote
  *   settings (read by its PDF report and the ROI tab);
- * - acres sent to the ROI tab ("Send to ROI"), with a version number so the
- *   ROI tab applies each send exactly once;
+ * - the LiDAR terrain under the measured property (slope, trees, buildings),
+ *   for the mower fit on screen and in the PDF;
+ * - acres sent to the ROI tab ("Send to ROI"), with the recommended Voyager
+ *   size and a version number so the ROI tab applies each send exactly once;
  * - the Incentives tab's profile, so the ROI tab can price grants and credits
  *   for the Voyager purchase with the same province, profile and tax rate.
  */
@@ -24,7 +28,8 @@ interface QuoteStoreState {
   sod: SodMeasurement | null;
   lawn: LawnMeasurement | null;
   courseName: string | null;
-  roiImport: { acres: number; version: number } | null;
+  terrain: TerrainGrid | null;
+  roiImport: { acres: number; model: VoyagerModel | null; version: number } | null;
   incentiveProfile: IncentiveInputs | null;
 }
 
@@ -35,6 +40,7 @@ const SERVER_STATE: QuoteStoreState = {
   sod: null,
   lawn: null,
   courseName: null,
+  terrain: null,
   roiImport: null,
   incentiveProfile: null,
 };
@@ -77,6 +83,7 @@ export const useSod = () => useStore((s) => s.sod);
 export const useLawn = () => useStore((s) => s.lawn);
 export const useCourseName = () => useStore((s) => s.courseName);
 export const useRoiImport = () => useStore((s) => s.roiImport);
+export const useTerrain = () => useStore((s) => s.terrain);
 export const useIncentiveProfile = () => useStore((s) => s.incentiveProfile);
 
 export function setQuoteSettings(patch: Partial<QuoteSettings>) {
@@ -112,6 +119,7 @@ export function setMode(mode: AcreageMode) {
     measurement: null,
     sod: null,
     lawn: null,
+    terrain: null,
     courseName: null,
     settings: { ...current().settings, override: null, lawnOverride: null },
   });
@@ -121,8 +129,13 @@ export function setCourseName(courseName: string | null) {
   update({ courseName });
 }
 
-export function sendAcresToRoi(acres: number) {
-  update({ roiImport: { acres, version: (current().roiImport?.version ?? 0) + 1 } });
+export function setTerrain(terrain: TerrainGrid | null) {
+  update({ terrain });
+}
+
+/** Acres for the ROI tab, and the Voyager size the mower fit recommends (null keeps the tab's choice). */
+export function sendAcresToRoi(acres: number, model: VoyagerModel | null = null) {
+  update({ roiImport: { acres, model, version: (current().roiImport?.version ?? 0) + 1 } });
 }
 
 export function setIncentiveProfile(incentiveProfile: IncentiveInputs) {

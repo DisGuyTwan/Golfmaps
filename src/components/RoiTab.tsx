@@ -137,7 +137,20 @@ export default function RoiTab() {
   const [seenImport, setSeenImport] = useState(0);
   if (roiImport && roiImport.version !== seenImport) {
     setSeenImport(roiImport.version);
-    setFields((prev) => ({ ...prev, area: String(Math.round(roiImport.acres * 100) / 100) }));
+    const preset = roiImport.model ? VOYAGER_PRESETS[roiImport.model as "7" | "19"] : null;
+    if (preset) {
+      setModel(roiImport.model!);
+      setBatteryKwh(preset.batteryKwh);
+    }
+    setFields((prev) => ({
+      ...prev,
+      area: String(Math.round(roiImport.acres * 100) / 100),
+      ...(preset && {
+        voyPrice: String(preset.voyPrice),
+        voyMaint: String(preset.voyMaint),
+        voyAcresPerDay: String(preset.voyAcresPerDay),
+      }),
+    }));
   }
   const measuredAcres = acresForQuote(useMode(), useMeasurement(), useSod(), useQuoteSettings());
 

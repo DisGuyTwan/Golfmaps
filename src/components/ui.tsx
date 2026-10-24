@@ -81,6 +81,9 @@ const NOTICE = {
   error: { icon: "alert", cls: "bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-200" },
 } as const;
 
+/** A notice tone's colors, for chips that should match the notices. */
+export const toneClass = (tone: keyof typeof NOTICE) => NOTICE[tone].cls;
+
 /** Short message box with its icon: info (blue), warn (amber) or error (red). */
 export function Notice({ tone, children }: { tone: keyof typeof NOTICE; children: React.ReactNode }) {
   const { icon, cls } = NOTICE[tone];

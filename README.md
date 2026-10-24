@@ -10,13 +10,16 @@ satellite land cover instead (or inside an outline you trace). Switch the
 Acreage tab to **Sod farm** and it finds a sod producer's fields on Agriculture
 Canada's yearly crop map, which you can edit by tapping fields out or tracing
 new ones. Switch it to **Lawn**, type a residential address, and it measures the
-lawn on that lot in square feet.
+lawn on that lot in square feet. Whatever it measures, **Mower fit** rates how
+hard the property is for a robot (slope, trees, separate areas, narrow
+passages, obstacles) and recommends the Kress model that fits it best.
 
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite
 tiles, the public Overpass API, Photon for search, ESA WorldCover and
-Agriculture Canada's Annual Crop Inventory for land cover, and Statistics Canada
-for the gas price. Four small Vercel functions cache course lookups, land cover
-and the gas price and collect client errors in the runtime logs.
+Agriculture Canada's Annual Crop Inventory for land cover, NRCan's HRDEM LiDAR
+for slope and trees, and Statistics Canada for the gas price. Six small Vercel
+functions cache course lookups, land cover, terrain, cadastre lots and the gas
+price and collect client errors in the runtime logs.
 
 The tabs work together: measure a course, choose what's actually mowed, and
 **Send to ROI** sizes the zero-turn crew and the Voyager fleet for those acres;
@@ -172,6 +175,36 @@ The **Lawn** switch measures a residential lawn in **square feet**:
 
 The cadastre is indicative only (the surveyor's boundary is the official one).
 
+Houses OSM doesn't have are found in the LiDAR (next section) and taken off
+too; the panel says how many. One that mostly overlaps an OSM building is left
+to OSM's outline.
+
+## Mower fit
+
+Under every measurement (lawn, course or sod farm), **Mower fit** says how
+hard the property is for a robot and which Kress model to quote:
+
+- **Terrain** comes from Natural Resources Canada's HRDEM mosaic: 1 m LiDAR
+  bare-earth and surface models (`/api/terrain` reads just the tiles under the
+  property from the Cloud Optimized GeoTIFFs on AWS; CDN 30 days). Slope is
+  read over 3 m where the LiDAR sees open ground, and only patches of 8 m² or
+  more count as steep (a bank, not a curb). What stands on the ground is low
+  plants, trees (rough crowns) or buildings (smooth roofs).
+- **Shape** (lawns): separate lawn areas, the narrowest passage a robot must
+  drive through (from the distance to the nearest edge), islands to go around,
+  and edge length.
+- The **score** adds 1-3 points per difficulty: Simple (0-2), Moderate (3-5),
+  Complex (6+), with the reasons listed.
+- The **recommendation** is the Kress robot that fits with the fewest
+  drawbacks, then the lowest outlay: RTKn for open lawns, EyePilot (camera) under
+  trees, EyePilot 4x4 on slopes over 40%; on a course, the MasterSeries (or a
+  KR237) for fairways and a Voyager for the rough, and a Voyager on a sod farm.
+  Send to ROI carries the recommended Voyager size to the ROI tab.
+
+Kress specs are as of Oct 24, 2026 (`src/lib/mowers.ts`). Kress publishes no
+minimum passage width, so those are estimates from each robot's size: check
+them on site.
+
 ## Incentives tab
 
 A second tab estimates first-year savings on robotic mowers and battery tools
@@ -259,6 +292,9 @@ Standard Next.js app, no extra configuration:
   you know the real figure.
 - Estimated rough inherits every gap in the underlying data — treat it as a
   starting point for a quote, not a survey.
+- The LiDAR was flown between about 2015 and 2023 depending on the area:
+  trees have grown since, and newer houses aren't in it (trace them out).
+  Where there's no LiDAR, the mower fit says slope and trees weren't checked.
 - The public Overpass API is rate-limited and occasionally busy. The app races
   three mirrors (from the server and from the browser) and surfaces a friendly
   message if all of them are down.

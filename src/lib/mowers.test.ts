@@ -1,0 +1,108 @@
+import { describe, expect, it } from "vitest";
+import { MOWERS, capacityM2, recommend } from "./mowers";
+import type { ShapeStats, Site } from "./site";
+import type { TerrainStats } from "./terrain";
+
+const ACRE = 4046.86;
+const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, over40: 0, over84: 0, canopy: 0.05 };
+const shape = (areaM2: number, patch: Partial<ShapeStats> = {}): ShapeStats => ({
+  areaM2,
+  parts: 1,
+  narrowestM: null,
+  obstacles: 0,
+  edgePer100: 18,
+  zonesAt: () => 1,
+  ...patch,
+});
+const lawn = (areaM2: number, terrain: TerrainStats | null = flat, patch: Partial<ShapeStats> = {}): Site => ({
+  kind: "lawn",
+  areaM2,
+  parts: 1,
+  shape: shape(areaM2, patch),
+  terrain,
+  fairwayM2: 0,
+});
+
+describe("Kress lineup data", () => {
+  it("has unique models with sane specs", () => {
+    expect(new Set(MOWERS.map((m) => m.id)).size).toBe(MOWERS.length);
+    for (const m of MOWERS) {
+      expect(m.maxAreaM2).toBeGreaterThanOrEqual(m.areaM2);
+      expect(m.maxSlopePct).toBeGreaterThanOrEqual(36);
+      expect(m.passageM).toBeGreaterThan(m.cutWidthCm / 100);
+    }
+  });
+  it("sizes a Voyager by the week, like the ROI tab (5 days, once a week)", () => {
+    expect(capacityM2(MOWERS.find((m) => m.id === "KR800")!) / ACRE).toBeCloseTo(35, 3);
+  });
+});
+
+describe("residential lawns", () => {
+  it("picks the smallest robot that covers an easy lawn", () => {
+    const r = recommend(lawn(0.37 * ACRE));
+    expect(r.best?.mower.id).toBe("KR172");
+    expect(r.runnerUp).not.toBeNull();
+  });
+
+  it("moves up a size rather than run one at its limit", () => {
+    const r = recommend(lawn(0.9 * ACRE, flat, { obstacles: 4 }));
+    expect(r.best?.mower.id).toBe("KR174");
+    expect(r.fits.find((f) => f.mower.id === "KR173")?.notes).toContain("atLimit");
+  });
+
+  it("picks an EyePilot camera robot under heavy tree cover", () => {
+    const r = recommend(lawn(0.37 * ACRE, { ...flat, canopy: 0.45 }));
+    expect(r.best?.mower.vision).toBe(true);
+    expect(r.fits.find((f) => f.mower.id === "KR172")?.notes).toContain("treesNoVision");
+  });
+
+  it("only offers a 4×4 when part of the lawn is steeper than 40 %", () => {
+    const r = recommend(lawn(0.4 * ACRE, { ...flat, over25: 0.2, over40: 0.06 }));
+    expect(r.best?.mower.fourWheel).toBe(true);
+    expect(r.fits.filter((f) => f.fits).every((f) => f.mower.maxSlopePct >= 84)).toBe(true);
+  });
+
+  it("prefers ZeroTrim when the lawn is mostly edges", () => {
+    const r = recommend(lawn(0.3 * ACRE, flat, { edgePer100: 50, obstacles: 6 }));
+    expect(r.best?.mower.zeroTrim).toBe(true);
+  });
+
+  it("recommends nothing when even a 4×4 can't climb it", () => {
+    const r = recommend(lawn(0.3 * ACRE, { ...flat, over25: 0.6, over40: 0.4, over84: 0.1 }));
+    expect(r.best).toBeNull();
+  });
+});
+
+describe("golf and sod", () => {
+  it("sends fairways to the MasterSeries and the rough to a Voyager", () => {
+    const site: Site = { kind: "golf", areaM2: 60 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 25 * ACRE };
+    const r = recommend(site);
+    expect(r.best?.mower.id).toBe("KR238G");
+    expect(r.best?.units).toBe(2);
+    expect(r.rough?.mower.line).toBe("voyager");
+  });
+
+  it("sizes the fairway robot on the fairways alone, however big the rough", () => {
+    const site: Site = { kind: "golf", areaM2: 190 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 13 * ACRE };
+    const r = recommend(site);
+    expect(r.best?.mower.minCutMm).toBeLessThanOrEqual(15);
+    expect(r.best?.units).toBe(1);
+    expect(r.rough?.mower.line).toBe("voyager");
+  });
+
+  it("gives a short course's fairways to a KR237", () => {
+    const site: Site = { kind: "golf", areaM2: 12 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 5 * ACRE };
+    expect(recommend(site).best?.mower.id).toBe("KR237");
+  });
+
+  it("uses Voyagers alone for rough-only quotes", () => {
+    const site: Site = { kind: "golf", areaM2: 40 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 0 };
+    expect(recommend(site).best?.mower.line).toBe("voyager");
+  });
+
+  it("sizes a sod farm's Voyager to the acreage", () => {
+    const sod = (acres: number): Site => ({ kind: "sod", areaM2: acres * ACRE, parts: 4, shape: null, terrain: flat, fairwayM2: 0 });
+    expect(recommend(sod(20)).best?.mower.id).toBe("KR800");
+    expect(recommend(sod(60)).best?.mower.id).toBe("KR804");
+  });
+});

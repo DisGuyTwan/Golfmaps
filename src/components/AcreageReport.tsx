@@ -5,8 +5,9 @@ import { estimatedTurf } from "@/lib/landcover";
 import { useLang } from "@/lib/preferences";
 import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, lawnQuoteSqft, quoteBreakdown, satelliteAcres } from "@/lib/quote";
 import { formatSqft, lawnTotals } from "@/lib/lawn";
-import { useCourseName, useLawn, useMeasurement, useMode, useQuoteSettings, useSod } from "@/lib/quote-store";
+import { useCourseName, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
 import type { SodField } from "@/lib/types";
+import MowerFit from "./MowerFit";
 import { TabHeader, ui } from "./ui";
 
 /** Measured vs counted table: one row per line, "–" when it isn't counted. */
@@ -49,6 +50,7 @@ export default function AcreageReport() {
   const sod = useSod();
   const q = useQuoteSettings();
   const courseName = useCourseName();
+  const terrain = useTerrain();
   if (mode === "lawn") return <LawnReport />;
   const ac = (n: number) => `${formatAcres(n, lang)} ac`;
   const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
@@ -120,6 +122,8 @@ export default function AcreageReport() {
               <span className={ui.kpi}>{total !== null ? ac(total) : "–"}</span>
             </div>
 
+            <MowerFit lang={lang} print />
+
             <div className={`${ui.note} space-y-1`}>
               {isSod && sod ? (
                 <>
@@ -150,6 +154,7 @@ export default function AcreageReport() {
                 {t.attribution}
                 {sat && <> · {t.attributionWorldCover}</>}
                 {isSod && sod?.year != null && <> · {t.attributionAci}</>}
+                {terrain && <> · {t.attributionLidar}</>}
               </p>
             </div>
           </>
@@ -166,6 +171,7 @@ function LawnReport() {
   const lawn = useLawn();
   const q = useQuoteSettings();
   const address = useCourseName();
+  const terrain = useTerrain();
   const sq = (n: number) => formatSqft(n, lang);
   const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
   const totals = lawn ? lawnTotals(lawn) : null;
@@ -218,12 +224,16 @@ function LawnReport() {
               <span className={ui.kpi}>{quoted !== null ? sq(quoted) : "–"}</span>
             </div>
 
+            <MowerFit lang={lang} print />
+
             <div className={`${ui.note} space-y-1`}>
               <p>{t.lawnTreesNote}</p>
+              {!!totals?.lidarCount && <p>{t.lawnLidar(totals.lidarCount)}</p>}
               {q.lawnOverride !== null && <p>{t.reportLawnOverride(sq(q.lawnOverride))}</p>}
               <p>
                 {t.attribution}
                 {lawn?.lotSource === "cadastre" && <> · {t.attributionCadastre}</>}
+                {terrain && <> · {t.attributionLidar}</>}
               </p>
             </div>
           </>

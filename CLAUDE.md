@@ -14,10 +14,11 @@ tools (Quebec, Ontario, federal) and an "ROI" tab comparing a Kress
 Voyager with a zero-turn crew. Every tab is in English (default) and Quebec
 French, with light and dark themes. The tabs are connected (measured acres →
 ROI sizing; the Incentives profile → ROI's net investment) and every tab has a
-share link and a client PDF. No API keys and no database: five small route
-handlers (Overpass cache, land cover, Quebec cadastre lot, gas price, client
-error log) run on Vercel; everything else goes straight from the browser to
-public APIs (built-in `fetch`).
+share link and a client PDF. Every measurement gets a mower fit: how hard
+the property is for a robot and which Kress model fits. No API keys and no
+database: six small route handlers (Overpass cache, land cover, LiDAR terrain,
+Quebec cadastre lot, gas price, client error log) run on Vercel; everything
+else goes straight from the browser to public APIs (built-in `fetch`).
 
 ## Layout
 
@@ -28,6 +29,8 @@ src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
                   Server-Timing per mirror); the browser races it with the mirrors
   api/landcover/  satellite land cover as a small class grid (CDN 30 days):
                   ESA WorldCover (src=worldcover) or AAFC crop inventory (src=aci)
+  api/terrain/    slope and cover (ground, low plants, trees, buildings) from
+                  NRCan's HRDEM LiDAR as a small lat/lon grid (CDN 30 days)
   api/parcel/     the Quebec cadastre lot at a point (CDN 1 week), for lawns
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
@@ -44,6 +47,8 @@ src/components/
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)
   MeasurePanel.tsx           results panel + legend, Golf course | Sod farm | Lawn
                              switch
+  MowerFit.tsx               mower fit card (score, reasons, recommended Kress model);
+                             useMowerFit() for the panel, PDF and Send to ROI
   QuoteSection.tsx           acres for the quote: categories, % rough (or %
                              satellite grass, or % sod), override, Send to ROI,
                              PDF report, Copy link
@@ -57,8 +62,14 @@ src/lib/
   landcover.ts  land cover grids: grass inside an outline, sod fields, traced
                 shapes (pure, tested)
   landcover-server.ts  WorldCover COG reader + crop inventory exportImage (route only)
-  lawn.ts       residential lawn: lot − OSM buildings/pools/paving − traced areas,
-                in sq ft (pure, tested)
+  lawn.ts       residential lawn: lot − OSM/LiDAR buildings, pools, paving − traced
+                areas, in sq ft (pure, tested)
+  terrain.ts    EPSG:3979 projection, slope, cover classes, stats under a shape,
+                LiDAR building outlines (pure, tested)
+  terrain-server.ts  minimal BigTIFF tile reader for the HRDEM COGs (route only)
+  site.ts       lawn shape (parts, passages, islands, edges) and the complexity
+                score; site builders for lawn, golf, sod (pure, tested)
+  mowers.ts     Kress lineup specs and the fit / recommendation (pure, tested)
   parcel.ts     Quebec cadastre lot lookup and parsing (pure parts tested)
   types.ts      BBox, CourseMeasurement, SatelliteTurf, SodField, SodMeasurement
   incentives.ts program rules, FR/EN copy and savings math (pure, tested)
@@ -144,6 +155,27 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   (100 m) while the cadastre lot loads, and again on the lot's box only when
   the lot is bigger. The route's Server-Timing header shows each mirror's
   result and time.
+- **Mower fit is capability, then outlay.** `site.ts` scores the property
+  (1-3 points per difficulty; 0-2 simple, 3-5 moderate, 6+ complex) and
+  `mowers.ts` ranks Kress robots: fits first (area, slope limit), then fewest
+  penalties (no camera under trees, no 4x4 on slopes, no ZeroTrim on edgy
+  lawns, passages), then `listUsd × units`. `listUsd` is a rough order only,
+  never shown: prices conflict between sources. Golf with fairways is two jobs
+  (a 10-15 mm robot on the fairways, the best robot on the rest). Voyager
+  units use the ROI tab's defaults (`capacityM2`), and Send to ROI passes the
+  Voyager size (`roiModel`). Specs are dated (`MOWERS_AS_OF`, in the copy);
+  `passageM` is an estimate (Kress publishes none). Update both when Kress
+  changes the lineup.
+- **Terrain is HRDEM LiDAR, read sparingly.** geotiff.js would load each 500 km
+  file's whole tile index (15 MB), so `terrain-server.ts` parses the BigTIFF
+  header once per instance and range-reads only the index entries and LZW
+  tiles under the box (decoded with geotiff's `getDecoder`). Slope is smoothed
+  over 3 × 3 cells (1 m LiDAR noise reads as 10-20 %), read on open ground
+  when there's enough (under crowns the DTM is interpolated), and steep shares
+  only count patches of 8 m² or more. Roofs are smooth, crowns rough
+  (`coverClasses`, 1-2 m cells only); LiDAR buildings are taken off a lawn
+  unless an OSM building already covers 30 % of one. Don't drop the smoothing
+  or the patch filter: flat lawns then read as steep and get a 4x4.
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in
@@ -228,5 +260,5 @@ npm install
 npm run dev      # http://localhost:3000
 npm run build    # type check + production build
 npm run lint
-npm test         # vitest: acreage pipeline, land cover, quote, incentives, ROI model, share links
+npm test         # vitest: acreage pipeline, land cover, terrain, mower fit, quote, incentives, ROI model, share links
 ```

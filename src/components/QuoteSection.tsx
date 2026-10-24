@@ -4,9 +4,11 @@ import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { formatSqft, type LawnMeasurement } from "@/lib/lawn";
 import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, lawnQuoteSqft, type AcreageMode, type QuoteSettings } from "@/lib/quote";
 import { sendAcresToRoi, setQuoteSettings, useQuoteSettings } from "@/lib/quote-store";
+import { roiModel } from "@/lib/mowers";
 import { goToTab } from "@/lib/tabs";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { Icon } from "./icons";
+import { useMowerFit } from "./MowerFit";
 import { CopyLinkButton, Notice, Pop, printAs, ui } from "./ui";
 
 /** A 0–100 % input bound to one quote setting. */
@@ -118,6 +120,9 @@ function AcreQuote({
   const t = UI[lang];
   const q = useQuoteSettings();
   const acres = acresForQuote(mode, result, sod, q);
+  // The Voyager size the mower fit recommends (for the whole job, or the rough), so the ROI tab prices that one.
+  const recommendation = useMowerFit()?.recommendation;
+  const voyager = roiModel(recommendation?.rough?.mower) ?? roiModel(recommendation?.best?.mower);
   const ac = (n: number) => formatAcres(n, lang);
   const mapped = mode === "golf" && result !== null && !result.boundaryOnly;
   const satellite = mode === "golf" && result?.boundaryOnly && result.satellite !== null;
@@ -193,7 +198,7 @@ function AcreQuote({
           disabled={acres === null}
           onClick={() => {
             if (acres === null) return;
-            sendAcresToRoi(acres);
+            sendAcresToRoi(acres, voyager);
             goToTab("#roi");
           }}
           className={`${ui.btnPrimary} group flex-1`}

@@ -37,6 +37,7 @@ import {
   type LawnMeasurement,
 } from "@/lib/lawn";
 import { fetchParcel, inQuebec } from "@/lib/parcel";
+import { TERRAIN_MAX_SPAN_DEG, fetchTerrain, lidarBuildings, type TerrainGrid } from "@/lib/terrain";
 import { encodeQuote, type AcreageMode } from "@/lib/quote";
 import {
   getLawn,
@@ -46,6 +47,7 @@ import {
   setMeasurement,
   setMode,
   setSod,
+  setTerrain,
   useCourseName,
   useLawn,
   useMode,
@@ -179,6 +181,8 @@ export default function GolfCourseCalculator() {
   const [picking, setPicking] = useState(false);
   /** Width of the driveway being traced, in feet (one car by default). */
   const [driveWidthFt, setDriveWidthFt] = useState<number>(DRIVEWAY_WIDTHS_FT[0]);
+  /** The LiDAR terrain (slope, trees, buildings) for the mower fit is loading. */
+  const [terrainLoading, setTerrainLoading] = useState(false);
 
   const mapRef = useRef<L.Map | null>(null);
   /** Bumped by every new measurement or clear, so a late answer never lands on a newer one. */
@@ -193,8 +197,42 @@ export default function GolfCourseCalculator() {
     setOverlay(null);
     setSatError(null);
     setSatLoading(false);
+    setTerrain(null);
+    setTerrainLoading(false);
     return runId.current;
   }, []);
+
+  /**
+   * Loads the LiDAR terrain under a box (or takes a lookup already under way)
+   * for the mower fit. A failure only leaves slope and trees unchecked.
+   */
+  const loadTerrain = useCallback(async (box: BBox | null, id: number, pending?: Promise<TerrainGrid>) => {
+    if (!box || box.north - box.south > TERRAIN_MAX_SPAN_DEG || box.east - box.west > TERRAIN_MAX_SPAN_DEG) return null;
+    setTerrainLoading(true);
+    try {
+      const grid = await (pending ?? fetchTerrain(box));
+      if (id !== runId.current) return null;
+      setTerrain(grid);
+      return grid;
+    } catch (err) {
+      if (id === runId.current) reportError("terrain", err);
+      return null;
+    } finally {
+      if (id === runId.current) setTerrainLoading(false);
+    }
+  }, []);
+
+  /** The terrain under a lot, and the buildings on it the LiDAR sees (houses OSM doesn't have). */
+  const loadLotTerrain = useCallback(
+    async (lot: Polygon | MultiPolygon, id: number, pending?: Promise<TerrainGrid>) => {
+      const grid = await loadTerrain(lotBBox(lot), id, pending);
+      const current = getLawn();
+      if (!grid || !current || id !== runId.current) return;
+      const lidar: LawnArea[] = lidarBuildings(grid, lot).map((geometry, i) => ({ id: `l${i + 1}`, kind: "building", geometry }));
+      setLawn({ ...current, lidar });
+    },
+    [loadTerrain],
+  );
 
   /** Counts the satellite grass inside a course's outline (no turf mapped, or traced). */
   const countSatellite = useCallback(async (m: CourseMeasurement, id: number) => {
@@ -228,8 +266,9 @@ export default function GolfCourseCalculator() {
       setResult(m);
       setMeasurement(m);
       void countSatellite(m, id);
+      void loadTerrain(geometryBBox(courseOutline(m)), id);
     },
-    [startRun, countSatellite],
+    [startRun, countSatellite, loadTerrain],
   );
 
   const runMeasure = useCallback(
@@ -247,6 +286,7 @@ export default function GolfCourseCalculator() {
         setResult(measurement);
         setMeasurement(measurement);
         if (measurement.boundaryOnly) void countSatellite(measurement, id);
+        if (measurement.found) void loadTerrain(geometryBBox(courseOutline(measurement)), id);
       } catch (err) {
         if (id !== runId.current) return;
         const measureError = toMeasureError(err);
@@ -256,7 +296,7 @@ export default function GolfCourseCalculator() {
         if (id === runId.current) setLoading(false);
       }
     },
-    [startRun, countSatellite],
+    [startRun, countSatellite, loadTerrain],
   );
 
   /** Finds the sod fields in view (or in the scan box) on the crop map; traced fields are kept. */
@@ -283,6 +323,7 @@ export default function GolfCourseCalculator() {
         );
         const traced = (getSod()?.fields ?? []).filter((f) => f.traced);
         setSod({ fields: [...detected, ...traced], year: grid.year });
+        void loadTerrain(geometryBBox([...detected, ...traced].map((f) => f.geometry)), id);
       } catch (err) {
         if (id !== runId.current) return;
         const kind = err instanceof LandcoverHttpError && err.status === 400 ? "sodTooLarge" : "sodUnreachable";
@@ -292,15 +333,16 @@ export default function GolfCourseCalculator() {
         if (id === runId.current) setLoading(false);
       }
     },
-    [startRun],
+    [startRun, loadTerrain],
   );
 
   /**
    * Shows a lawn on its lot and fills in what OSM has on it (buildings, pools,
    * paving), from a lookup already under way around the lot when there is one.
    */
-  const showLawn = useCallback(async (next: LawnMeasurement, id: number, nearby?: Promise<unknown>) => {
+  const showLawn = useCallback(async (next: LawnMeasurement, id: number, nearby?: Promise<unknown>, terrain?: Promise<TerrainGrid>) => {
     setLawn(next);
+    void loadLotTerrain(next.lot, id, terrain);
     try {
       const json = await (nearby ?? fetchFairways(lotBBox(next.lot), "lawn"));
       if (id !== runId.current) return;
@@ -310,7 +352,7 @@ export default function GolfCourseCalculator() {
       setLawn({ ...(getLawn() ?? next), mapped: [], mappedFailed: true });
       reportError("lawn:buildings", err);
     }
-  }, []);
+  }, [loadLotTerrain]);
 
   /** The lawn on the cadastre lot at a point: a searched address, a tap or a share link. */
   const runLawn = useCallback(
@@ -324,6 +366,8 @@ export default function GolfCourseCalculator() {
       const around = aroundPoint(lat, lon);
       const nearby = inQuebec(lat, lon) ? fetchFairways(around, "lawn") : null;
       nearby?.catch(() => {}); // Handled by showLawn, or unused when the lot is bigger.
+      const terrain = inQuebec(lat, lon) ? fetchTerrain(around) : null;
+      terrain?.catch(() => {}); // Likewise, by loadTerrain.
       try {
         const parcel = await fetchParcel(lat, lon);
         if (id !== runId.current) return;
@@ -341,7 +385,8 @@ export default function GolfCourseCalculator() {
           traced,
         };
         if (mapRef.current) fitAbovePanel(mapRef.current, parcel.geometry);
-        await showLawn(next, id, nearby && bboxContains(around, lotBBox(parcel.geometry)) ? nearby : undefined);
+        const inBox = bboxContains(around, lotBBox(parcel.geometry));
+        await showLawn(next, id, (inBox && nearby) || undefined, (inBox && terrain) || undefined);
       } catch (err) {
         if (id !== runId.current) return;
         setError({ kind: "lotUnreachable" });
@@ -684,6 +729,7 @@ export default function GolfCourseCalculator() {
         features: [
           ...(totals?.lawn ? [feature(totals.lawn, "lawn")] : []),
           ...(lawn.mapped ?? []).map((a) => feature(a.geometry, a.kind === "paving" ? "lawn_paved" : "lawn_built")),
+          ...(lawn.lidar ?? []).map((a) => feature(a.geometry, "lawn_built")),
           ...lawn.traced.map((a) => feature(a.geometry, "lawn_removed")),
           ...(preview ? [feature(preview, "lawn_removed")] : []),
           feature(lawn.lot, "course"),
@@ -744,6 +790,7 @@ export default function GolfCourseCalculator() {
         error={error}
         satLoading={satLoading}
         satError={satError}
+        terrainLoading={terrainLoading}
         selecting={selecting}
         awaitingSecondCorner={firstCorner !== null}
         tracing={tracing}

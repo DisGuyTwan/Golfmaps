@@ -7,6 +7,8 @@ import { DRIVEWAY_WIDTHS_FT, formatSqft, lotLooksOdd, type LawnMeasurement, type
 import type { AcreageMode } from "@/lib/quote";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import type { MeasureError, SatelliteError, TraceKind } from "./GolfCourseCalculator";
+import { useTerrain } from "@/lib/quote-store";
+import MowerFit from "./MowerFit";
 import QuoteSection from "./QuoteSection";
 import { Icon } from "./icons";
 import { Notice, Pop, ui } from "./ui";
@@ -21,6 +23,8 @@ interface MeasurePanelProps {
   loading: boolean;
   error: MeasureError | null;
   satLoading: boolean;
+  /** The LiDAR terrain for the mower fit is loading. */
+  terrainLoading: boolean;
   satError: SatelliteError | null;
   selecting: boolean;
   awaitingSecondCorner: boolean;
@@ -87,6 +91,7 @@ export default function MeasurePanel({
   loading,
   error,
   satLoading,
+  terrainLoading,
   satError,
   selecting,
   awaitingSecondCorner,
@@ -109,6 +114,7 @@ export default function MeasurePanel({
   getShareUrl,
 }: MeasurePanelProps) {
   const t = UI[lang];
+  const terrain = useTerrain();
   const ac = (acres: number) => formatAcres(acres, lang);
   const errorText = error
     ? error.kind === "http"
@@ -131,7 +137,12 @@ export default function MeasurePanel({
   const title = mode === "sod" ? t.sodPanelTitle : mode === "lawn" ? t.lawnPanelTitle : t.panelTitle;
   // Lawn: say so when OSM has no building on the lot, so the rep traces the house out.
   const lawnNoBuilding =
-    !!lawn && lawn.mapped !== null && !lawn.mappedFailed && !lawn.mapped.some((a) => a.kind === "building") && lawn.traced.length === 0;
+    !!lawn &&
+    lawn.mapped !== null &&
+    !lawn.mappedFailed &&
+    !lawn.mapped.some((a) => a.kind === "building") &&
+    !lawn.lidar?.length &&
+    lawn.traced.length === 0;
 
   return (
     <div
@@ -323,11 +334,13 @@ export default function MeasurePanel({
             {lawn && (
               <div className="space-y-1 text-[11px]">
                 <p className="text-muted">{lawn.lotNumber ? t.lawnLotNumber(lawn.lotNumber) : lawn.lotSource === "traced" ? t.lawnLotTraced : null}</p>
+                {!!lawnTotals?.lidarCount && <p className="text-muted">{t.lawnLidar(lawnTotals.lidarCount)}</p>}
                 <p className="text-muted">{t.lawnRemoveHint}</p>
                 <p className="text-faint">{t.lawnTreesNote}</p>
               </div>
             )}
 
+            {lawn && !error && <MowerFit lang={lang} loading={terrainLoading} />}
             {lawn && !error && <QuoteSection lang={lang} mode="lawn" result={null} sod={null} lawn={lawn} getShareUrl={getShareUrl} />}
           </>
         ) : mode === "golf" ? (
@@ -422,7 +435,10 @@ export default function MeasurePanel({
             )}
 
             {result && (result.found || result.boundaryOnly) && !error && (
-              <QuoteSection lang={lang} mode="golf" result={result} sod={null} lawn={null} getShareUrl={getShareUrl} />
+              <>
+                <MowerFit lang={lang} loading={terrainLoading} />
+                <QuoteSection lang={lang} mode="golf" result={result} sod={null} lawn={null} getShareUrl={getShareUrl} />
+              </>
             )}
           </>
         ) : (
@@ -445,6 +461,7 @@ export default function MeasurePanel({
               </div>
             )}
 
+            {sod && !error && <MowerFit lang={lang} loading={terrainLoading} />}
             {sod && !error && <QuoteSection lang={lang} mode="sod" result={null} sod={sod} lawn={null} getShareUrl={getShareUrl} />}
           </>
         )}
@@ -454,6 +471,7 @@ export default function MeasurePanel({
           {mode === "golf" && sat && <> · {t.attributionWorldCover}</>}
           {mode === "sod" && sod?.year != null && <> · {t.attributionAci}</>}
           {mode === "lawn" && lawn?.lotSource === "cadastre" && <> · {t.attributionCadastre}</>}
+          {terrain && <> · {t.attributionLidar}</>}
         </p>
       </div>
     </div>

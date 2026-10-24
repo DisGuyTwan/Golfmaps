@@ -46,13 +46,21 @@ export interface LawnMeasurement {
   /** Buildings, pools and paving from OSM; null while loading or if the lookup failed. */
   mapped: LawnArea[] | null;
   mappedFailed: boolean;
+  /**
+   * Buildings the LiDAR sees on the lot (terrain.ts), for houses OSM doesn't
+   * have; null while loading or where there's no LiDAR. One that mostly
+   * overlaps an OSM building is left to OSM's outline.
+   */
+  lidar?: LawnArea[] | null;
   traced: LawnArea[];
 }
 
 export interface LawnTotals {
   lotSqft: number;
-  /** Buildings and pools mapped in OSM, on the lot. */
+  /** Buildings and pools mapped in OSM, and buildings only the LiDAR sees, on the lot. */
   builtSqft: number;
+  /** Buildings counted from the LiDAR alone (not in OSM). */
+  lidarCount: number;
   /** Paving mapped in OSM (parking, driveways, aisles), not under a building. */
   pavedSqft: number;
   /** Traced out by hand (driveways and areas), not counting what OSM already removed. */
@@ -162,19 +170,32 @@ export function mappedOnLot(overpassJson: unknown, lot: Polygon | MultiPolygon):
   return out;
 }
 
+/** LiDAR buildings OSM doesn't already have: less than 30 % of each under an OSM building. */
+function lidarOnly(lidar: LawnArea[], osm: Poly | null): LawnArea[] {
+  if (!osm) return lidar;
+  return lidar.filter((a) => {
+    const f = asFeature(a.geometry);
+    const shared = intersect(featureCollection([f, osm]));
+    return !shared || area(shared) < 0.3 * area(f);
+  });
+}
+
 /** Lot, what's removed and the lawn left, in square feet. Each part counts once. */
 export function lawnTotals(m: LawnMeasurement): LawnTotals {
   const lotF = asFeature(m.lot);
   const lotSqft = sqft(lotF);
   const mapped = m.mapped ?? [];
   try {
-    const built = clip(merge(mapped.filter((a) => a.kind !== "paving").map((a) => a.geometry)), lotF);
+    const osmBuilt = mapped.filter((a) => a.kind !== "paving");
+    const lidar = lidarOnly(m.lidar ?? [], merge(osmBuilt.map((a) => a.geometry)));
+    const built = clip(merge([...osmBuilt, ...lidar].map((a) => a.geometry)), lotF);
     const paved = minus(clip(merge(mapped.filter((a) => a.kind === "paving").map((a) => a.geometry)), lotF), built);
     const traced = minus(clip(merge(m.traced.map((a) => a.geometry)), lotF), built, paved);
     const lawn = minus(lotF, built, paved, traced);
     return {
       lotSqft,
       builtSqft: sqft(built),
+      lidarCount: lidar.length,
       pavedSqft: sqft(paved),
       tracedSqft: sqft(traced),
       lawnSqft: sqft(lawn),
@@ -189,6 +210,7 @@ export function lawnTotals(m: LawnMeasurement): LawnTotals {
     return {
       lotSqft,
       builtSqft,
+      lidarCount: 0,
       pavedSqft,
       tracedSqft,
       lawnSqft: Math.max(0, lotSqft - builtSqft - pavedSqft - tracedSqft),
