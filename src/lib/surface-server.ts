@@ -8,7 +8,7 @@
  */
 import jpeg from "jpeg-js";
 import { classifySurface, latOfY, lonOfX, mercX, mercY, surfaceZoom, type SurfaceGrid } from "./surface";
-import { COVER, terrainCellM } from "./terrain";
+import { COVER, NO_SLOPE, terrainCellM } from "./terrain";
 import { readTerrain } from "./terrain-server";
 import type { BBox } from "./types";
 
@@ -81,8 +81,10 @@ export async function readSurface(bbox: BBox, debug = false): Promise<(SurfaceGr
 
   const box = { west: lonOfX(px0, z), east: lonOfX(px1, z), north: latOfY(py0, z), south: latOfY(py1, z) };
   let cover: Uint8Array | null = null;
+  let slope: Uint8Array | null = null;
   if (terrain) {
     cover = new Uint8Array(width * height);
+    slope = new Uint8Array(width * height).fill(NO_SLOPE);
     const t = terrain;
     for (let y = 0; y < height; y++) {
       const lat = latOfY(py0 + y + 0.5, z);
@@ -90,10 +92,12 @@ export async function readSurface(bbox: BBox, debug = false): Promise<(SurfaceGr
       for (let x = 0; x < width; x++) {
         const lon = lonOfX(px0 + x + 0.5, z);
         const c = Math.floor(((lon - t.bbox.west) / (t.bbox.east - t.bbox.west)) * t.width);
-        cover[y * width + x] = r >= 0 && r < t.height && c >= 0 && c < t.width ? t.cover[r * t.width + c] : COVER.none;
+        const inside = r >= 0 && r < t.height && c >= 0 && c < t.width;
+        cover[y * width + x] = inside ? t.cover[r * t.width + c] : COVER.none;
+        if (inside) slope[y * width + x] = t.slope[r * t.width + c];
       }
     }
   }
   const cellM = (156543.03392 / 2 ** z) * Math.cos((((box.north + box.south) / 2) * Math.PI) / 180);
-  return { bbox: box, width, height, cellM, classes: classifySurface({ rgb, width, height, cellM, valid, cover }), ...(debug ? { rgb } : {}) };
+  return { bbox: box, width, height, cellM, classes: classifySurface({ rgb, width, height, cellM, valid, cover, slope }), ...(debug ? { rgb } : {}) };
 }

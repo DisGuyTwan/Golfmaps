@@ -51,6 +51,23 @@ describe("aerial photo classes", () => {
     expect(at(classes, 25, 10)).toBe(SURFACE.other);
   });
 
+  it("keeps grass dried yellow as grass, and still finds sand", () => {
+    const sand = (x: number, y: number) => x >= 5 && x < 25 && y >= 5 && y < 25;
+    const dry = (x: number, y: number) => x >= 40 && x < 75 && y >= 5 && y < 40;
+    const course = classifySurface(scene((x, y) => (sand(x, y) ? [205, 192, 168] : dry(x, y) ? [120, 118, 100] : null)));
+    expect(at(course, 15, 15)).toBe(SURFACE.hard);
+    expect(at(course, 55, 20)).toBe(SURFACE.other);
+  });
+
+  it("finds a pond where the LiDAR is dead flat, though the photo shows it dark like shade", () => {
+    const pond = (_x: number, y: number) => y < 75; // 16 × 15 m
+    const s = scene((x, y) => (pond(x, y) ? [20, 32, 40] : null));
+    const slope = new Uint8Array(W * H).fill(3);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (pond(x, y)) slope[y * W + x] = 0;
+    expect(at(classifySurface({ ...s, slope }), 40, 40)).toBe(SURFACE.water);
+    expect(at(classifySurface(s), 40, 40)).toBe(SURFACE.other);
+  });
+
   it("removes nothing from a yard that's all lawn", () => {
     const lawn = classifySurface(scene(() => null));
     expect(lawn.includes(SURFACE.hard)).toBe(false);

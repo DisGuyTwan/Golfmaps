@@ -7,12 +7,15 @@
  * course at about 85 cm, a farm coarser (`surfaceZoom`). /api/surface reads
  * the tiles over the property and the LiDAR under them (terrain.ts) and
  * classifies every pixel:
- * - water: clearly blue, a pool (in-ground or above-ground);
+ * - water: clearly blue (a pool), or ground the LiDAR reads as dead flat over
+ *   200 m² or more (a pond or a lake: the ground model is flattened over
+ *   water, and dark water looks like shade in the photos);
  * - tree, building: what the LiDAR sees standing there (crowns, roofs);
- * - hard: open ground that isn't green: driveways, pavers, decks, paths,
- *   sand. Green is split from grey by each scene's own colours (Otsu on the
- *   green share G / (R + G + B) of open ground), since the photos' tint
- *   changes from one flight to the next;
+ * - hard: open ground that isn't green and is grey or bright: driveways,
+ *   pavers, decks, paths, sand. Green is split from grey by each scene's own
+ *   colours (Otsu on the green share G / (R + G + B) of open ground), since
+ *   the photos' tint changes from one flight to the next; grass dried yellow
+ *   in summer isn't green either, but it stays yellow (G well above B);
  * - other: grass, and shade too dark to tell (left as grass).
  * Pure, so it's tested without a browser; the route does the fetching.
  */
@@ -45,6 +48,15 @@ const MAX_SHADE = 50;
 const SPLIT_RANGE: readonly [number, number] = [0.335, 0.37];
 /** With grass and pavement closer than this in green share, there's no pavement to tell apart: only clear greys count. */
 const MIN_SEPARATION = 0.015;
+/**
+ * Paving is grey (G − B under this) or bright like sand and concrete (at least SAND_BRIGHT): dried grass on a
+ * course's rough or range isn't green but stays yellow (G − B 9-25 on fully mapped Quebec courses), paving
+ * on lots stayed under 6.
+ */
+const GREY_GB = 8;
+const SAND_BRIGHT = 150;
+/** Ground the LiDAR reads as dead flat (slope under 0.5 %) over this much (m²) is water: the ground model is flattened over ponds. */
+const MIN_POND_M2 = 200;
 
 /** Classes over a lat/lon box (cells about `cellM` square, from Web Mercator pixels). */
 export interface SurfaceGrid extends GridShape {
@@ -175,10 +187,12 @@ export interface SurfacePixels {
   valid: Uint8Array;
   /** What the LiDAR sees on each pixel (terrain.ts COVER); null without LiDAR (everything counts as open ground). */
   cover: Uint8Array | null;
+  /** LiDAR slope on each pixel, in % (terrain.ts, NO_SLOPE where there's none); finds ponds. */
+  slope?: Uint8Array | null;
 }
 
 /** SURFACE class of every pixel (see the module comment). */
-export function classifySurface({ rgb, width: w, height: h, cellM, valid, cover }: SurfacePixels): Uint8Array {
+export function classifySurface({ rgb, width: w, height: h, cellM, valid, cover, slope }: SurfacePixels): Uint8Array {
   const n = w * h;
   // Only crowns and roofs are ruled out: a car or a hedge the LiDAR caught may be gone from the photo (or be
   // parked on the driveway), and the two weren't flown the same year.
@@ -196,6 +210,12 @@ export function classifySurface({ rgb, width: w, height: h, cellM, valid, cover 
   }
   const minWater = Math.max(1, Math.round(MIN_WATER_M2 / (cellM * cellM)));
   const pools = dropSmall(close(open(water, w, h, 1), w, h, 1), w, h, minWater);
+  if (slope && cover) {
+    const flat = new Uint8Array(n);
+    for (let i = 0; i < n; i++) flat[i] = valid[i] && slope[i] === 0 && cover[i] === COVER.ground ? 1 : 0;
+    const ponds = dropSmall(flat, w, h, MIN_POND_M2 / (cellM * cellM));
+    for (let i = 0; i < n; i++) pools[i] |= ponds[i];
+  }
 
   // Colour averaged over about a metre (JPEG noise and 4:2:0 chroma at single pixels).
   const half = Math.floor((Math.max(1, Math.round(SMOOTH_M / cellM)) | 1) / 2);
@@ -237,7 +257,10 @@ export function classifySurface({ rgb, width: w, height: h, cellM, valid, cover 
   const threshold = split.separation >= MIN_SEPARATION ? Math.min(SPLIT_RANGE[1], Math.max(SPLIT_RANGE[0], split.threshold)) : SPLIT_RANGE[0];
 
   const hard = new Uint8Array(n);
-  for (let i = 0; i < n; i++) hard[i] = candidate(i) && (R[i] + G[i] + B[i]) / 3 > shade && share[i] < threshold ? 1 : 0;
+  for (let i = 0; i < n; i++) {
+    const bright = (R[i] + G[i] + B[i]) / 3;
+    hard[i] = candidate(i) && bright > shade && share[i] < threshold && (G[i] - B[i] < GREY_GB || bright >= SAND_BRIGHT) ? 1 : 0;
+  }
   const radius = Math.max(1, Math.round(OPEN_M / cellM));
   const paved = dropSmall(open(hard, w, h, radius), w, h, Math.max(1, Math.round(MIN_HARD_M2 / (cellM * cellM))));
   for (let i = 0; i < n; i++) {
