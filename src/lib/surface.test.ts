@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import area from "@turf/area";
 import type { Polygon } from "geojson";
-import { classifySurface, latOfY, lonOfX, mercX, mercY, otsu, surfaceAreas, SURFACE, type SurfaceGrid } from "./surface";
+import { classifySurface, latOfY, lonOfX, mercX, mercY, otsu, surfaceAreas, surfaceCover, surfaceZoom, SURFACE, type SurfaceGrid } from "./surface";
+import { COVER } from "./terrain";
 
 // An 80 × 80 pixel scene at 20 cm a pixel (16 × 16 m), lawn by default.
 const W = 80, H = 80, CELL = 0.2;
@@ -11,17 +12,17 @@ const grain = (x: number, y: number) => ((((x * 73856093) ^ (y * 19349663)) >>> 
 
 function scene(paint: Paint, roof?: (x: number, y: number) => boolean) {
   const rgb = new Uint8Array(W * H * 3);
-  const open = new Uint8Array(W * H).fill(1);
+  const cover = new Uint8Array(W * H).fill(COVER.ground);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const [r, g, b] = paint(x, y) ?? [52, 74, 62];
       const n = grain(x, y);
       const i = y * W + x;
       rgb.set([r + n, g + n, b + n].map((v) => Math.max(0, Math.min(255, v))), 3 * i);
-      if (roof?.(x, y)) open[i] = 0;
+      if (roof?.(x, y)) cover[i] = COVER.building;
     }
   }
-  return { rgb, width: W, height: H, cellM: CELL, valid: new Uint8Array(W * H).fill(1), open };
+  return { rgb, width: W, height: H, cellM: CELL, valid: new Uint8Array(W * H).fill(1), cover };
 }
 
 const driveway = (x: number, y: number) => x >= 5 && x < 20 && y >= 20 && y < 60; // 3 × 8 m
@@ -44,8 +45,8 @@ describe("aerial photo classes", () => {
     expect(at(classes, 70, 10)).toBe(SURFACE.other);
   });
 
-  it("leaves roofs, thin edging and shade alone", () => {
-    expect(at(classes, 55, 57)).toBe(SURFACE.other);
+  it("calls a roof a building, and leaves thin edging and shade as lawn", () => {
+    expect(at(classes, 55, 57)).toBe(SURFACE.building);
     expect(at(classes, 31, 60)).toBe(SURFACE.other);
     expect(at(classes, 25, 10)).toBe(SURFACE.other);
   });
@@ -68,6 +69,33 @@ describe("aerial photo classes", () => {
     expect(threshold).toBeGreaterThan(0.34);
     expect(threshold).toBeLessThanOrEqual(0.375);
     expect(separation).toBeCloseTo(0.035, 2);
+  });
+});
+
+describe("zoom by property size", () => {
+  it("reads a lot at 20 cm, a course at about 85 cm, a farm coarser", () => {
+    expect(surfaceZoom({ south: 45.4441, west: -73.3338, north: 45.4444, east: -73.3332 })).toBe(19);
+    expect(surfaceZoom({ south: 45.43, west: -73.36, north: 45.44, east: -73.348 })).toBe(17);
+    expect(surfaceZoom({ south: 45.42, west: -73.38, north: 45.46, east: -73.34 })).toBeLessThanOrEqual(16);
+  });
+});
+
+describe("woods and single trees", () => {
+  // 300 × 300 cells of 1 m: a 40 × 40 m wood and a 10 × 10 m tree, over grass.
+  const n = 300;
+  const classes = new Uint8Array(n * n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    if (x < 40 && y < 40) classes[y * n + x] = SURFACE.tree;
+    if (x >= 100 && x < 110 && y >= 100 && y < 110) classes[y * n + x] = SURFACE.tree;
+  }
+  const dLat = n / 111320, dLon = n / (111320 * Math.cos((45.4 * Math.PI) / 180));
+  const grid: SurfaceGrid = { bbox: { south: 45.4, west: -73.4, north: 45.4 + dLat, east: -73.4 + dLon }, width: n, height: n, cellM: 1, classes };
+  const all: Polygon = { type: "Polygon", coordinates: [[[-73.4, 45.4], [-73.4 + dLon, 45.4], [-73.4 + dLon, 45.4 + dLat], [-73.4, 45.4 + dLat], [-73.4, 45.4]]] };
+
+  it("leaves the wood out and mows under the single tree", () => {
+    const { cover } = surfaceCover(grid, [all]);
+    expect(cover.woodsM2).toBeCloseTo(1600, -1);
+    expect(cover.grassM2).toBeCloseTo(n * n - 1600, -1);
   });
 });
 
@@ -98,6 +126,16 @@ describe("pools and paving on the lot", () => {
     expect(m2(paved[0].geometry) / px).toBeGreaterThan(520);
     expect(m2(paved[0].geometry) / px).toBeLessThan(760);
     expect(new Set(areas.map((a) => a.id)).size).toBe(areas.length);
+  });
+
+  it("breaks the lot down: lawn, roof, driveway, pool", () => {
+    const { cover } = surfaceCover(grid, [lot]);
+    const px = cover.totalM2 / (W * H);
+    expect(cover.waterM2 / px).toBeGreaterThan(150);
+    expect(cover.builtM2 / px).toBeCloseTo(30 * 25, -1);
+    expect(cover.pavedM2 / px).toBeGreaterThan(520);
+    expect(cover.grassM2 + cover.waterM2 + cover.builtM2 + cover.pavedM2 + cover.woodsM2).toBeCloseTo(cover.totalM2, 3);
+    expect(cover.woodsM2).toBe(0);
   });
 
   it("keeps only what's on the lot", () => {
