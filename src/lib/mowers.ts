@@ -14,7 +14,8 @@
  * run all season), so `listUsd` is only a rough order used to break ties
  * between robots that fit equally well, never shown.
  */
-import { overhead, type Overhead, type Pace } from "./coverage";
+import { overhead, share, type Overhead, type Pace } from "./coverage";
+import type { MowEvery } from "./quote";
 import { ROI_DEFAULTS } from "./roi";
 import type { Site } from "./site";
 import type { TerrainStats } from "./terrain";
@@ -28,10 +29,12 @@ export type MowerLine = "rtkn" | "eyepilot" | "eyepilot4x4" | "masterseries" | "
 export interface Mower {
   id: string;
   line: MowerLine;
-  /** Kress's rated area (m²): mowing every 48 h for the robots; one charge (a day) for the Voyager. */
+  /**
+   * Kress's rated area (m²): mowed all over every 48 h for the robots (the
+   * RTKn listings' larger "max" areas are for mowing less often, which the
+   * mowing frequency covers); one charge (a day) for the Voyager.
+   */
   areaM2: number;
-  /** Largest area (m²) it can keep up with, mowing less often (every 72 h). */
-  maxAreaM2: number;
   maxSlopePct: number;
   cutWidthCm: number;
   /** Lowest cutting height (mm): a fairway wants 10-15 mm, rough and lawns 40 mm and up. */
@@ -63,22 +66,22 @@ const EYEPILOT = { ...RESIDENTIAL, vision: true, zeroTrim: true };
 
 export const MOWERS: Mower[] = [
   // RTKn: RTK satellite positioning, no camera; the KR161 and KR172 bump into obstacles rather than avoid them.
-  { ...RESIDENTIAL, id: "KR161", line: "rtkn", areaM2: ac(0.25), maxAreaM2: ac(0.25), maxSlopePct: 36, cutWidthCm: 20, minCutMm: 40, runtimeMin: 50, avoidance: false, listUsd: 1500 },
-  { ...RESIDENTIAL, id: "KR172", line: "rtkn", areaM2: ac(0.5), maxAreaM2: ac(0.7), maxSlopePct: 36, cutWidthCm: 20, minCutMm: 40, runtimeMin: 60, avoidance: false, listUsd: 1700 },
-  { ...RESIDENTIAL, id: "KR173", line: "rtkn", areaM2: ac(0.75), maxAreaM2: ac(1.2), maxSlopePct: 36, cutWidthCm: 20, minCutMm: 40, runtimeMin: 70, listUsd: 2000 },
-  { ...RESIDENTIAL, id: "KR174", line: "rtkn", areaM2: ac(1.2), maxAreaM2: ac(1.7), maxSlopePct: 36, cutWidthCm: 22, minCutMm: 40, runtimeMin: 90, listUsd: 2700 },
+  { ...RESIDENTIAL, id: "KR161", line: "rtkn", areaM2: ac(0.25), maxSlopePct: 36, cutWidthCm: 20, minCutMm: 40, runtimeMin: 50, avoidance: false, listUsd: 1500 },
+  { ...RESIDENTIAL, id: "KR172", line: "rtkn", areaM2: ac(0.5), maxSlopePct: 36, cutWidthCm: 20, minCutMm: 40, runtimeMin: 60, avoidance: false, listUsd: 1700 },
+  { ...RESIDENTIAL, id: "KR173", line: "rtkn", areaM2: ac(0.75), maxSlopePct: 36, cutWidthCm: 20, minCutMm: 40, runtimeMin: 70, listUsd: 2000 },
+  { ...RESIDENTIAL, id: "KR174", line: "rtkn", areaM2: ac(1.2), maxSlopePct: 36, cutWidthCm: 22, minCutMm: 40, runtimeMin: 90, listUsd: 2700 },
   // EyePilot: camera plus RTK, ZeroTrim; the KR276 lists 130 min per charge (10 Ah).
-  { ...EYEPILOT, id: "KR272", line: "eyepilot", areaM2: ac(0.5), maxAreaM2: ac(0.5), maxSlopePct: 36, cutWidthCm: 22, minCutMm: 40, runtimeMin: 75, listUsd: 2500 },
-  { ...EYEPILOT, id: "KR276", line: "eyepilot", areaM2: ac(1.5), maxAreaM2: ac(1.5), maxSlopePct: 36, cutWidthCm: 24, minCutMm: 40, runtimeMin: 130, listUsd: 3600 },
+  { ...EYEPILOT, id: "KR272", line: "eyepilot", areaM2: ac(0.5), maxSlopePct: 36, cutWidthCm: 22, minCutMm: 40, runtimeMin: 75, listUsd: 2500 },
+  { ...EYEPILOT, id: "KR276", line: "eyepilot", areaM2: ac(1.5), maxSlopePct: 36, cutWidthCm: 24, minCutMm: 40, runtimeMin: 130, listUsd: 3600 },
   // EyePilot 4x4: four motors, slopes to 84 % (40°): the only ones for slopes over 20°.
-  { ...EYEPILOT, id: "KR282", line: "eyepilot4x4", areaM2: ac(0.5), maxAreaM2: ac(0.5), maxSlopePct: 84, cutWidthCm: 24, minCutMm: 40, runtimeMin: 75, fourWheel: true, listUsd: 3000 },
-  { ...EYEPILOT, id: "KR284", line: "eyepilot4x4", areaM2: ac(1), maxAreaM2: ac(1), maxSlopePct: 84, cutWidthCm: 24, minCutMm: 40, runtimeMin: 100, fourWheel: true, listUsd: 3600 },
-  { ...EYEPILOT, id: "KR286", line: "eyepilot4x4", areaM2: ac(2.5), maxAreaM2: ac(2.5), maxSlopePct: 84, cutWidthCm: 24, minCutMm: 40, runtimeMin: 130, fourWheel: true, listUsd: 4300 },
+  { ...EYEPILOT, id: "KR282", line: "eyepilot4x4", areaM2: ac(0.5), maxSlopePct: 84, cutWidthCm: 24, minCutMm: 40, runtimeMin: 75, fourWheel: true, listUsd: 3000 },
+  { ...EYEPILOT, id: "KR284", line: "eyepilot4x4", areaM2: ac(1), maxSlopePct: 84, cutWidthCm: 24, minCutMm: 40, runtimeMin: 100, fourWheel: true, listUsd: 3600 },
+  { ...EYEPILOT, id: "KR286", line: "eyepilot4x4", areaM2: ac(2.5), maxSlopePct: 84, cutWidthCm: 24, minCutMm: 40, runtimeMin: 130, fourWheel: true, listUsd: 4300 },
   // MasterSeries: 62 cm, cuts down to 10 mm (fairways), 2 h per charge, 1.5 m/s; 18 % slope at the boundary.
-  { ...RESIDENTIAL, id: "KR238", line: "masterseries", areaM2: ac(20), maxAreaM2: ac(20), maxSlopePct: 36, cutWidthCm: 62, minCutMm: 10, passageM: 1.5, speedMS: 1.5, turnS: 10, runtimeMin: 120, commercial: true, listUsd: 40000 },
+  { ...RESIDENTIAL, id: "KR238", line: "masterseries", areaM2: ac(20), maxSlopePct: 36, cutWidthCm: 62, minCutMm: 10, passageM: 1.5, speedMS: 1.5, turnS: 10, runtimeMin: 120, commercial: true, listUsd: 40000 },
   // Voyager: up to 7 or 19 acres (about 8 h) per charge at 5.6 mph. Slope: Kress gives 20° (about 36 %) for the KR800 and 25° (about 47 %) for the KR804.
-  { ...RESIDENTIAL, id: "KR800", line: "voyager", areaM2: ac(7), maxAreaM2: ac(7), maxSlopePct: 36, cutWidthCm: 102, minCutMm: 38, passageM: 2, speedMS: 2.5, turnS: 12, runtimeMin: 480, commercial: true, listUsd: 62000 },
-  { ...RESIDENTIAL, id: "KR804", line: "voyager", areaM2: ac(19), maxAreaM2: ac(19), maxSlopePct: 47, cutWidthCm: 152, minCutMm: 38, passageM: 2.5, speedMS: 2.5, turnS: 12, runtimeMin: 480, commercial: true, listUsd: 84000 },
+  { ...RESIDENTIAL, id: "KR800", line: "voyager", areaM2: ac(7), maxSlopePct: 36, cutWidthCm: 102, minCutMm: 38, passageM: 2, speedMS: 2.5, turnS: 12, runtimeMin: 480, commercial: true, listUsd: 62000 },
+  { ...RESIDENTIAL, id: "KR804", line: "voyager", areaM2: ac(19), maxSlopePct: 47, cutWidthCm: 152, minCutMm: 38, passageM: 2.5, speedMS: 2.5, turnS: 12, runtimeMin: 480, commercial: true, listUsd: 84000 },
 ];
 
 const LINE_NAME: Record<MowerLine, string> = {
@@ -117,33 +120,49 @@ export type FitNote =
 
 export interface Fit {
   mower: Mower;
-  /** Units needed for the area. */
+  /** Units needed for the area at the chosen mowing frequency, each with its own zone and charger. */
   units: number;
   /** False when it can't do the job: parts of the site are past its slope limit. */
   fits: boolean;
   /** Lower is better. */
   penalty: number;
   notes: FitNote[];
-  /** Extra time the property costs this robot (shapes, driving), or null without a layout. */
+  /** Extra time one unit's zone costs it (shapes, trees, driving) and its hours per mow, or null without a layout. */
   work: Overhead | null;
 }
 
 /**
  * Area one unit keeps mowed (m²). Robots are rated for mowing it all every
- * 48 h. A Voyager mows its rating per charge, so it covers that many days'
- * worth at the ROI tab's defaults (5 mowing days, once a week), so both tabs
- * size the same fleet.
+ * 48 h, so mowing every day halves it and every 3 days adds half. A Voyager
+ * mows its rating per charge, so it covers that many days' worth at the ROI
+ * tab's defaults (5 mowing days, once a week), so both tabs size the same
+ * fleet; the mowing frequency doesn't change it.
  */
-export function capacityM2(mower: Mower): number {
-  return mower.line === "voyager" ? (mower.areaM2 * ROI_DEFAULTS.voyDaysPerWeek) / ROI_DEFAULTS.mowsPerWeek : mower.areaM2;
+export function capacityM2(mower: Mower, everyDays: MowEvery = 2): number {
+  return mower.line === "voyager" ? (mower.areaM2 * ROI_DEFAULTS.voyDaysPerWeek) / ROI_DEFAULTS.mowsPerWeek : (mower.areaM2 * everyDays) / 2;
 }
 
-/** Share of the area above a robot's slope limit that rules it out: a few patches can be left to a trimmer. */
+/**
+ * Steep ground past a robot's limit rules it out once it's more than a few
+ * patches a trimmer can take: 2 % of the area, and at most TRIMMER_M2 (on a
+ * big property 2 % is acres).
+ */
 const STEEP_SHARE = 0.02;
+const TRIMMER_M2 = 250;
 /** Home robots one lawn can get before the commercial ones are worth a look too. */
 const MAX_LAWN_UNITS = 3;
 /** A layout can't make a robot faster than about this much of its rating. */
 const MIN_FACTOR = 0.9;
+/** A unit working more than this share of its capacity is near its limit; a fleet of several is sized to stay under it. */
+const LIMIT_LOAD = 0.9;
+
+const tooMuch = (site: Site, steepShare: number) => steepShare > Math.min(STEEP_SHARE, TRIMMER_M2 / Math.max(1, site.areaM2));
+
+/** Share of the site steeper than any robot can climb (40°), when it's more than a trimmer's few patches; 0 otherwise. */
+export function trimmerShare(site: Site): number {
+  const t = site.terrain;
+  return t && t.coverage >= 0.5 && tooMuch(site, t.over84) ? t.over84 : 0;
+}
 
 /** Share of the site steeper than a robot's slope limit (the LiDAR shares are at 36, 47 and 84 %). */
 function overLimit(terrain: TerrainStats, limitPct: number): number {
@@ -151,30 +170,49 @@ function overLimit(terrain: TerrainStats, limitPct: number): number {
 }
 
 /**
- * How well one robot fits a site. The area it has to keep up with is the
- * site's area times the extra time the layout costs this robot (turns, broken
- * stripes, edges, driving from the charger and between areas), so a ragged
- * lawn far from the charger can need the next size up. A lawn bigger than a
- * home robot's largest area gets several (each mowing part of it).
+ * How well one robot fits a site, mowing it all every `everyDays`. Each unit
+ * has to keep up with its zone's area times the extra time that zone costs
+ * it (turns, broken stripes, edges, trees, driving from its charger and
+ * between areas), so a ragged lawn far from the charger can need the next
+ * size up, and a big property gets as many units as it takes (each driving
+ * only within its own zone). Ground steeper than any robot can climb is left
+ * to a trimmer (trimmerShare).
  */
-export function fitMower(site: Site, mower: Mower): Fit {
+export function fitMower(site: Site, mower: Mower, everyDays: MowEvery = 2): Fit {
   const notes: FitNote[] = [];
   let fits = true;
   let penalty = 0;
   const { terrain, shape } = site;
-  // The layout's extra time is a ratio; its hours are for the layout's own area (all the turf on a course).
-  const layout = site.coverage ? overhead(site.coverage, paceOf(mower)) : null;
-  const work = layout && { ...layout, hours: (layout.hours * site.areaM2) / site.coverage!.areaM2 };
-  const effective = site.areaM2 * Math.max(MIN_FACTOR, work?.factor ?? 1);
-  const home = site.kind === "lawn" && !mower.commercial;
-  const units = Math.max(1, Math.ceil(effective / (home ? mower.maxAreaM2 : capacityM2(mower))));
+  const pace = paceOf(mower);
+  const capacity = capacityM2(mower, everyDays);
+  const left = trimmerShare(site);
+  const areaM2 = site.areaM2 * (1 - left);
+  const zone = (units: number) => (site.coverage ? overhead(share(site.coverage, units), pace) : null);
+  const load = (units: number) => (areaM2 * Math.max(MIN_FACTOR, zone(units)?.factor ?? 1)) / (units * capacity);
+  // One unit if it keeps up; else the fewest that each stay under LIMIT_LOAD (more units, smaller zones, shorter
+  // drives). Voyager fleets fill up like the ROI tab's, which sizes its own from the acres sent.
+  const fleetLoad = mower.line === "voyager" ? 1 : LIMIT_LOAD;
+  let units = 1;
+  if (load(1) > 1) {
+    let lo = 2, hi = Math.ceil((2 * load(1)) / fleetLoad) + 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (load(mid) <= fleetLoad) hi = mid;
+      else lo = mid + 1;
+    }
+    units = lo;
+  }
+  const layout = zone(units);
+  // The zone's extra time is a ratio; its hours are for the layout's own area (all the turf on a course), scaled to the quoted area.
+  const work = layout && { ...layout, hours: (layout.hours * areaM2) / site.coverage!.areaM2 };
 
-  if (home && effective / units > mower.areaM2) {
+  if (load(units) > LIMIT_LOAD) {
     penalty += 1;
     notes.push("atLimit");
   }
   if (terrain && terrain.coverage >= 0.5) {
-    if (overLimit(terrain, mower.maxSlopePct) > STEEP_SHARE) {
+    // Ground past this robot's limit that a more capable one could mow.
+    if (tooMuch(site, overLimit(terrain, mower.maxSlopePct) - left)) {
       fits = false;
       notes.push("tooSteep");
     } else if (terrain.over25 > 0.05 && !mower.fourWheel) {
@@ -186,8 +224,9 @@ export function fitMower(site: Site, mower: Mower): Fit {
       notes.push("treesNoVision");
     }
   }
+  const trees = terrain && terrain.coverage >= 0.5 ? terrain.trees : 0;
   if (shape) {
-    if (shape.obstacles >= 3 && !mower.avoidance) {
+    if (shape.obstacles + trees >= 3 && !mower.avoidance) {
       penalty += 1;
       notes.push("noAvoidance");
     }
@@ -207,13 +246,13 @@ export function fitMower(site: Site, mower: Mower): Fit {
 
 /**
  * The robots a recommendation chooses from for each kind of site. A lawn gets
- * home robots (several on a big one); past three of the biggest, the
- * commercial ones are compared too.
+ * home robots (several on a big one); past three of the biggest (at Kress's
+ * every-2-days rating), the commercial ones are compared too.
  */
 function candidates(site: Site): Mower[] {
   if (site.kind === "lawn") {
     const residential = MOWERS.filter((m) => !m.commercial);
-    const biggest = Math.max(...residential.map((m) => m.maxAreaM2));
+    const biggest = Math.max(...residential.map((m) => m.areaM2));
     return site.areaM2 <= MAX_LAWN_UNITS * biggest ? residential : MOWERS;
   }
   if (site.kind === "sod") return MOWERS.filter((m) => m.line === "voyager");
@@ -228,6 +267,8 @@ export interface Recommendation {
   rough: Fit | null;
   /** Every candidate for `best`, best first. */
   fits: Fit[];
+  /** Share of the site steeper than any robot climbs, left to a trimmer (0 when it's only a few patches). */
+  trimmed: number;
 }
 
 /** Fits first, then the fewest drawbacks, then the lowest outlay. */
@@ -243,21 +284,22 @@ const FAIRWAY_CUT_MM = 15;
  * robot suits it best, usually a Voyager. Both take the whole turf's layout
  * (its extra time is a ratio).
  */
-export function recommend(site: Site): Recommendation {
-  if (site.areaM2 <= 0) return { best: null, runnerUp: null, rough: null, fits: [] };
+export function recommend(site: Site, everyDays: MowEvery = 2): Recommendation {
+  const trimmed = trimmerShare(site);
+  if (site.areaM2 <= 0) return { best: null, runnerUp: null, rough: null, fits: [], trimmed: 0 };
   if (site.kind === "golf" && site.fairwayM2 > 0) {
     const fairways: Site = { ...site, areaM2: site.fairwayM2 };
     const fits = candidates(site)
       .filter((m) => m.minCutMm <= FAIRWAY_CUT_MM)
-      .map((m) => fitMower(fairways, m))
+      .map((m) => fitMower(fairways, m, everyDays))
       .sort(rank);
     const ok = fits.filter((f) => f.fits);
     const restM2 = site.areaM2 - site.fairwayM2;
     const rest: Site = { ...site, areaM2: restM2, fairwayM2: 0 };
-    const rough = restM2 > 0 ? (candidates(rest).map((m) => fitMower(rest, m)).filter((f) => f.fits).sort(rank)[0] ?? null) : null;
-    return { best: ok[0] ?? null, runnerUp: ok[1] ?? null, rough, fits };
+    const rough = restM2 > 0 ? (candidates(rest).map((m) => fitMower(rest, m, everyDays)).filter((f) => f.fits).sort(rank)[0] ?? null) : null;
+    return { best: ok[0] ?? null, runnerUp: ok[1] ?? null, rough, fits, trimmed };
   }
-  const fits = candidates(site).map((m) => fitMower(site, m)).sort(rank);
+  const fits = candidates(site).map((m) => fitMower(site, m, everyDays)).sort(rank);
   const ok = fits.filter((f) => f.fits);
-  return { best: ok[0] ?? null, runnerUp: ok[1] ?? null, rough: null, fits };
+  return { best: ok[0] ?? null, runnerUp: ok[1] ?? null, rough: null, fits, trimmed };
 }

@@ -70,8 +70,9 @@ src/lib/
   site.ts       lawn shape (parts, passages, islands, edges) and the complexity
                 score; site builders for lawn, golf, sod (pure, tested)
   coverage.ts   how a robot works an area: stripes per zone (turns, broken runs,
-                edge laps), driving from the charger and between zones, against
-                a square of the same area (pure, tested)
+                edge laps), trees to go around, driving from the charger and
+                between zones, against a square of the same area; one unit's
+                share when several split it (pure, tested)
   mowers.ts     the 12 Kress models quoted and the fit / recommendation (pure, tested)
   parcel.ts     Quebec cadastre lot lookup and parsing (pure parts tested)
   types.ts      BBox, CourseMeasurement, SatelliteTurf, SodField, SodMeasurement
@@ -165,19 +166,38 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   `mowers.ts` ranks the 12 Kress models quoted (KR161/172/173/174,
   KR272/276, KR282/284/286, KR238, KR800/804; keep to that list unless told
   otherwise): fits first (slope limit), then fewest penalties (no camera
-  under trees, no 4x4 on slopes, no ZeroTrim on edgy lawns, passages, each
-  extra unit), then `listUsd × units`. Slope limits are the dealer's rule, not
-  Kress's listings: only the EyePilot 4x4 (KR282/284/286) take slopes over 20°
-  (36 %), up to 84 %; every other model stops at 36 % (KR804 47 %). A lawn
-  gets home robots only, several when it's bigger than one (units on
-  `maxAreaM2`); commercial models join only past three of the biggest
-  (`MAX_LAWN_UNITS`), so a steep 3-acre lot gets 2 × KR286, never a KR238. `listUsd` is a rough order only, never shown:
-  prices conflict between sources. The area a robot must keep up with is the
-  site's area × the layout's extra time for that robot (`coverage.ts`
-  `overhead`: stripes in each zone's best direction, turns, hops around
-  broken stripes, edge laps, driving to and from the charger every charge and
-  between zones, around buildings on a lot), relative to a square of the same
-  area with the charger at its edge (what a rated area assumes). The charger
+  under trees, no 4x4 on slopes, no ZeroTrim on edgy lawns, no obstacle
+  avoidance among buildings, beds and trees, passages, each extra unit), then
+  `listUsd × units`. `listUsd` is a rough order only, never shown: prices
+  conflict between sources. Slope limits are the dealer's rule, not Kress's
+  listings: only the EyePilot 4x4 (KR282/284/286) take slopes over 20°
+  (36 %), up to 84 %; every other model stops at 36 % (KR804 47 %). Ground
+  past a robot's limit rules it out past 2 % of the area or `TRIMMER_M2`
+  (250 m²), whichever is less: on a big property 2 % is acres. Ground past
+  84 % (40°) is left to a trimmer (`trimmerShare`, a notice) and the 4x4 is
+  sized for the rest, rather than recommending nothing.
+  Every site gets as many units as it takes (each with its own zone and
+  charger): one if it keeps up, else the fewest that each stay under 90 % of
+  their capacity (`LIMIT_LOAD`; Voyager fleets fill to 100 % like the ROI
+  tab's). A robot's capacity is its rating (every 48 h) × the mowing
+  frequency / 2: `QuoteSettings.mowEvery` is 1, 2 (default) or 3 days, picked
+  in the card (lawns, and golf when fairways are quoted), kept in links as
+  `q_every`; Voyagers follow the ROI tab's defaults whatever it says. A lawn
+  gets home robots only; commercial models join only past three of the
+  biggest (`MAX_LAWN_UNITS`), so a steep 3-acre lot gets 2 × KR286, never a
+  KR238. The area a unit must keep up with is its zone's area × the layout's
+  extra time for that robot (`coverage.ts` `overhead` on `share(c, units)`:
+  stripes in each zone's best direction, turns, hops around broken stripes,
+  edge laps, trees, driving to and from the charger every charge and between
+  zones, around buildings on a lot), relative to a square of the same area
+  with the charger at its edge (what a rated area assumes). `share` scales
+  lengths by 1/√units and areas by 1/units, so a big property's long drives
+  shrink with more units. Trees are counted from the LiDAR crowns on the
+  mowed area (`terrainStats.trees`: each crown patch one tree, or one per
+  `CROWN_M2` 120 m² where crowns run together, which matched local height
+  maxima within 5-30 % in forest and streets); each costs the stripes it cuts
+  and a lap around a 1 m trunk (`TRUNK_M`), and is listed with that time in
+  the score. The charger
   is estimated (next to the house; the middle of the biggest area on a course
   or farm) unless the rep places it (store `charger`, link `ch`). Golf with
   fairways is two jobs (the KR238 on the fairways, the best robot on the

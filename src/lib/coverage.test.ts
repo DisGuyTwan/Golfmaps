@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseline, overhead, reachOnFields, reachOnLot, stripes, type LocalPolygon, type Pace } from "./coverage";
+import { baseline, overhead, reachOnFields, reachOnLot, share, stripes, type LocalPolygon, type Pace } from "./coverage";
 
 const rect = (x: number, y: number, w: number, h: number): LocalPolygon => [[[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]]];
 const lawnPace: Pace = { stripeM: 0.19, speedMS: 0.35, turnS: 8, runtimeMin: 90 };
@@ -54,9 +54,9 @@ describe("reach", () => {
 });
 
 describe("overhead", () => {
-  const coverage = (parts: LocalPolygon[], charger: [number, number]) => {
+  const coverage = (parts: LocalPolygon[], charger: [number, number], trees = 0) => {
     const areaM2 = parts.reduce((s, p) => s + Math.abs(p[0].reduce((a, q, i, r) => a + (i ? (r[i - 1][0] + q[0]) * (r[i - 1][1] - q[1]) : 0), 0)) / 2, 0);
-    return { areaM2, stripes: stripes(parts, 0.5), reach: reachOnLot(parts, parts, [], charger), base: baseline(areaM2, true, 0.5) };
+    return { areaM2, stripes: stripes(parts, 0.5), reach: reachOnLot(parts, parts, [], charger), trees, base: baseline(areaM2, true, 0.5) };
   };
 
   it("rates a square with the charger at its edge as 1", () => {
@@ -71,5 +71,27 @@ describe("overhead", () => {
     expect(s.factor).toBeGreaterThan(1);
     const strip = overhead(coverage([rect(0, 0, 100, 6)], [0, 0]), lawnPace);
     expect(strip.travel).toBeGreaterThan(0.02);
+  });
+
+  it("adds time for every tree to mow around", () => {
+    const open = overhead(coverage([rect(0, 0, 40, 40)], [20, 0]), lawnPace);
+    const treed = overhead(coverage([rect(0, 0, 40, 40)], [20, 0], 20), lawnPace);
+    expect(open.trees).toBe(0);
+    // About a minute per tree for a 22 cm robot: 20 trees on 1,600 m² is a few per cent.
+    expect(treed.trees).toBeGreaterThan(0.03);
+    expect(treed.trees).toBeLessThan(0.1);
+    expect(treed.hours - open.hours).toBeCloseTo((treed.trees * open.hours) / open.factor, 1);
+  });
+
+  it("splits a big property into zones: shorter drives per unit, same mowing", () => {
+    const big = coverage([rect(0, 0, 200, 200)], [100, 0], 400);
+    const one = overhead(big, lawnPace);
+    const four = share(big, 4);
+    expect(four.areaM2).toBeCloseTo(big.areaM2 / 4, 6);
+    expect(four.trees).toBe(100);
+    expect(four.reach.avgM).toBeCloseTo(big.reach.avgM / 2, 6);
+    const each = overhead(four, lawnPace);
+    expect(each.hours).toBeLessThan(one.hours / 4 + 0.5);
+    expect(share(big, 1)).toBe(big);
   });
 });

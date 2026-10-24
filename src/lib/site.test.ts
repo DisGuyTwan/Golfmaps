@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MultiPolygon, Polygon, Position } from "geojson";
 import { complexity, lawnShape, lawnSite, type Site } from "./site";
-import type { TerrainStats } from "./terrain";
+import { COVER, type TerrainGrid, type TerrainStats } from "./terrain";
 
 // Shapes built in metres around a Boucherville lot.
 const LAT = 45.58, LON = -73.45;
@@ -45,7 +45,7 @@ describe("lawn shape", () => {
   });
 });
 
-const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, over36: 0, over47: 0, over84: 0, canopy: 0.05 };
+const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, over36: 0, over47: 0, over84: 0, canopy: 0.05, trees: 0 };
 
 describe("complexity", () => {
   const lawn = (shape: Polygon | MultiPolygon, terrain: TerrainStats | null): Site => {
@@ -107,5 +107,28 @@ describe("lawn layout", () => {
     };
     const site = lawnSite(blob, rect(0, 0, 40, 40), [], null, 650, null);
     expect(complexity(site).reasons.map((r) => r.key)).toContain("shapes");
+  });
+
+  it("counts the trees on the lawn: obstacles that cost mowing time", () => {
+    // A 1 m LiDAR grid over a 40 × 40 m lawn: five small crowns and a 15 × 20 m grove (two or three trees).
+    const n = 42;
+    const [west, south] = at(-1, -1);
+    const [east, north] = at(41, 41);
+    const cover = new Uint8Array(n * n).fill(COVER.ground);
+    const crown = (x: number, y: number, w: number, h: number) => {
+      for (let r = n - 1 - (y + 1) - h + 1; r <= n - 1 - (y + 1); r++) for (let c = x + 1; c < x + 1 + w; c++) cover[r * n + c] = COVER.tree;
+    };
+    [[4, 4], [12, 4], [20, 4], [28, 4], [4, 30]].forEach(([x, y]) => crown(x, y, 3, 3));
+    crown(20, 15, 15, 20);
+    const grid: TerrainGrid = { bbox: { west, south, east, north }, width: n, height: n, cellM: 1, slope: new Uint8Array(n * n), cover };
+    const lawn = rect(0, 0, 40, 40);
+    const site = lawnSite(lawn, lawn, [], null, 1600, grid);
+    expect(site.terrain!.trees).toBeGreaterThanOrEqual(7);
+    expect(site.terrain!.trees).toBeLessThanOrEqual(8);
+    expect(site.coverage!.trees).toBe(site.terrain!.trees);
+    const trees = complexity(site).reasons.find((r) => r.key === "trees")!;
+    expect(trees.value).toBe(site.terrain!.trees);
+    expect(trees.share).toBeGreaterThan(0.005);
+    expect(complexity(lawnSite(lawn, lawn, [], null, 1600, null)).reasons.some((r) => r.key === "trees")).toBe(false);
   });
 });

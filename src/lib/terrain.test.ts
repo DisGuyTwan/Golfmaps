@@ -187,6 +187,8 @@ describe("steep patches and wooded slopes", () => {
     });
     const stats = terrainStats(shaded, [all])!;
     expect(stats.canopy).toBeCloseTo(300 / 400, 5);
+    // One grove of 300 m² of crowns: about 2.5 trees.
+    expect(stats.trees).toBe(3);
     expect(stats.slopeP90).toBe(45);
     expect(stats.over36).toBeCloseTo(300 / 400, 5);
     expect(stats.over47).toBe(0);

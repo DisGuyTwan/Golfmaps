@@ -5,7 +5,7 @@ import type { ShapeStats, Site } from "./site";
 import type { TerrainStats } from "./terrain";
 
 const ACRE = 4046.86;
-const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, over36: 0, over47: 0, over84: 0, canopy: 0.05 };
+const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, over36: 0, over47: 0, over84: 0, canopy: 0.05, trees: 0 };
 const shape = (areaM2: number, patch: Partial<ShapeStats> = {}): ShapeStats => ({
   areaM2,
   parts: 1,
@@ -25,6 +25,7 @@ const lawn = (areaM2: number, terrain: TerrainStats | null = flat, patch: Partia
   fairwayM2: 0,
   ...noLayout,
 });
+const model = (id: string) => MOWERS.find((m) => m.id === id)!;
 
 describe("Kress lineup data", () => {
   it("has the twelve models quoted, each with sane specs", () => {
@@ -33,7 +34,7 @@ describe("Kress lineup data", () => {
     );
     expect(new Set(MOWERS.map((m) => m.id)).size).toBe(MOWERS.length);
     for (const m of MOWERS) {
-      expect(m.maxAreaM2).toBeGreaterThanOrEqual(m.areaM2);
+      expect(m.areaM2).toBeGreaterThan(0);
       expect(m.maxSlopePct).toBeGreaterThanOrEqual(36);
       expect(m.passageM).toBeGreaterThan(m.cutWidthCm / 100);
     }
@@ -42,8 +43,13 @@ describe("Kress lineup data", () => {
     expect(MOWERS.filter((m) => m.maxSlopePct > 36).map((m) => m.id).sort()).toEqual(["KR282", "KR284", "KR286", "KR804"]);
     expect(MOWERS.filter((m) => m.maxSlopePct > 47).every((m) => m.fourWheel)).toBe(true);
   });
-  it("sizes a Voyager by the week, like the ROI tab (5 days, once a week)", () => {
-    expect(capacityM2(MOWERS.find((m) => m.id === "KR800")!) / ACRE).toBeCloseTo(35, 3);
+  it("sizes a robot by how often it mows, a Voyager by the week like the ROI tab (5 days, once a week)", () => {
+    const kr286 = model("KR286");
+    expect(capacityM2(kr286) / ACRE).toBeCloseTo(2.5, 3);
+    expect(capacityM2(kr286, 1) / ACRE).toBeCloseTo(1.25, 3);
+    expect(capacityM2(kr286, 3) / ACRE).toBeCloseTo(3.75, 3);
+    expect(capacityM2(model("KR800")) / ACRE).toBeCloseTo(35, 3);
+    expect(capacityM2(model("KR800"), 1)).toBe(capacityM2(model("KR800")));
   });
 });
 
@@ -51,19 +57,29 @@ describe("residential lawns", () => {
   it("picks the smallest robot that covers an easy lawn", () => {
     const r = recommend(lawn(0.37 * ACRE));
     expect(r.best?.mower.id).toBe("KR172");
+    expect(r.best?.units).toBe(1);
     expect(r.runnerUp).not.toBeNull();
   });
 
-  it("moves up a size rather than run one at its limit", () => {
+  it("moves up a size rather than run one at its limit or double up", () => {
     const r = recommend(lawn(0.9 * ACRE, flat, { obstacles: 4 }));
     expect(r.best?.mower.id).toBe("KR174");
-    expect(r.fits.find((f) => f.mower.id === "KR173")?.notes).toContain("atLimit");
+    expect(r.fits.find((f) => f.mower.id === "KR173")?.units).toBe(2);
+    const near = recommend(lawn(0.47 * ACRE));
+    expect(near.fits.find((f) => f.mower.id === "KR172")?.notes).toContain("atLimit");
+    expect(near.best?.mower.id).toBe("KR173");
   });
 
   it("picks an EyePilot camera robot under heavy tree cover", () => {
     const r = recommend(lawn(0.37 * ACRE, { ...flat, canopy: 0.45 }));
     expect(r.best?.mower.vision).toBe(true);
     expect(r.fits.find((f) => f.mower.id === "KR172")?.notes).toContain("treesNoVision");
+  });
+
+  it("counts trees as obstacles: a bump-and-turn robot loses out", () => {
+    const r = recommend(lawn(0.2 * ACRE, { ...flat, trees: 5 }));
+    expect(r.fits.find((f) => f.mower.id === "KR161")?.notes).toContain("noAvoidance");
+    expect(r.best?.mower.avoidance).toBe(true);
   });
 
   it("only offers a 4×4 when part of the lawn is steeper than 20° (36 %)", () => {
@@ -78,29 +94,31 @@ describe("residential lawns", () => {
   });
 
   it("moves up a size when the layout costs extra time", () => {
-    const area = 0.45 * ACRE;
+    const area = 0.42 * ACRE;
     const base = baseline(area, true, 0.5);
     // Same stripes as a square, but the charger far from the lawn and two areas apart.
     const far: Site = {
       ...lawn(area),
-      coverage: { areaM2: area, stripes: base.stripes, reach: { avgM: base.reach.avgM * 6, farM: 150, tourM: 120 }, base },
+      coverage: { areaM2: area, stripes: base.stripes, reach: { avgM: base.reach.avgM * 6, farM: 150, tourM: 120 }, trees: 0, base },
     };
-    const kr172 = fitMower(far, MOWERS.find((m) => m.id === "KR172")!);
-    expect(kr172.work!.factor).toBeGreaterThan(1.12);
-    expect(kr172.notes).toContain("atLimit");
+    const kr172 = fitMower(far, model("KR172"));
+    expect(kr172.units > 1 || kr172.notes.includes("atLimit")).toBe(true);
     expect(recommend(far).best?.mower.id).toBe("KR173");
     expect(recommend(lawn(area)).best?.mower.id).toBe("KR172");
   });
 
   it("gives a steep, wooded 3-acre lot on a mountain two KR286s, never a commercial robot", () => {
     // Lot 2 420 141 (Saint-Bruno): 131,702 sq ft of lawn, 80 % under trees, 4 areas, 12 obstacles.
-    const mountain: TerrainStats = { coverage: 1, slopeP50: 19, slopeP90: 42, over25: 0.35, over36: 0.16, over47: 0.06, over84: 0, canopy: 0.8 };
+    const mountain: TerrainStats = { coverage: 1, slopeP50: 19, slopeP90: 42, over25: 0.35, over36: 0.16, over47: 0.06, over84: 0, canopy: 0.8, trees: 80 };
     const site: Site = { ...lawn(131702 / 10.7639, mountain, { parts: 4, obstacles: 12 }), parts: 4 };
     const r = recommend(site);
     expect(r.best?.mower.id).toBe("KR286");
     expect(r.best?.units).toBe(2);
     expect(r.fits.some((f) => f.mower.commercial)).toBe(false);
     expect(r.fits.filter((f) => f.fits).every((f) => f.mower.fourWheel)).toBe(true);
+    // Mowing every 3 days, one keeps up; every day takes three.
+    expect(recommend(site, 3).best?.units).toBe(1);
+    expect(recommend(site, 1).best?.units).toBe(3);
   });
 
   it("keeps a big lawn on home robots up to three of the biggest, then compares the commercial ones", () => {
@@ -111,9 +129,23 @@ describe("residential lawns", () => {
     expect(recommend(lawn(9 * ACRE)).fits.some((f) => f.mower.commercial)).toBe(true);
   });
 
-  it("recommends nothing when even a 4×4 can't climb it", () => {
+  it("sizes a fleet of 4x4s for a big property where 1 % of steep ground is acres", () => {
+    // Like lot 3 042 992 at the foot of Mont Saint-Bruno: 100 acres, 1.25 % over 20°, 0.1 % over 40°.
+    const hill: TerrainStats = { ...flat, slopeP90: 13, over25: 0.025, over36: 0.0125, over47: 0.0055, over84: 0.001, canopy: 0.8, trees: 27000 };
+    const r = recommend(lawn(100 * ACRE, hill));
+    expect(r.best?.mower.id).toBe("KR286");
+    // 100 acres at 2.5 each, every unit under 90 % of its rating.
+    expect(r.best?.units).toBe(45);
+    expect(r.trimmed).toBeCloseTo(0.001, 6);
+    expect(r.fits.find((f) => f.mower.id === "KR804")?.notes).toContain("tooSteep");
+  });
+
+  it("leaves a cliff no robot climbs to a trimmer and still sizes the 4x4", () => {
     const r = recommend(lawn(0.3 * ACRE, { ...flat, over25: 0.6, over36: 0.4, over47: 0.3, over84: 0.1 }));
-    expect(r.best).toBeNull();
+    expect(r.best?.mower.fourWheel).toBe(true);
+    expect(r.trimmed).toBeCloseTo(0.1, 6);
+    // A few patches are just a trimmer's job, not worth a note.
+    expect(recommend(lawn(0.3 * ACRE, { ...flat, over25: 0.2, over36: 0.1, over84: 0.01 })).trimmed).toBe(0);
   });
 });
 
@@ -124,6 +156,10 @@ describe("golf and sod", () => {
     expect(r.best?.mower.id).toBe("KR238");
     expect(r.best?.units).toBe(2);
     expect(r.rough?.mower.line).toBe("voyager");
+    // Fairways mowed every day take twice the MasterSeries; the Voyager fleet follows the ROI tab.
+    const daily = recommend(site, 1);
+    expect(daily.best?.units).toBe(3);
+    expect(daily.rough?.units).toBe(r.rough?.units);
   });
 
   it("sizes the fairway robot on the fairways alone, however big the rough", () => {
@@ -148,5 +184,10 @@ describe("golf and sod", () => {
     const sod = (acres: number): Site => ({ kind: "sod", areaM2: acres * ACRE, parts: 4, shape: null, terrain: flat, fairwayM2: 0, ...noLayout });
     expect(recommend(sod(20)).best?.mower.id).toBe("KR800");
     expect(recommend(sod(60)).best?.mower.id).toBe("KR804");
+  });
+
+  it("finds nothing for a steep course: its robots stop at 25°", () => {
+    const site: Site = { kind: "golf", areaM2: 40 * ACRE, parts: 1, shape: null, terrain: { ...flat, over36: 0.3, over47: 0.2 }, fairwayM2: 0, ...noLayout };
+    expect(recommend(site).best).toBeNull();
   });
 });

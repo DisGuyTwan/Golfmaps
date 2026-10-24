@@ -38,7 +38,13 @@ export interface QuoteSettings {
   sodPct: number;
   /** Lawn area typed in by hand for a residential lot, in square feet. */
   lawnOverride: number | null;
+  /** How often the robots mow it all (days): sizes the robot fleet in the mower fit. */
+  mowEvery: MowEvery;
 }
+
+/** Mowing every day, every 2 days (Kress's rating) or every 3. */
+export type MowEvery = 1 | 2 | 3;
+export const MOW_EVERY: MowEvery[] = [1, 2, 3];
 
 export const DEFAULT_QUOTE: QuoteSettings = {
   include: { fairway: true, rough: true, green: false, tee: false, range: true },
@@ -47,6 +53,7 @@ export const DEFAULT_QUOTE: QuoteSettings = {
   grassPct: 80,
   sodPct: 90,
   lawnOverride: null,
+  mowEvery: 2,
 };
 
 const share = (pct: number) => Math.min(100, Math.max(0, pct)) / 100;
@@ -125,7 +132,8 @@ export function lawnQuoteSqft(lawn: LawnMeasurement | null, q: QuoteSettings): n
 
 /** Share-link parameters: q_inc, q_pct, q_gpct for a course, q_spct for sod, q_ovr; q_lovr for a lawn. */
 export function encodeQuote(q: QuoteSettings, mode: AcreageMode = "golf"): Record<string, string> {
-  if (mode === "lawn") return q.lawnOverride !== null ? { q_lovr: String(q.lawnOverride) } : {};
+  const every: Record<string, string> = q.mowEvery !== DEFAULT_QUOTE.mowEvery ? { q_every: String(q.mowEvery) } : {};
+  if (mode === "lawn") return q.lawnOverride !== null ? { q_lovr: String(q.lawnOverride), ...every } : every;
   const params: Record<string, string> =
     mode === "sod"
       ? { q_spct: String(q.sodPct) }
@@ -135,7 +143,7 @@ export function encodeQuote(q: QuoteSettings, mode: AcreageMode = "golf"): Recor
           q_gpct: String(q.grassPct),
         };
   if (q.override !== null) params.q_ovr = String(q.override);
-  return params;
+  return { ...params, ...every };
 }
 
 export function decodeQuote(params: URLSearchParams): QuoteSettings {
@@ -156,5 +164,7 @@ export function decodeQuote(params: URLSearchParams): QuoteSettings {
   if (params.has("q_ovr") && Number.isFinite(ovr) && ovr > 0) q.override = ovr;
   const lovr = Number(params.get("q_lovr"));
   if (params.has("q_lovr") && Number.isFinite(lovr) && lovr > 0) q.lawnOverride = lovr;
+  const every = Number(params.get("q_every"));
+  if (MOW_EVERY.includes(every as MowEvery)) q.mowEvery = every as MowEvery;
   return q;
 }

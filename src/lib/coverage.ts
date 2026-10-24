@@ -3,8 +3,9 @@
  * the best direction (a rectangle is a few long runs; an S-shaped or ragged
  * zone is many short, broken ones, each ending in a turn, with hops between
  * the pieces), a slower lap along every edge (an S has twice a square's), the
- * trips to and from the charger every time the battery runs low, and the
- * drive from one separate area to the next. Everything is
+ * trips to and from the charger every time the battery runs low, the
+ * drive from one separate area to the next, and going around every tree
+ * trunk (each cuts a few stripes and needs a lap). Everything is
  * compared with a plain square of the same area with the charger at its
  * edge, which is what a robot's rated area assumes, so a simple lawn comes
  * out at 1 and a hard one above it. Geometry is in local metres. Pure, so
@@ -52,6 +53,8 @@ const EDGE_SPEED = 0.5;
 const TURN_AS_M = 3;
 /** Robots drive along paths, not as the crow flies, between areas on a course or a farm. */
 const FIELD_DETOUR = 1.2;
+/** A tree trunk with its root flare and the clearance a robot keeps (m): the stripes it cuts and the lap around it. */
+const TRUNK_M = 1;
 
 const area = (ring: [number, number][]) => {
   let a = 0;
@@ -351,7 +354,30 @@ export interface Coverage {
   areaM2: number;
   stripes: Stripes;
   reach: Reach;
+  /** Trees standing in the mowed area (terrain.ts). */
+  trees: number;
   base: { stripes: Stripes; reach: Reach };
+}
+
+/**
+ * One unit's share when several robots split the area, each with its own zone
+ * and charger: lengths (stripes' turns and edges, driving) shrink with the
+ * square root of the share, areas (mowing, broken stripes, trees) with the
+ * share itself. Its square is scaled the same way, so a big property's long
+ * drives shrink and its zones' extra turns show.
+ */
+export function share(c: Coverage, units: number): Coverage {
+  if (units <= 1) return c;
+  const k = 1 / units, r = Math.sqrt(k);
+  const scale = (s: Stripes): Stripes => ({ ...s, runs1: s.runs1 * r, hops1: s.hops1 * k, edgeM: s.edgeM * r });
+  const near = (q: Reach): Reach => ({ avgM: q.avgM * r, farM: q.farM * r, tourM: q.tourM * r });
+  return {
+    areaM2: c.areaM2 * k,
+    stripes: scale(c.stripes),
+    reach: near(c.reach),
+    trees: c.trees * k,
+    base: { stripes: scale(c.base.stripes), reach: near(c.base.reach) },
+  };
 }
 
 /** A square of `areaM2` with the charger at the middle of one edge, measured the same way (on a lot or on fields). */
@@ -366,47 +392,55 @@ export function baseline(areaM2: number, onLot: boolean, refM: number): { stripe
 }
 
 interface Work {
-  /** Mowing along the stripes, turns, hops around broken stripes, edge laps, and driving (s). */
+  /** Mowing along the stripes, turns, hops around broken stripes, edge laps, going around trees, and driving (s). */
   mowS: number;
   turnsS: number;
   hopsS: number;
   edgeS: number;
+  treesS: number;
   travelS: number;
   totalS: number;
   /** Charges it takes to mow everything once. */
   cycles: number;
 }
 
-/** Time for one robot to mow the area once. */
-function workTime(areaM2: number, s: Stripes, reach: Reach, pace: Pace): Work {
+/**
+ * Time for one robot to mow the area once. A trunk cuts TRUNK_M / stripe
+ * stripes (each an extra turn and a hop of TRUNK_M around it) and takes a lap.
+ */
+function workTime(areaM2: number, s: Stripes, reach: Reach, trees: number, pace: Pace): Work {
   const mowS = areaM2 / (pace.stripeM * pace.speedMS);
   const turnsS = (s.runs1 / pace.stripeM) * pace.turnS;
   const hopsS = ((s.hops1 / pace.stripeM) * HOP_DETOUR) / pace.speedMS;
   const edgeS = s.edgeM / (pace.speedMS * EDGE_SPEED);
-  const busy = mowS + turnsS + hopsS + edgeS;
+  const perTree = (TRUNK_M / pace.stripeM) * (pace.turnS + (TRUNK_M * HOP_DETOUR) / pace.speedMS) + (Math.PI * TRUNK_M) / (pace.speedMS * EDGE_SPEED);
+  const treesS = trees * perTree;
+  const busy = mowS + turnsS + hopsS + edgeS + treesS;
   const cycles = Math.max(1, busy / (pace.runtimeMin * 60));
   const travelS = (cycles * 2 * reach.avgM + reach.tourM) / pace.speedMS;
-  return { mowS, turnsS, hopsS, edgeS, travelS, totalS: busy + travelS, cycles };
+  return { mowS, turnsS, hopsS, edgeS, treesS, travelS, totalS: busy + travelS, cycles };
 }
 
 /** How much more work the area is than the square its rating assumes, for one robot. */
 export interface Overhead {
   /** Total time over the square's (1 = as rated). */
   factor: number;
-  /** Extra time in turns, broken stripes and edges, and in driving, as shares of the square's total. */
+  /** Extra time in turns, broken stripes and edges, going around trees, and driving, as shares of the square's total. */
   shape: number;
+  trees: number;
   travel: number;
   /** Hours to mow it all once. */
   hours: number;
 }
 
 export function overhead(c: Coverage, pace: Pace): Overhead {
-  const site = workTime(c.areaM2, c.stripes, c.reach, pace);
-  const base = workTime(c.areaM2, c.base.stripes, c.base.reach, pace);
-  const busy = (w: Work) => w.totalS - w.travelS;
+  const site = workTime(c.areaM2, c.stripes, c.reach, c.trees, pace);
+  const base = workTime(c.areaM2, c.base.stripes, c.base.reach, 0, pace);
+  const busy = (w: Work) => w.totalS - w.travelS - w.treesS;
   return {
     factor: site.totalS / base.totalS,
     shape: (busy(site) - busy(base)) / base.totalS,
+    trees: site.treesS / base.totalS,
     travel: (site.travelS - base.travelS) / base.totalS,
     hours: site.totalS / 3600,
   };

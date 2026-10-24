@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { UI, type Lang } from "@/lib/i18n";
+import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, type LawnMeasurement } from "@/lib/lawn";
-import { MOWERS_AS_OF, mowerName, recommend, type Fit, type Recommendation } from "@/lib/mowers";
-import { acresForQuote, lawnQuoteSqft, type AcreageMode, type QuoteSettings } from "@/lib/quote";
-import { useCharger, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
+import { MOWERS_AS_OF, capacityM2, mowerName, recommend, type Fit, type Recommendation } from "@/lib/mowers";
+import { MOW_EVERY, acresForQuote, lawnQuoteSqft, type AcreageMode, type MowEvery, type QuoteSettings } from "@/lib/quote";
+import { setQuoteSettings, useCharger, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
 import { complexity, golfSite, lawnSite, sodSite, type Complexity, type Level, type Reason, type Site } from "@/lib/site";
 import { slopeDeg, type TerrainGrid } from "@/lib/terrain";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
@@ -50,7 +50,13 @@ function computeFit(...inputs: FitInputs): MowerFitResult | null {
     if (acres && mode === "golf" && measurement) site = golfSite(measurement, q, acres, terrain, charger);
     if (acres && mode === "sod" && sod) site = sodSite(sod, acres, terrain, charger);
   }
-  const result = site ? { site, complexity: complexity(site), recommendation: recommend(site) } : null;
+  let result: MowerFitResult | null = null;
+  if (site) {
+    const recommendation = recommend(site, q.mowEvery);
+    // Each unit drives within its own zone: the fleet covering the whole site sets the zones (on a course with fairways, the rough's).
+    const fleet = recommendation.rough ?? recommendation.best;
+    result = { site, complexity: complexity(site, fleet?.units ?? 1), recommendation };
+  }
   last = { inputs, result };
   return result;
 }
@@ -104,6 +110,8 @@ function useCopy(lang: Lang) {
         return t.fitReason.slope(num(r.value), num(slopeDeg(r.value)));
       case "canopy":
         return t.fitReason.canopy(pct(r.value));
+      case "trees":
+        return t.fitReason.trees(num(r.value), (r.share ?? 0) >= 0.005 ? pct(r.share ?? 0) : null);
       case "obstacles":
         return t.fitReason.obstacles(r.value);
       case "noTerrain":
@@ -111,19 +119,20 @@ function useCopy(lang: Lang) {
     }
   };
 
-  /** Why the recommended robot suits this site. */
-  const why = (fit: Fit, site: Site): string[] => {
+  /** Why the recommended robot suits this site, mowing it all every `days`. */
+  const why = (fit: Fit, site: Site, days: MowEvery): string[] => {
     const m = fit.mower;
     const out: string[] = [];
     const terrain = site.terrain;
-    if (site.kind === "lawn") out.push(t.fitRated(formatSqft(m.areaM2 * SQ_M_TO_SQ_FT, lang)));
+    if (site.kind === "lawn" && m.line !== "voyager") out.push(t.fitRated(formatSqft(capacityM2(m, days) * SQ_M_TO_SQ_FT, lang), days));
     if (m.vision && terrain && terrain.canopy > 0.1) out.push(t.fitWhy.vision);
     if (m.fourWheel && terrain && terrain.coverage >= 0.5 && terrain.over25 > 0.02) out.push(t.fitWhy.fourWheel);
     if (m.zeroTrim && site.shape && site.shape.edgePer100 > 25) out.push(t.fitWhy.zeroTrim);
     if (m.avoidance && site.shape && site.shape.obstacles >= 3) out.push(t.fitWhy.avoidance);
     if (site.kind === "golf" && site.fairwayM2 > 0 && m.minCutMm <= 15) out.push(t.fitWhy.fairway);
     if (m.line === "voyager") out.push(t.fitWhy.fleet);
-    if (fit.work) out.push(t.fitHours(num(fit.work.hours / fit.units, fit.work.hours / fit.units < 10 ? 1 : 0), fit.units > 1));
+    else if (fit.units > 1) out.push(t.fitWhy.zones);
+    if (fit.work) out.push(t.fitHours(num(fit.work.hours, fit.work.hours < 10 ? 1 : 0), fit.units > 1));
     return out;
   };
 
@@ -136,7 +145,7 @@ function useCopy(lang: Lang) {
 }
 
 /** One recommended robot: name, units, why, and what to check on site. */
-function Pick({ label, fit, site, lang }: { label: string; fit: Fit; site: Site; lang: Lang }) {
+function Pick({ label, fit, site, days, lang }: { label: string; fit: Fit; site: Site; days: MowEvery; lang: Lang }) {
   const { t, why, units, colon } = useCopy(lang);
   return (
     <div className="rounded-lg bg-accent-soft px-3 py-2 print:border print:border-line">
@@ -146,7 +155,7 @@ function Pick({ label, fit, site, lang }: { label: string; fit: Fit; site: Site;
         {units(fit, site)}
       </div>
       <ul className="mt-0.5 space-y-0.5 text-[11px] text-accent-ink">
-        {why(fit, site).map((line) => (
+        {why(fit, site, days).map((line) => (
           <li key={line} className="flex items-start gap-1">
             <Icon name="check" className="mt-px h-3 w-3" />
             {line}
@@ -184,6 +193,7 @@ export default function MowerFit({
   onMoveCharger?: () => void;
 }) {
   const fit = useMowerFit();
+  const { mowEvery } = useQuoteSettings();
   const { t, reason, units, date, colon } = useCopy(lang);
   if (!fit && !loading) return null;
 
@@ -193,6 +203,12 @@ export default function MowerFit({
   const runnerUp = rec?.runnerUp;
   // What the next best does worse than the pick (shared caveats are on the pick).
   const worse = runnerUp ? runnerUp.notes.filter((n) => !rec?.best?.notes.includes(n)) : [];
+  // The frequency sizes the robots: lawns, and a course's fairways (Voyager fleets follow the ROI tab). A lawn's
+  // PDF says it in the pick ("Mows up to … every 2 days"), so the line is left out there to keep one page.
+  const frequency = fit && (fit.site.kind === "lawn" || (fit.site.kind === "golf" && fit.site.fairwayM2 > 0)) && !(print && fit.site.kind === "lawn");
+  const trimmedM2 = fit && rec ? rec.trimmed * fit.site.areaM2 : 0;
+  const trimmedArea =
+    fit?.site.kind === "lawn" ? formatSqft(trimmedM2 * SQ_M_TO_SQ_FT, lang) : `${formatAcres(trimmedM2 / 4046.86, lang)} ac`;
 
   return (
     <section className={`space-y-2 ${print ? "" : "animate-fade-up border-t border-line pt-3"}`} aria-live="polite">
@@ -224,17 +240,49 @@ export default function MowerFit({
             ))}
           </ul>
 
+          {frequency &&
+            (print ? (
+              <p className="text-xs text-ink-2">
+                <span className="font-semibold">
+                  {t.fitEvery.label}
+                  {colon}
+                </span>
+                {t.fitEvery.options[mowEvery].toLowerCase()}
+              </p>
+            ) : (
+              <div className="space-y-1">
+                <div className="text-xs font-semibold text-ink-2">{t.fitEvery.label}</div>
+                <div role="group" aria-label={t.fitEvery.group} className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-surface-2 p-1">
+                  {MOW_EVERY.map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      aria-pressed={mowEvery === days}
+                      onClick={() => setQuoteSettings({ mowEvery: days })}
+                      className={`inline-flex min-h-8 items-center justify-center rounded-md text-xs font-semibold transition-all duration-200 active:scale-[0.98] ${
+                        mowEvery === days ? "bg-brand text-white shadow-sm" : "text-muted hover:text-ink"
+                      }`}
+                    >
+                      {t.fitEvery.options[days]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+
           {rec?.best ? (
             <Pick
               label={fit.site.kind === "golf" && fit.site.fairwayM2 > 0 ? t.fitFairways : t.fitBest}
               fit={rec.best}
               site={fit.site}
+              days={mowEvery}
               lang={lang}
             />
           ) : (
             <Notice tone="warn">{t.fitNone}</Notice>
           )}
-          {rec?.rough && <Pick label={t.fitRough} fit={rec.rough} site={{ ...fit.site, fairwayM2: 0 }} lang={lang} />}
+          {rec?.rough && <Pick label={t.fitRough} fit={rec.rough} site={{ ...fit.site, fairwayM2: 0 }} days={mowEvery} lang={lang} />}
+          {rec && rec.trimmed > 0 && <Notice tone="warn">{t.fitTrimmer(trimmedArea)}</Notice>}
           {runnerUp && (
             <p className="text-[11px] text-muted">
               <span className="font-semibold">

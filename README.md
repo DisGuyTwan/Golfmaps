@@ -208,21 +208,32 @@ hard the property is for a robot and which Kress model to quote:
   and a tap puts it where it will really go (kept in the link). All of it is
   compared with a plain square of the same area with the charger at its edge,
   which is what a rated area assumes.
+- **Trees** are counted from the LiDAR crowns over the mowed area (each crown
+  one tree, or one per 120 m² where crowns run together). Each is an obstacle
+  the robot mows around: the stripes it cuts and a lap around the trunk, so
+  it adds mowing time, and robots that bump rather than steer lose out.
 - The **score** adds 1-3 points per difficulty (separate areas, passages,
-  irregular shapes, driving, slope, trees, obstacles): Simple (0-2), Moderate
-  (3-5), Complex (6+), with the reasons listed.
+  irregular shapes, driving, slope, tree cover, trees, obstacles): Simple
+  (0-2), Moderate (3-5), Complex (6+), with the reasons listed.
+- **How often** the robots mow it all: every day, every 2 days (the default,
+  Kress's rating) or every 3 days, picked on the card and kept in the link.
+  Mowing every day takes twice the robots; every 3 days two thirds.
 - The **recommendation** chooses among the twelve Kress models quoted: RTKn
   KR161, KR172, KR173, KR174; EyePilot KR272, KR276; EyePilot 4x4 KR282, KR284,
   KR286; MasterSeries KR238; Voyager KR800 and KR804. Only the EyePilot 4x4
-  robots take slopes over 20° (36%), up to 40° (84%); a property with more
-  than 2% of its area past a robot's limit rules that robot out (the Voyager
-  KR804's limit is 25°). A robot has to keep up with the area times the extra
-  time the layout costs it, so a ragged lawn far from the charger can need the
-  next size up, and a lawn bigger than one robot gets several (home robots
-  only, up to three of the biggest; past that the commercial ones are compared
-  too). Then the fewest drawbacks win (no camera under trees, no 4x4 on slopes
-  over 14°, no ZeroTrim on lawns that are mostly edges, a passage narrower
-  than the robot, each extra unit), then the lowest outlay. On a course with fairways in the quote, the MasterSeries takes the
+  robots take slopes over 20° (36%), up to 40° (84%); steep ground past a
+  robot's limit rules it out once it's more than 2% of the area or 2,700 sq ft
+  (the Voyager KR804's limit is 25°). Ground steeper than 40° is left to a
+  trimmer, with a note, and the 4x4 is sized for the rest. A property gets as
+  many units as it takes, each with its own zone and charger: one if it keeps
+  up, else enough that each works under 90% of its capacity. Each unit has to
+  keep up with its zone times the extra time the layout costs it, so a ragged
+  lawn far from the charger can need the next size up. A lawn gets home
+  robots (past three of the biggest, the commercial ones are compared too).
+  Then the fewest drawbacks win (no camera under trees, no 4x4 on slopes over
+  14°, no ZeroTrim on lawns that are mostly edges, no obstacle avoidance among
+  many obstacles and trees, a passage narrower than the robot, each extra
+  unit), then the lowest outlay. On a course with fairways in the quote, the MasterSeries takes the
   fairways (it cuts to 10 mm) and the best robot the rest, usually a Voyager;
   a sod farm gets a Voyager. The card says about how many hours a full mow
   takes. Send to ROI carries the recommended Voyager size to the ROI tab.

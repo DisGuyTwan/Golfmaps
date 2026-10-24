@@ -58,6 +58,7 @@ describe("share-link round trip", () => {
       override: 55.5,
       grassPct: 70,
       sodPct: DEFAULT_QUOTE.sodPct,
+      mowEvery: 3,
       lawnOverride: null,
     };
     expect(decodeQuote(new URLSearchParams(encodeQuote(q)))).toEqual(q);
@@ -103,5 +104,12 @@ describe("lawn quote", () => {
     expect(encodeQuote(q, "lawn")).toEqual({ q_lovr: "5150" });
     expect(encodeQuote(DEFAULT_QUOTE, "lawn")).toEqual({});
     expect(decodeQuote(new URLSearchParams(encodeQuote(q, "lawn")))).toEqual(q);
+  });
+  it("keeps the mowing frequency in every mode's link, only when it isn't every 2 days", () => {
+    const daily: QuoteSettings = { ...DEFAULT_QUOTE, mowEvery: 1 };
+    expect(encodeQuote(daily, "lawn")).toEqual({ q_every: "1" });
+    expect(encodeQuote(daily, "sod").q_every).toBe("1");
+    expect(decodeQuote(new URLSearchParams(encodeQuote(daily, "lawn"))).mowEvery).toBe(1);
+    expect(decodeQuote(new URLSearchParams("q_every=5")).mowEvery).toBe(2);
   });
 });

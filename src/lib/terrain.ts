@@ -312,31 +312,52 @@ export interface TerrainStats {
   over84: number;
   /** Under tree crowns: weaker satellite signal for RTK robots. */
   canopy: number;
+  /** Trees standing on the shape, estimated from the crowns (see CROWN_M2): trunks to mow around. */
+  trees: number;
 }
 
 /** Steep cells only count in patches at least this big (m²): a bank, not a curb, a wall's foot or a bed's edge. */
 const MIN_STEEP_M2 = 8;
+/**
+ * Crown area per tree (m²): in the LiDAR, the dominant crowns in Mont
+ * Saint-Bruno's forest and in Boucherville's and Mount Royal's streets take
+ * 95-135 m² each (local height maxima 5 m apart). A crown patch smaller than
+ * that is still one tree; patches under MIN_CROWN_M2 are noise.
+ */
+const CROWN_M2 = 120;
+const MIN_CROWN_M2 = 4;
 
 /**
- * Slope and canopy under a shape, or null when the LiDAR doesn't cover it.
- * Every cell counts, wooded or open: on a wooded hillside the trees stand on
- * the slope the robot has to climb (the route already reads slope under trees
- * over a wider window, see slopePct).
+ * Slope, canopy and trees under a shape, or null when the LiDAR doesn't
+ * cover it. Every cell counts, wooded or open: on a wooded hillside the trees
+ * stand on the slope the robot has to climb (the route already reads slope
+ * under trees over a wider window, see slopePct). Each crown patch is one
+ * tree, or one per CROWN_M2 where crowns run together.
  */
 export function terrainStats(grid: TerrainGrid, geoms: (Polygon | MultiPolygon)[]): TerrainStats | null {
   const mask = polygonMask(grid, geoms);
   let inside = 0, canopy = 0;
   const counted = new Uint8Array(mask.length);
   const slopes: number[] = [];
+  const crowns = new Uint8Array(mask.length);
   for (let i = 0; i < mask.length; i++) {
     if (!mask[i]) continue;
     inside++;
     if (grid.slope[i] === NO_SLOPE) continue;
     counted[i] = 1;
     slopes.push(grid.slope[i]);
-    if (grid.cover[i] === COVER.tree) canopy++;
+    if (grid.cover[i] === COVER.tree) {
+      canopy++;
+      crowns[i] = 1;
+    }
   }
   if (!slopes.length) return null;
+  const cellM2 = grid.cellM * grid.cellM;
+  let trees = 0;
+  for (const cells of labelRegions(crowns, grid.width, grid.height).regions) {
+    const m2 = cells.length * cellM2;
+    if (m2 >= MIN_CROWN_M2) trees += Math.max(1, m2 / CROWN_M2);
+  }
   slopes.sort((a, b) => a - b);
   const pct = (q: number) => slopes[Math.min(slopes.length - 1, Math.floor(q * slopes.length))];
   const minCells = Math.max(1, MIN_STEEP_M2 / (grid.cellM * grid.cellM));
@@ -357,6 +378,7 @@ export function terrainStats(grid: TerrainGrid, geoms: (Polygon | MultiPolygon)[
     over47: steeper(47),
     over84: steeper(84),
     canopy: canopy / slopes.length,
+    trees: Math.round(trees),
   };
 }
 

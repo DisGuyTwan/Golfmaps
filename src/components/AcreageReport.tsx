@@ -188,7 +188,7 @@ function LawnReport() {
         lede={t.reportLawnLede}
         printTitle={`Calculator - ${t.tabs.acreage}`}
       />
-      <div className="space-y-4 px-4 py-4">
+      <div className="space-y-3 px-4 py-4">
         {empty ? (
           <p className="text-sm text-muted">{t.reportLawnEmpty}</p>
         ) : (
