@@ -236,6 +236,26 @@ export function lotBBox(lot: Polygon | MultiPolygon, marginDeg = 0.0002): BBox {
   return { south: south - marginDeg, west: west - marginDeg, north: north + marginDeg, east: east + marginDeg };
 }
 
+/**
+ * How far around a tapped or searched point buildings and paving are looked
+ * up while the cadastre lot is still loading, so both lookups run at once.
+ * Wide enough for nearly every house lot; a bigger lot is looked up again on
+ * its own box (see bboxContains).
+ */
+export const LOT_LOOKAROUND_M = 100;
+
+/** A box `radiusM` metres around a point, each way. */
+export function aroundPoint(lat: number, lon: number, radiusM = LOT_LOOKAROUND_M): BBox {
+  const dLat = radiusM / 111320;
+  const dLon = radiusM / (111320 * Math.cos((lat * Math.PI) / 180));
+  return { south: lat - dLat, west: lon - dLon, north: lat + dLat, east: lon + dLon };
+}
+
+/** True when `inner` lies entirely inside `outer`. */
+export function bboxContains(outer: BBox, inner: BBox): boolean {
+  return inner.south >= outer.south && inner.west >= outer.west && inner.north <= outer.north && inner.east <= outer.east;
+}
+
 /** Square feet, whole, formatted for the language: "12,345 sq ft" / "12 345 pi²" (or just the number). */
 export function formatSqft(value: number, lang: "en" | "fr", withUnit = true): string {
   const n = Math.round(value).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA");

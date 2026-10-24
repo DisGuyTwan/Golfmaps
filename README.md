@@ -71,8 +71,11 @@ animated.
    the same area with the same settings.
 
 Lookups go through `/api/overpass` first, which Vercel's CDN caches for a day,
-so a course measured once is instant and survives busy mirrors; if the route
-fails, the browser calls the mirrors directly.
+so a course measured once is instant. The mirrors queue Vercel's shared server
+addresses for about half a minute, though, so if the route hasn't started
+answering within 1.5 s (or fails) the browser also asks the mirrors from its
+own address and takes whichever answer comes first; the route still finishes
+and caches its answer for next time.
 
 ### How rough is handled
 
@@ -256,6 +259,6 @@ Standard Next.js app, no extra configuration:
   you know the real figure.
 - Estimated rough inherits every gap in the underlying data — treat it as a
   starting point for a quote, not a survey.
-- The public Overpass API is rate-limited and occasionally busy. The app fails
-  over across three mirrors and surfaces a friendly message if all of them are
-  down.
+- The public Overpass API is rate-limited and occasionally busy. The app races
+  three mirrors (from the server and from the browser) and surfaces a friendly
+  message if all of them are down.

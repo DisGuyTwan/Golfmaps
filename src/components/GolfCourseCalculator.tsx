@@ -26,6 +26,8 @@ import {
 import {
   DRIVEWAY_WIDTHS_FT,
   FT_TO_M,
+  aroundPoint,
+  bboxContains,
   drivewayArea,
   lawnTotals,
   lotBBox,
@@ -34,7 +36,7 @@ import {
   type LawnArea,
   type LawnMeasurement,
 } from "@/lib/lawn";
-import { fetchParcel } from "@/lib/parcel";
+import { fetchParcel, inQuebec } from "@/lib/parcel";
 import { encodeQuote, type AcreageMode } from "@/lib/quote";
 import {
   getLawn,
@@ -293,11 +295,14 @@ export default function GolfCourseCalculator() {
     [startRun],
   );
 
-  /** Shows a lawn on its lot and fills in what OSM has on it (buildings, pools, paving). */
-  const showLawn = useCallback(async (next: LawnMeasurement, id: number) => {
+  /**
+   * Shows a lawn on its lot and fills in what OSM has on it (buildings, pools,
+   * paving), from a lookup already under way around the lot when there is one.
+   */
+  const showLawn = useCallback(async (next: LawnMeasurement, id: number, nearby?: Promise<unknown>) => {
     setLawn(next);
     try {
-      const json = await fetchFairways(lotBBox(next.lot), "lawn");
+      const json = await (nearby ?? fetchFairways(lotBBox(next.lot), "lawn"));
       if (id !== runId.current) return;
       setLawn({ ...(getLawn() ?? next), mapped: mappedOnLot(json, next.lot), mappedFailed: false });
     } catch (err) {
@@ -314,6 +319,11 @@ export default function GolfCourseCalculator() {
       setLoading(true);
       setError(null);
       setLawn(null);
+      // Buildings and paving around the point, looked up while the lot loads
+      // (outside Quebec there's no cadastre lot, so nothing to look up).
+      const around = aroundPoint(lat, lon);
+      const nearby = inQuebec(lat, lon) ? fetchFairways(around, "lawn") : null;
+      nearby?.catch(() => {}); // Handled by showLawn, or unused when the lot is bigger.
       try {
         const parcel = await fetchParcel(lat, lon);
         if (id !== runId.current) return;
@@ -331,7 +341,7 @@ export default function GolfCourseCalculator() {
           traced,
         };
         if (mapRef.current) fitAbovePanel(mapRef.current, parcel.geometry);
-        await showLawn(next, id);
+        await showLawn(next, id, nearby && bboxContains(around, lotBBox(parcel.geometry)) ? nearby : undefined);
       } catch (err) {
         if (id !== runId.current) return;
         setError({ kind: "lotUnreachable" });

@@ -3,7 +3,10 @@ import area from "@turf/area";
 import type { Polygon } from "geojson";
 import {
   FT_TO_M,
+  LOT_LOOKAROUND_M,
   SQ_M_TO_SQ_FT,
+  aroundPoint,
+  bboxContains,
   drivewayArea,
   formatSqft,
   lawnTotals,
@@ -189,5 +192,17 @@ describe("driveways and paving", () => {
     expect(t.lotSqft - t.builtSqft - t.pavedSqft - t.tracedSqft).toBeCloseTo(t.lawnSqft, 0);
     expect(drive.path).toHaveLength(2);
     expect(drive.widthM).toBeCloseTo(6.096, 3);
+  });
+});
+
+describe("lookaround box", () => {
+  it("reaches LOT_LOOKAROUND_M each way and holds a house lot, not a farm", () => {
+    // Tapped in the middle of the 30 × 40 m lot.
+    const [lon, lat] = at(15, 20);
+    const box = aroundPoint(lat, lon);
+    expect((box.north - box.south) * 111_320).toBeCloseTo(2 * LOT_LOOKAROUND_M, 6);
+    expect(box.east - box.west).toBeCloseTo(dLon(2 * LOT_LOOKAROUND_M), 6);
+    expect(bboxContains(box, lotBBox(rect(0, 0, 30, 40)))).toBe(true);
+    expect(bboxContains(box, lotBBox(rect(0, 0, 30, 300)))).toBe(false);
   });
 });

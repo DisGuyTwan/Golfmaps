@@ -24,8 +24,8 @@ public APIs (built-in `fetch`).
 ```
 src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
                   not-found.tsx, globals.css (theme color variables), boot.css
-  api/overpass/   cached Overpass lookup (CDN 1 day, hedged mirror requests);
-                  the browser falls back to calling the mirrors itself
+  api/overpass/   cached Overpass lookup (CDN 1 day, hedged mirror requests,
+                  Server-Timing per mirror); the browser races it with the mirrors
   api/landcover/  satellite land cover as a small class grid (CDN 30 days):
                   ESA WorldCover (src=worldcover) or AAFC crop inventory (src=aci)
   api/parcel/     the Quebec cadastre lot at a point (CDN 1 week), for lawns
@@ -52,7 +52,7 @@ src/components/
   IncentivesTab.tsx          incentive checker UI (client-only)
   RoiTab.tsx                 Voyager ROI calculator UI, printable
 src/lib/
-  overpass.ts   builds the Overpass QL query; cache route first, then 3 mirrors
+  overpass.ts   builds the Overpass QL query; cache route, raced by 3 mirrors
   area.ts       OSM → GeoJSON → categorize → clip → acres  (the core logic)
   landcover.ts  land cover grids: grass inside an outline, sod fields, traced
                 shapes (pure, tested)
@@ -133,6 +133,17 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   Streets are cadastre lots too and a geocoded address can land on the road,
   so `lotLooksOdd` (over 5,000 m², or a strip with compactness under 0.2)
   warns the rep to tap the house itself.
+- **Overpass is the slow step, and only from Vercel.** The mirrors queue
+  Vercel's shared server addresses: 27-33 s per lookup measured on the preview,
+  even for one house lot, while the cadastre, WorldCover and crop map answer in
+  about 1 s. So `fetchFairways` asks the cache route, and if it hasn't started
+  answering within `DIRECT_AFTER_MS` (1.5 s; a CDN hit starts in well under a
+  second) the browser also asks the mirrors from its own address; the first
+  answer wins and the route still finishes to fill the cache. Don't make the
+  browser wait on the route again. Lawn mode looks up buildings `aroundPoint`
+  (100 m) while the cadastre lot loads, and again on the lot's box only when
+  the lot is bigger. The route's Server-Timing header shows each mirror's
+  result and time.
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in

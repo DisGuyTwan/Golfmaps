@@ -101,6 +101,27 @@ describe("fetchFairways", () => {
     await expect(lookup).resolves.toEqual({ from: "mirror" });
     expect(calls).toEqual(["route", "overpass-api.de"]);
   });
+  it("waits for a route that has started answering, without asking the mirrors", async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", (url: string) => {
+      calls.push(url.startsWith("/api/overpass") ? "route" : "mirror");
+      // Headers now, the body (a big course on a slow phone) well after the head start.
+      const body = new ReadableStream({
+        start(c) {
+          setTimeout(() => {
+            c.enqueue(new TextEncoder().encode('{"from":"route"}'));
+            c.close();
+          }, DIRECT_AFTER_MS * 2);
+        },
+      });
+      return Promise.resolve(new Response(body));
+    });
+    const lookup = fetchFairways(bbox);
+    await vi.advanceTimersByTimeAsync(DIRECT_AFTER_MS * 2);
+    await expect(lookup).resolves.toEqual({ from: "route" });
+    expect(calls).toEqual(["route"]);
+  });
   it("asks the mirrors at once when the route fails", async () => {
     const calls = mockRouteAndMirrors(502, "ok");
     await expect(fetchFairways(bbox)).resolves.toEqual({ from: "mirror" });

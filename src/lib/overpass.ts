@@ -229,68 +229,68 @@ export function serverTiming(attempts: MirrorAttempt[]): string {
 }
 
 /**
- * How long the browser waits on the cache route before also asking the
- * mirrors itself. A cached lookup (or a quick mirror) answers well within it;
- * past it, the mirrors are usually queueing the route's shared server
- * addresses, and this browser's own address gets its own place in line.
+ * How long the browser waits for the cache route to start answering before
+ * also asking the mirrors itself. A cached answer starts within a few hundred
+ * ms; an uncached one waits on the mirrors, which queue the route's shared
+ * server addresses for half a minute (27-33 s measured, even for one house
+ * lot), while this browser's own address gets its own place in line.
  */
-export const DIRECT_AFTER_MS = 3000;
+export const DIRECT_AFTER_MS = 1500;
 
 /**
  * Fetches the golf features for a scan box (or, with kind "lawn", what isn't
  * lawn on a residential lot). Asks this app's cache route first (/api/overpass:
- * shared CDN cache, so a course measured once is instant and survives busy
- * mirrors). If it hasn't answered within DIRECT_AFTER_MS, or fails, the
- * browser also asks the mirrors directly, and the first answer wins. The route
- * is left to finish so its answer is cached for next time.
+ * shared CDN cache, so a course measured once is instant). If it hasn't
+ * started answering within DIRECT_AFTER_MS, or fails, the browser also asks
+ * the mirrors directly, and the first answer wins. The route is left to
+ * finish, so its answer is cached for next time.
  */
 export function fetchFairways(bbox: BBox, kind: OverpassQuery = "golf"): Promise<unknown> {
   const query = kind === "golf" ? "" : `&q=${kind}`;
-  const route = fetch(`/api/overpass?bbox=${bboxParam(bbox)}${query}`, { signal: AbortSignal.timeout(65000) }).then(
-    async (response) => {
-      if (!response.ok) throw new OverpassHttpError(response.status);
-      return response.json() as Promise<unknown>;
-    },
-  );
-
   return new Promise((resolve, reject) => {
     const direct = new AbortController();
     let done = false;
     let routeFailed = false;
+    let directStarted = false;
     let directFailed = false;
     let directError: unknown;
-    const win = (json: unknown) => {
+    const finish = (settle: () => void) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
       direct.abort();
-      resolve(json);
+      settle();
     };
-    const fail = (err: unknown) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      direct.abort();
-      reject(err);
-    };
-    let directStarted = false;
     const startDirect = () => {
       if (done || directStarted) return;
       directStarted = true;
-      fetchFromMirrorsHedged(bbox, { kind, signal: direct.signal }).then(win, (err) => {
-        directFailed = true;
-        directError = err;
-        if (routeFailed) fail(err);
-      });
+      fetchFromMirrorsHedged(bbox, { kind, signal: direct.signal }).then(
+        (json) => finish(() => resolve(json)),
+        (err) => {
+          directFailed = true;
+          directError = err;
+          if (routeFailed) finish(() => reject(err));
+        },
+      );
     };
     const timer = setTimeout(startDirect, DIRECT_AFTER_MS);
 
-    route.then(win, (err) => {
-      // Too large or malformed fails the same way directly; don't retry it.
-      if (err instanceof OverpassHttpError && err.status === 400) return fail(err);
-      routeFailed = true;
-      if (directFailed) fail(directError);
-      else startDirect();
-    });
+    fetch(`/api/overpass?bbox=${bboxParam(bbox)}${query}`, { signal: AbortSignal.timeout(65000) })
+      .then((response) => {
+        if (!response.ok) throw new OverpassHttpError(response.status);
+        // Answering: the data is ready (a cache hit or a mirror answered), so wait for it.
+        clearTimeout(timer);
+        return response.json() as Promise<unknown>;
+      })
+      .then(
+        (json) => finish(() => resolve(json)),
+        (err) => {
+          // Too large or malformed fails the same way directly; don't retry it.
+          if (err instanceof OverpassHttpError && err.status === 400) return finish(() => reject(err));
+          routeFailed = true;
+          if (directFailed) finish(() => reject(directError));
+          else startDirect();
+        },
+      );
   });
 }
