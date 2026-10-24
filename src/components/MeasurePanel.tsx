@@ -311,13 +311,14 @@ export default function MeasurePanel({
           </div>
         ) : mode === "lawn" ? (
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => onStartPick("lot")} disabled={loading} className={`${ui.btnPrimary} grow basis-48`}>
+            {/* Detected as a lawn, the next tap still detects (a course, a farm); picked by hand, it stays a lot. */}
+            <button onClick={() => onStartPick(chosen ? "lot" : "property")} disabled={loading} className={`${ui.btnPrimary} grow basis-48`}>
               {loading ? (
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
               ) : (
                 <Icon name="home" />
               )}
-              {loading ? t.measuring : t.selectLot}
+              {loading ? t.measuring : chosen ? t.selectLot : t.selectProperty}
             </button>
             <button onClick={() => onStartTrace("lot")} disabled={loading} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
               <Icon name="pen" />
