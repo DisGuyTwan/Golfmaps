@@ -18,7 +18,8 @@ export async function GET(request: Request) {
   }
   const started = Date.now();
   try {
-    const grid = await readSurface(bbox);
+    const debug = new URL(request.url).searchParams.get("debug") === "rgb"; // TEMPORARY: tuning on real courses
+    const grid = await readSurface(bbox, debug);
     const timing = { "Server-Timing": `surface;dur=${Date.now() - started}` };
     if (!grid) {
       return Response.json({ error: "No aerial photos here" }, { status: 404, headers: { "Cache-Control": "public, s-maxage=86400", ...timing } });
@@ -29,6 +30,7 @@ export async function GET(request: Request) {
       height: grid.height,
       cellM: grid.cellM,
       classes: Buffer.from(grid.classes).toString("base64"),
+      ...(grid.rgb ? { rgb: Buffer.from(grid.rgb).toString("base64") } : {}),
     };
     return Response.json(body, { headers: { "Cache-Control": "public, s-maxage=2592000, stale-while-revalidate=31536000", ...timing } });
   } catch (err) {

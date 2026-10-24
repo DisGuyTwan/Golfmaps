@@ -41,7 +41,7 @@ async function readTile(z: number, x: number, y: number): Promise<Uint8Array | n
 }
 
 /** Classes over the box, or null where the photos don't reach. */
-export async function readSurface(bbox: BBox): Promise<SurfaceGrid | null> {
+export async function readSurface(bbox: BBox, debug = false): Promise<(SurfaceGrid & { rgb?: Uint8Array }) | null> {
   const z = surfaceZoom(bbox);
   const px0 = Math.floor(mercX(bbox.west, z)), px1 = Math.ceil(mercX(bbox.east, z));
   const py0 = Math.floor(mercY(bbox.north, z)), py1 = Math.ceil(mercY(bbox.south, z));
@@ -95,5 +95,5 @@ export async function readSurface(bbox: BBox): Promise<SurfaceGrid | null> {
     }
   }
   const cellM = (156543.03392 / 2 ** z) * Math.cos((((box.north + box.south) / 2) * Math.PI) / 180);
-  return { bbox: box, width, height, cellM, classes: classifySurface({ rgb, width, height, cellM, valid, cover }) };
+  return { bbox: box, width, height, cellM, classes: classifySurface({ rgb, width, height, cellM, valid, cover }), ...(debug ? { rgb } : {}) };
 }
