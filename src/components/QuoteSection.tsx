@@ -4,7 +4,7 @@ import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { formatSqft, type LawnMeasurement } from "@/lib/lawn";
 import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, lawnQuoteSqft, type AcreageMode, type QuoteSettings } from "@/lib/quote";
 import { sendAcresToRoi, setQuoteSettings, useQuoteSettings } from "@/lib/quote-store";
-import { roiModel } from "@/lib/mowers";
+import { mainFleet, roiModel } from "@/lib/mowers";
 import { goToTab } from "@/lib/tabs";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { Icon } from "./icons";
@@ -120,9 +120,13 @@ function AcreQuote({
   const t = UI[lang];
   const q = useQuoteSettings();
   const acres = acresForQuote(mode, result, sod, q);
-  // The Voyager size the mower fit recommends (for the whole job, or the rough), so the ROI tab prices that one.
-  const recommendation = useMowerFit()?.recommendation;
-  const voyager = roiModel(recommendation?.rough?.mower) ?? roiModel(recommendation?.best?.mower);
+  // What the mower fit recommends for the whole job (or the rough), so the ROI tab prices the same robots: how they
+  // work, how often, the layout's extra time over a plain square (none when it's quicker), and the Voyager size
+  // (on a course, the cut-and-go one, in case the ROI tab switches to it).
+  const fit = useMowerFit();
+  const fleet = fit ? mainFleet(fit.recommendation) : null;
+  const voyager = fit?.approaches ? mainFleet(fit.approaches.go) : fleet;
+  const layoutPct = fleet?.work ? Math.max(0, Math.round((fleet.work.factor - 1) * 100)) : null;
   const ac = (n: number) => formatAcres(n, lang);
   const mapped = mode === "golf" && result !== null && !result.boundaryOnly;
   const satellite = mode === "golf" && result?.boundaryOnly && result.satellite !== null;
@@ -198,7 +202,7 @@ function AcreQuote({
           disabled={acres === null}
           onClick={() => {
             if (acres === null) return;
-            sendAcresToRoi(acres, voyager);
+            sendAcresToRoi({ acres, approach: fit?.approach ?? null, every: q.mowEvery, model: roiModel(voyager?.mower), layoutPct });
             goToTab("#roi");
           }}
           className={`${ui.btnPrimary} group flex-1`}

@@ -3,19 +3,35 @@
 import { useMemo } from "react";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, photoAreas, type LawnMeasurement } from "@/lib/lawn";
-import { MOWERS_AS_OF, capacityM2, mowerName, recommend, type Fit, type Recommendation } from "@/lib/mowers";
+import {
+  MOWERS_AS_OF,
+  capacityM2,
+  mainFleet,
+  mowerName,
+  recommend,
+  recommendBoth,
+  type Approaches,
+  type Fit,
+  type Recommendation,
+} from "@/lib/mowers";
 import { MOW_EVERY, acresForQuote, lawnQuoteSqft, type AcreageMode, type MowEvery, type QuoteSettings } from "@/lib/quote";
 import { setQuoteSettings, useCharger, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
 import { complexity, golfSite, lawnSite, sodSite, type Complexity, type Level, type Reason, type Site } from "@/lib/site";
 import { slopeDeg, type TerrainGrid } from "@/lib/terrain";
+import type { Approach } from "@/lib/roi";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { Icon } from "./icons";
-import { Notice, toneClass } from "./ui";
+import { Notice, Segmented, toneClass } from "./ui";
 
 export interface MowerFitResult {
   site: Site;
   complexity: Complexity;
+  /** For the approach shown, on a golf course. */
   recommendation: Recommendation;
+  /** A golf course both ways (cut and stay, cut and go), else null. */
+  approaches: Approaches | null;
+  /** How the robots work: picked by the rep, else suggested (golf); always cut and go on a sod farm; null on a lawn. */
+  approach: Approach | null;
 }
 
 type FitInputs = [
@@ -54,10 +70,12 @@ function computeFit(...inputs: FitInputs): MowerFitResult | null {
   }
   let result: MowerFitResult | null = null;
   if (site) {
-    const recommendation = recommend(site, q.mowEvery);
+    const approaches = site.kind === "golf" ? recommendBoth(site, q.mowEvery) : null;
+    const approach = approaches ? (q.approach ?? approaches.suggested) : site.kind === "sod" ? "go" : null;
+    const recommendation = approaches && approach ? approaches[approach] : recommend(site, q.mowEvery);
     // Each unit drives within its own zone: the fleet covering the whole site sets the zones (on a course with fairways, the rough's).
-    const fleet = recommendation.rough ?? recommendation.best;
-    result = { site, complexity: complexity(site, fleet?.units ?? 1), recommendation };
+    const fleet = mainFleet(recommendation);
+    result = { site, complexity: complexity(site, fleet?.units ?? 1), recommendation, approaches, approach };
   }
   last = { inputs, result };
   return result;
@@ -146,6 +164,23 @@ function useCopy(lang: Lang) {
   return { t, reason, why, units, date, colon };
 }
 
+/** A question in the card, answered with buttons. */
+function Question<T extends string | number>(props: React.ComponentProps<typeof Segmented<T>>) {
+  return (
+    <div className="space-y-1">
+      <div className="text-xs font-semibold text-ink-2">{props.label}</div>
+      <Segmented {...props} />
+    </div>
+  );
+}
+
+/** "10 × KR238", "4 × KR238 + 7 × KR804" (fairways and rough): the robots a recommendation takes. */
+function fleetText(r: Recommendation, none: string): string {
+  const units = new Map<string, number>();
+  for (const f of [r.best, r.rough]) if (f) units.set(f.mower.id, (units.get(f.mower.id) ?? 0) + f.units);
+  return units.size ? [...units].map(([id, n]) => `${n} × ${id}`).join(" + ") : none;
+}
+
 /** One recommended robot: name, units, why, and what to check on site. */
 function Pick({ label, fit, site, days, lang }: { label: string; fit: Fit; site: Site; days: MowEvery; lang: Lang }) {
   const { t, why, units, colon } = useCopy(lang);
@@ -195,7 +230,7 @@ export default function MowerFit({
   onMoveCharger?: () => void;
 }) {
   const fit = useMowerFit();
-  const { mowEvery } = useQuoteSettings();
+  const { mowEvery, approach: picked } = useQuoteSettings();
   const { t, reason, units, date, colon } = useCopy(lang);
   if (!fit && !loading) return null;
 
@@ -206,9 +241,11 @@ export default function MowerFit({
   const runnerUp = rec?.runnerUp;
   // What the next best does worse than the pick (shared caveats are on the pick).
   const worse = runnerUp ? runnerUp.notes.filter((n) => !rec?.best?.notes.includes(n)) : [];
-  // The frequency sizes the robots: lawns, and a course's fairways (Voyager fleets follow the ROI tab). A lawn's
-  // PDF says it in the pick ("Mows up to … every 2 days"), so the line is left out there to keep one page.
-  const frequency = fit && (fit.site.kind === "lawn" || (fit.site.kind === "golf" && fit.site.fairwayM2 > 0)) && !(print && fit.site.kind === "lawn");
+  // The frequency sizes every fleet. A lawn's PDF says it in the pick ("Mows up to … every 2 days"), so the
+  // line is left out there to keep one page.
+  const frequency = fit && !(print && fit.site.kind === "lawn");
+  const approaches = fit?.approaches;
+  const approach = fit?.approach ?? null;
   const trimmedM2 = fit && rec ? rec.trimmed * fit.site.areaM2 : 0;
   const trimmedArea =
     fit?.site.kind === "lawn" ? formatSqft(trimmedM2 * SQ_M_TO_SQ_FT, lang) : `${formatAcres(trimmedM2 / 4046.86, lang)} ac`;
@@ -250,26 +287,44 @@ export default function MowerFit({
                   {colon}
                 </span>
                 {t.fitEvery.options[mowEvery].toLowerCase()}
+                {approaches && approach && (
+                  <>
+                    {" · "}
+                    <span className="font-semibold">
+                      {t.fitHow.label}
+                      {colon}
+                    </span>
+                    {t.fitHow.options[approach].toLowerCase()}
+                  </>
+                )}
               </p>
             ) : (
-              <div className="space-y-1">
-                <div className="text-xs font-semibold text-ink-2">{t.fitEvery.label}</div>
-                <div role="group" aria-label={t.fitEvery.group} className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-surface-2 p-1">
-                  {MOW_EVERY.map((days) => (
-                    <button
-                      key={days}
-                      type="button"
-                      aria-pressed={mowEvery === days}
-                      onClick={() => setQuoteSettings({ mowEvery: days })}
-                      className={`inline-flex min-h-8 items-center justify-center rounded-md text-xs font-semibold transition-all duration-200 active:scale-[0.98] ${
-                        mowEvery === days ? "bg-brand text-white shadow-sm" : "text-muted hover:text-ink"
-                      }`}
-                    >
-                      {t.fitEvery.options[days]}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <>
+                <Question
+                  label={t.fitEvery.question}
+                  value={mowEvery}
+                  options={MOW_EVERY.map((days) => ({ value: days, label: t.fitEvery.options[days] }))}
+                  onChange={(days) => setQuoteSettings({ mowEvery: days })}
+                />
+                {approaches && approach && (
+                  <div className="space-y-1">
+                    <Question
+                      label={t.fitHow.question}
+                      value={approach}
+                      options={(["stay", "go"] as const).map((a) => ({
+                        value: a,
+                        label: t.fitHow.options[a],
+                        sub: fleetText(approaches[a], t.fitHow.none),
+                      }))}
+                      onChange={(a) => setQuoteSettings({ approach: a })}
+                    />
+                    <p className="text-[11px] text-muted">
+                      {t.fitHow.hints[approach]}
+                      {!picked && ` ${t.fitHow.suggested[approach]}`}
+                    </p>
+                  </div>
+                )}
+              </>
             ))}
 
           {rec?.best ? (

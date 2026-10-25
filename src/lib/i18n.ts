@@ -251,9 +251,23 @@ const en = {
   fitNone: "No Kress robot for this kind of property can climb all of it: too much of it is too steep. Check it on site.",
   fitTrimmer: (area: string) => `About ${area} is steeper than 40° (84%): no robot climbs that. Plan a trimmer for those parts.`,
   fitEvery: {
+    question: "How often do you want to mow?",
     label: "Mowing",
-    group: "How often the robots mow it all",
     options: { 1: "Every day", 2: "Every 2 days", 3: "Every 3 days" } as Record<1 | 2 | 3, string>,
+  },
+  fitHow: {
+    question: "Cut and stay or cut and go?",
+    label: "Robots",
+    options: { stay: "Cut and stay", go: "Cut and go" } as Record<"stay" | "go", string>,
+    hints: {
+      stay: "KR238s stay on the course, each with its own zone and charger.",
+      go: "Voyagers come with the crew, mow, then move on.",
+    } as Record<"stay" | "go", string>,
+    suggested: {
+      stay: "Suggested for a course: tap Cut and go to compare.",
+      go: "Suggested: the KR238 can’t mow all of it.",
+    } as Record<"stay" | "go", string>,
+    none: "Doesn’t fit",
   },
   fitUnits: (n: number) => (n === 1 ? "1 unit" : `${n} units`),
   fitHours: (h: string, each: boolean) => `About ${h} h ${each ? "per unit " : ""}for a full mow, turns and driving included`,
@@ -544,9 +558,23 @@ const fr: UiStrings = {
   fitNone: "Aucun robot Kress pour ce type de terrain ne peut tout gravir : trop de parties sont trop raides. À vérifier sur place.",
   fitTrimmer: (area: string) => `Environ ${area} dépasse 40° (84 %) de pente : aucun robot n’y monte. Prévoyez un coupe-bordure pour ces parties.`,
   fitEvery: {
+    question: "À quelle fréquence voulez-vous tondre?",
     label: "Tonte",
-    group: "À quelle fréquence les robots tondent tout",
     options: { 1: "Chaque jour", 2: "Aux 2 jours", 3: "Aux 3 jours" } as Record<1 | 2 | 3, string>,
+  },
+  fitHow: {
+    question: "Tond et reste ou tond et repart?",
+    label: "Robots",
+    options: { stay: "Tond et reste", go: "Tond et repart" } as Record<"stay" | "go", string>,
+    hints: {
+      stay: "Les KR238 restent sur le terrain, chacun avec sa zone et sa station de recharge.",
+      go: "Les Voyager arrivent avec l’équipe, tondent, puis repartent.",
+    } as Record<"stay" | "go", string>,
+    suggested: {
+      stay: "Suggéré pour un golf : touchez Tond et repart pour comparer.",
+      go: "Suggéré : le KR238 ne peut pas tout tondre.",
+    } as Record<"stay" | "go", string>,
+    none: "Ne convient pas",
   },
   fitUnits: (n: number) => (n === 1 ? "1 unité" : `${n} unités`),
   fitHours: (h: string, each: boolean) => `Environ ${h} h ${each ? "par unité " : ""}par tonte complète, virages et déplacements compris`,

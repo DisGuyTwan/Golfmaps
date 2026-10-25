@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { baseline } from "./coverage";
-import { MOWERS, capacityM2, fitMower, recommend } from "./mowers";
+import { MOWERS, approachOf, capacityM2, fitMower, mainFleet, recommend, recommendBoth } from "./mowers";
 import type { ShapeStats, Site } from "./site";
 import type { TerrainStats } from "./terrain";
 
@@ -43,13 +43,18 @@ describe("Kress lineup data", () => {
     expect(MOWERS.filter((m) => m.maxSlopePct > 36).map((m) => m.id).sort()).toEqual(["KR282", "KR284", "KR286", "KR804"]);
     expect(MOWERS.filter((m) => m.maxSlopePct > 47).every((m) => m.fourWheel)).toBe(true);
   });
-  it("sizes a robot by how often it mows, a Voyager by the week like the ROI tab (5 days, once a week)", () => {
+  it("sizes a robot by how often it mows, a Voyager by its charges a week (5, like the ROI tab) shared among the mowings", () => {
     const kr286 = model("KR286");
     expect(capacityM2(kr286) / ACRE).toBeCloseTo(2.5, 3);
     expect(capacityM2(kr286, 1) / ACRE).toBeCloseTo(1.25, 3);
     expect(capacityM2(kr286, 3) / ACRE).toBeCloseTo(3.75, 3);
-    expect(capacityM2(model("KR800")) / ACRE).toBeCloseTo(35, 3);
-    expect(capacityM2(model("KR800"), 1)).toBe(capacityM2(model("KR800")));
+    // 7 acres a charge × 5 a week = 35 acres a week: 10 acres mowed every 2 days, 5 every day, 15 every 3 days.
+    expect([2, 1, 3].map((days) => capacityM2(model("KR800"), days as 1 | 2 | 3) / ACRE)).toEqual([10, 5, 15].map((n) => expect.closeTo(n, 3)));
+  });
+  it("tells the robots that stay on a property from those that come and go with the crew", () => {
+    expect(MOWERS.filter((m) => approachOf(m) === "stay").map((m) => m.id)).toEqual(["KR238"]);
+    expect(MOWERS.filter((m) => approachOf(m) === "go").map((m) => m.id)).toEqual(["KR800", "KR804"]);
+    expect(approachOf(model("KR286"))).toBeNull();
   });
 });
 
@@ -150,21 +155,21 @@ describe("residential lawns", () => {
 });
 
 describe("golf and sod", () => {
-  it("sends fairways to the MasterSeries and the rough to a Voyager", () => {
+  it("cut and go sends fairways to the MasterSeries and the rough to a Voyager", () => {
     const site: Site = { kind: "golf", areaM2: 60 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 25 * ACRE, ...noLayout };
-    const r = recommend(site);
+    const r = recommend(site, 2, "go");
     expect(r.best?.mower.id).toBe("KR238");
     expect(r.best?.units).toBe(2);
     expect(r.rough?.mower.line).toBe("voyager");
-    // Fairways mowed every day take twice the MasterSeries; the Voyager fleet follows the ROI tab.
-    const daily = recommend(site, 1);
+    // Mowed every day, the fairways take twice the MasterSeries, and the rough more Voyagers.
+    const daily = recommend(site, 1, "go");
     expect(daily.best?.units).toBe(3);
-    expect(daily.rough?.units).toBe(r.rough?.units);
+    expect(daily.rough!.units).toBeGreaterThan(r.rough!.units);
   });
 
   it("sizes the fairway robot on the fairways alone, however big the rough", () => {
     const site: Site = { kind: "golf", areaM2: 190 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 13 * ACRE, ...noLayout };
-    const r = recommend(site);
+    const r = recommend(site, 2, "go");
     expect(r.best?.mower.minCutMm).toBeLessThanOrEqual(15);
     expect(r.best?.units).toBe(1);
     expect(r.rough?.mower.line).toBe("voyager");
@@ -175,15 +180,45 @@ describe("golf and sod", () => {
     expect(recommend(site).best?.mower.id).toBe("KR238");
   });
 
-  it("uses Voyagers alone for rough-only quotes", () => {
+  it("cut and go uses Voyagers alone for rough-only quotes, cut and stay KR238s", () => {
     const site: Site = { kind: "golf", areaM2: 40 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 0, ...noLayout };
-    expect(recommend(site).best?.mower.line).toBe("voyager");
+    expect(recommend(site, 2, "go").best?.mower.line).toBe("voyager");
+    expect(recommend(site, 2, "stay").best?.mower.id).toBe("KR238");
   });
 
   it("sizes a sod farm's Voyager to the acreage", () => {
     const sod = (acres: number): Site => ({ kind: "sod", areaM2: acres * ACRE, parts: 4, shape: null, terrain: flat, fairwayM2: 0, ...noLayout });
-    expect(recommend(sod(20)).best?.mower.id).toBe("KR800");
+    expect(recommend(sod(8)).best?.mower.id).toBe("KR800");
     expect(recommend(sod(60)).best?.mower.id).toBe("KR804");
+    expect(recommend(sod(60)).best?.units).toBe(3);
+  });
+
+  it("prices a course both ways, cut and stay suggested: KR238s for 166.7 acres, or Voyagers", () => {
+    const site: Site = { kind: "golf", areaM2: 166.7 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 0, ...noLayout };
+    const both = recommendBoth(site);
+    expect(both.suggested).toBe("stay");
+    // Like the ROI tab: 20 acres every 2 days each, filled to 90 %; KR804s at 19 acres × 5 charges a week.
+    expect([both.stay.best?.mower.id, both.stay.best?.units]).toEqual(["KR238", 10]);
+    expect([both.go.best?.mower.id, both.go.best?.units]).toEqual(["KR804", 7]);
+    expect(both.go.runnerUp?.mower.id).toBe("KR800");
+    expect(recommendBoth(site, 3).stay.best?.units).toBe(7);
+  });
+
+  it("with fairways, the KR238 keeps them either way and the approach decides the rest", () => {
+    const site: Site = { kind: "golf", areaM2: 60 * ACRE, parts: 1, shape: null, terrain: flat, fairwayM2: 25 * ACRE, ...noLayout };
+    const both = recommendBoth(site);
+    expect([both.stay.best?.mower.id, both.go.best?.mower.id]).toEqual(["KR238", "KR238"]);
+    expect(mainFleet(both.stay)?.mower.id).toBe("KR238");
+    expect(mainFleet(both.go)?.mower.line).toBe("voyager");
+  });
+
+  it("suggests cut and go where the KR238 can't climb it", () => {
+    // Over 36 % is past the KR238, not the KR804 (47 %).
+    const site: Site = { kind: "golf", areaM2: 40 * ACRE, parts: 1, shape: null, terrain: { ...flat, over25: 0.2, over36: 0.1 }, fairwayM2: 0, ...noLayout };
+    const both = recommendBoth(site);
+    expect(both.stay.best).toBeNull();
+    expect(both.suggested).toBe("go");
+    expect(both.go.best?.mower.id).toBe("KR804");
   });
 
   it("finds nothing for a steep course: its robots stop at 25°", () => {

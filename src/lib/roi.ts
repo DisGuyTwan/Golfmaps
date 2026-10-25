@@ -1,6 +1,11 @@
 /**
- * Voyager ROI calculator (Quebec): a zero-turn crew versus Kress Voyager
- * autonomous mowers, sized for the same mowing job, over a chosen horizon.
+ * ROI calculator (Quebec): a zero-turn crew versus Kress robots, sized for
+ * the same mowing job (the same acres, mowed every 1, 2 or 3 days), over a
+ * chosen horizon. The robots work one of two ways:
+ * - cut and stay: KR238s live on the property, each with its own zone and
+ *   charger, mowing it all every 48 h at their rating;
+ * - cut and go: a crew brings Voyagers (KR800, KR804), which mow so many
+ *   acres per charge and move on.
  *
  * Started as a port of the dealer handoff (Calculateur_ROI_Voyager_Quebec.html),
  * which compared one employee with one Voyager. It now sizes both sides from
@@ -9,13 +14,20 @@
  * - Zero-turn: acres per hour → mowing hours needed → crew (full-time
  *   equivalents, paid for the share of their shifts the mowing takes) and
  *   machines (whole units).
+ * - KR238: acres it keeps mowed (its 48 h rating × the days between mowings
+ *   ÷ 2) → units (whole; a fleet of several fills each to 90 %, like the
+ *   Acreage tab's mower fit), electricity per acre, installation, plus a
+ *   weekly check per robot.
  * - Voyager: acres per charge × mowing days → units (whole), electricity per
  *   charge, plus supervision time (moving it, mapping, clearing jams).
+ * - Robots size for a plain square; a property's turns, edges, trees and
+ *   driving take extra time (`layoutPct`, from the mower fit's layout).
  * - Payback: the zero-turns are either due for replacement (purchase avoided)
  *   or already owned (they can be sold: resale value), and grants/tax credits
  *   from the Incentives tab can reduce the Voyager investment.
  * With one crew member's worth of acreage, no supervision, no incentives and
  * the handoff's inputs, it reproduces the handoff's figures (see roi.test.ts).
+ * The robot side keeps the `voy` names from when it priced Voyagers only.
  */
 
 /** Hydro-Québec Tarif G, first block, in effect April 1, 2026 ($/kWh). Update each April 1. */
@@ -23,6 +35,9 @@ export const HQ_RATE = 0.12388;
 export const HOURS_PER_WORKDAY = 8;
 
 export type VoyagerModel = "7" | "19" | "custom";
+/** Cut and stay (KR238s live on the property) or cut and go (Voyagers come with the crew). */
+export type Approach = "stay" | "go";
+export const isApproach = (v: unknown): v is Approach => v === "stay" || v === "go";
 /** Existing zero-turns: due for replacement (purchase avoided) or already paid for (resale). */
 export type ZeroTurnStatus = "replace" | "own";
 
@@ -37,10 +52,34 @@ export const VOYAGER_PRESETS: Record<
   "19": { voyPrice: 115000, voyMaint: 1600, batteryKwh: 38, voyAcresPerDay: 19 },
 };
 
+/** A KR238 fleet of several fills each robot to this share of its rating (mowers.ts LIMIT_LOAD); one alone can run full. */
+export const STAY_LOAD = 0.9;
+/**
+ * KR238 electricity per acre mowed (kWh), an estimate: Kress publishes no
+ * battery size. About 2 h per charge on a battery of about 1 kWh, mowing
+ * about 1.4 acres an hour, plus charging losses.
+ */
+export const KR238_KWH_PER_ACRE = 0.3;
+
+/** Mowings per week when mowing every `days` days. */
+export const mowsPerWeekOf = (days: number) => (days > 0 ? 7 / days : 0);
 export interface RoiInputs {
-  /** Turf to mow (acres), e.g. from the Acreage tab, and how often. */
+  /** Turf to mow (acres), e.g. from the Acreage tab, and the days between mowings (2 = every 2 days). */
   area: number;
-  mowsPerWeek: number;
+  mowEvery: number;
+  approach: Approach;
+  /** Extra robot time for this property's layout (%), from the mower fit: turns, edges, trees, driving. 0 = a plain square (never less). */
+  layoutPct: number;
+
+  /** KR238 price and installation per robot ($): charger, RTK antenna, mapping. */
+  kr238Price: number;
+  kr238Install: number;
+  /** Acres one KR238 keeps mowed all over every 48 h (Kress's rating). */
+  kr238Acres: number;
+  /** KR238 maintenance per robot per year ($). */
+  kr238Maint: number;
+  /** Checks per KR238 per week (h): cleaning, blades, freeing it. */
+  kr238Checks: number;
 
   voyPrice: number;
   batteryKwh: number;
@@ -79,9 +118,18 @@ export interface RoiInputs {
 }
 
 export const ROI_DEFAULTS: RoiInputs = {
-  // 35 acres once a week = one 7-acre Voyager mowing 5 days a week.
-  area: 35,
-  mowsPerWeek: 1,
+  // 10 acres every 2 days = 35 acres a week: one 7-acre Voyager mowing 5 days a week, or one KR238.
+  area: 10,
+  mowEvery: 2,
+  approach: "go",
+  layoutPct: 0,
+  // KR238: US$39,999 at a US dealer, converted like the Voyager's price (Oct. 2026); 20 acres every 48 h per Kress.
+  // Installation, maintenance and checks are estimates.
+  kr238Price: 55000,
+  kr238Install: 1500,
+  kr238Acres: 20,
+  kr238Maint: 600,
+  kr238Checks: 1,
   ...VOYAGER_PRESETS["7"],
   voyDaysPerWeek: 5,
   supHrs: 0.5,
@@ -119,7 +167,8 @@ export interface CostColumn {
 }
 
 export interface RoiResult {
-  /** Acres mowed per week and per season (same job on both sides). */
+  /** Mowings per week, and acres mowed per week and per season (same job on both sides). */
+  mowsPerWeek: number;
   weeklyAcres: number;
   seasonAcres: number;
   totalHours: number;
@@ -137,9 +186,11 @@ export interface RoiResult {
   annualLabor: number;
   ztMaintTotal: number;
 
-  /** Voyager units needed. */
+  /** Robot units needed (KR238s or Voyagers). */
   units: number;
-  /** Charges per season (one per acres-per-day of mowing). */
+  /** Robot equipment before grants and credits ($): price and installation. */
+  robotGross: number;
+  /** Voyager charges per season (one per acres-per-day of mowing); 0 for KR238s. */
   charges: number;
   kwhPerSeason: number;
   /** Voyager electricity per season ($). */
@@ -181,7 +232,9 @@ export function computeRoi(input: RoiInputs): RoiResult {
   const burden = input.burden / 100;
   const loadedWage = input.wage * (1 + burden);
 
-  const weeklyAcres = Math.max(0, input.area) * Math.max(0, input.mowsPerWeek);
+  const area = Math.max(0, input.area);
+  const mowsPerWeek = mowsPerWeekOf(input.mowEvery);
+  const weeklyAcres = area * mowsPerWeek;
   const seasonAcres = weeklyAcres * input.weeks;
   const totalHours = input.weeks * input.hoursPerWeek;
   const workDays = totalHours / HOURS_PER_WORKDAY;
@@ -198,20 +251,36 @@ export function computeRoi(input: RoiInputs): RoiResult {
   const annualLabor = crewFte * totalHours * loadedWage;
   const ztMaintTotal = ztMachines * input.ztMaint;
 
-  // Voyager fleet
-  const weeklyCapacity = input.voyAcresPerDay * input.voyDaysPerWeek;
-  const units = weeklyCapacity > 0 ? wholeUnits(weeklyAcres / weeklyCapacity) : 0;
-  const charges = input.voyAcresPerDay > 0 ? (weeklyAcres / input.voyAcresPerDay) * input.weeks : 0;
-  const kwhPerSeason = charges * input.batteryKwh;
+  // Robot fleet: the layout's extra time is mowing time, so it takes capacity and energy.
+  const layout = 1 + Math.max(0, input.layoutPct) / 100;
+  const stay = input.approach === "stay";
+  let units: number;
+  let charges = 0;
+  let kwhPerSeason: number;
+  let supHoursPerSeason: number;
+  if (stay) {
+    // KR238: rated for mowing it all every 48 h, so every day halves its area and every 3 days adds half.
+    const perUnit = (input.kr238Acres * input.mowEvery) / 2;
+    const load = perUnit > 0 ? (area * layout) / perUnit : 0;
+    units = load > 1 ? wholeUnits(load / STAY_LOAD) : wholeUnits(load);
+    kwhPerSeason = seasonAcres * layout * KR238_KWH_PER_ACRE;
+    supHoursPerSeason = units * input.kr238Checks * input.weeks;
+  } else {
+    const weeklyCapacity = input.voyAcresPerDay * input.voyDaysPerWeek;
+    units = weeklyCapacity > 0 ? wholeUnits((weeklyAcres * layout) / weeklyCapacity) : 0;
+    charges = input.voyAcresPerDay > 0 ? ((weeklyAcres * layout) / input.voyAcresPerDay) * input.weeks : 0;
+    kwhPerSeason = charges * input.batteryKwh;
+    supHoursPerSeason = units * input.supHrs * input.voyDaysPerWeek * input.weeks;
+  }
   const voyEnergy = kwhPerSeason * HQ_RATE;
-  const voyMaintTotal = units * input.voyMaint;
-  const supHoursPerSeason = units * input.supHrs * input.voyDaysPerWeek * input.weeks;
+  const voyMaintTotal = units * (stay ? input.kr238Maint : input.voyMaint);
   const supLabor = supHoursPerSeason * loadedWage;
+  const robotGross = units * (stay ? input.kr238Price + input.kr238Install : input.voyPrice);
 
   // Equipment: the zero-turns are a purchase avoided, or (already owned) their resale value.
   const ztUnitValue = input.ztStatus === "replace" ? input.ztPrice : input.ztResale;
   const ztEquip = ztMachines * ztUnitValue;
-  const voyEquip = Math.max(0, units * input.voyPrice - Math.max(0, input.incentives));
+  const voyEquip = Math.max(0, robotGross - Math.max(0, input.incentives));
 
   const zt: CostColumn = {
     equip: ztEquip,
@@ -244,6 +313,7 @@ export function computeRoi(input: RoiInputs): RoiResult {
     annualOpSavings <= 0 ? Infinity : netInvestment <= 0 ? 0 : netInvestment / (annualOpSavings / 12);
 
   return {
+    mowsPerWeek,
     weeklyAcres,
     seasonAcres,
     totalHours,
@@ -256,6 +326,7 @@ export function computeRoi(input: RoiInputs): RoiResult {
     annualLabor,
     ztMaintTotal,
     units,
+    robotGross,
     charges,
     kwhPerSeason,
     voyEnergy,
@@ -328,5 +399,7 @@ export function formatPayback(months: number, lang: RoiLang = "fr"): string {
 /** "268 %" in French, "268%" in English. */
 export function formatRoi(roiPct: number | null, lang: RoiLang = "fr"): string {
   if (roiPct === null) return lang === "en" ? "n/a" : "n/d";
-  return lang === "en" ? `${roiPct.toFixed(0)}%` : `${roiPct.toFixed(0)} %`;
+  // Math.round, not toFixed: a slightly negative ROI reads "0 %", not "-0 %".
+  const pct = String(Math.round(roiPct));
+  return lang === "en" ? `${pct}%` : `${pct} %`;
 }

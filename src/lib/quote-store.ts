@@ -2,9 +2,9 @@
 
 import { useSyncExternalStore } from "react";
 import type { IncentiveInputs } from "./incentives";
-import { DEFAULT_QUOTE, decodeQuote, type AcreageMode, type QuoteSettings } from "./quote";
+import { DEFAULT_QUOTE, decodeQuote, type AcreageMode, type MowEvery, type QuoteSettings } from "./quote";
 import type { LawnMeasurement } from "./lawn";
-import type { VoyagerModel } from "./roi";
+import type { Approach, VoyagerModel } from "./roi";
 import type { TerrainGrid } from "./terrain";
 import type { CourseMeasurement, SodMeasurement } from "./types";
 
@@ -16,11 +16,23 @@ import type { CourseMeasurement, SodMeasurement } from "./types";
  * - the LiDAR terrain under the measured property (slope, trees, buildings)
  *   and where the rep put the charger, for the mower fit on screen and in
  *   the PDF;
- * - acres sent to the ROI tab ("Send to ROI"), with the recommended Voyager
- *   size and a version number so the ROI tab applies each send exactly once;
+ * - acres sent to the ROI tab ("Send to ROI"), with how the robots work, how
+ *   often, the recommended Voyager size and the layout's extra time, and a
+ *   version number so the ROI tab applies each send exactly once;
  * - the Incentives tab's profile, so the ROI tab can price grants and credits
  *   for the Voyager purchase with the same province, profile and tax rate.
  */
+
+/** What "Send to ROI" carries; null fields keep the ROI tab's own values. */
+export interface RoiImport {
+  acres: number;
+  approach: Approach | null;
+  every: MowEvery | null;
+  model: VoyagerModel | null;
+  /** Extra robot time for the property's layout (%), from the mower fit. */
+  layoutPct: number | null;
+  version: number;
+}
 
 interface QuoteStoreState {
   settings: QuoteSettings;
@@ -32,7 +44,7 @@ interface QuoteStoreState {
   terrain: TerrainGrid | null;
   /** Where the rep put the robot's charger, [lat, lon]; null = estimated by the mower fit. */
   charger: [number, number] | null;
-  roiImport: { acres: number; model: VoyagerModel | null; version: number } | null;
+  roiImport: RoiImport | null;
   incentiveProfile: IncentiveInputs | null;
 }
 
@@ -143,9 +155,9 @@ export function setCharger(charger: [number, number] | null) {
   update({ charger });
 }
 
-/** Acres for the ROI tab, and the Voyager size the mower fit recommends (null keeps the tab's choice). */
-export function sendAcresToRoi(acres: number, model: VoyagerModel | null = null) {
-  update({ roiImport: { acres, model, version: (current().roiImport?.version ?? 0) + 1 } });
+/** Acres for the ROI tab, with what the mower fit recommends. */
+export function sendAcresToRoi(send: Omit<RoiImport, "version">) {
+  update({ roiImport: { ...send, version: (current().roiImport?.version ?? 0) + 1 } });
 }
 
 export function setIncentiveProfile(incentiveProfile: IncentiveInputs) {

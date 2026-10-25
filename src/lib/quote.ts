@@ -14,6 +14,7 @@
  */
 import { estimatedTurf } from "./landcover";
 import { lawnTotals, type LawnMeasurement } from "./lawn";
+import { isApproach, type Approach } from "./roi";
 import type { CourseMeasurement, SatelliteTurf, SodMeasurement } from "./types";
 
 /** What the Acreage tab measures: a golf course, a sod farm or a residential lawn. */
@@ -40,6 +41,8 @@ export interface QuoteSettings {
   lawnOverride: number | null;
   /** How often the robots mow it all (days): sizes the robot fleet in the mower fit. */
   mowEvery: MowEvery;
+  /** On a golf course: cut and stay (KR238s) or cut and go (Voyagers); null = whichever fits it better. */
+  approach: Approach | null;
 }
 
 /** Mowing every day, every 2 days (Kress's rating) or every 3. */
@@ -54,6 +57,7 @@ export const DEFAULT_QUOTE: QuoteSettings = {
   sodPct: 90,
   lawnOverride: null,
   mowEvery: 2,
+  approach: null,
 };
 
 const share = (pct: number) => Math.min(100, Math.max(0, pct)) / 100;
@@ -130,7 +134,7 @@ export function lawnQuoteSqft(lawn: LawnMeasurement | null, q: QuoteSettings): n
   return sqft > 0 ? sqft : null;
 }
 
-/** Share-link parameters: q_inc, q_pct, q_gpct for a course, q_spct for sod, q_ovr; q_lovr for a lawn. */
+/** Share-link parameters: q_inc, q_pct, q_gpct for a course (q_how: cut and stay or go), q_spct for sod, q_ovr; q_lovr for a lawn. */
 export function encodeQuote(q: QuoteSettings, mode: AcreageMode = "golf"): Record<string, string> {
   const every: Record<string, string> = q.mowEvery !== DEFAULT_QUOTE.mowEvery ? { q_every: String(q.mowEvery) } : {};
   if (mode === "lawn") return q.lawnOverride !== null ? { q_lovr: String(q.lawnOverride), ...every } : every;
@@ -141,6 +145,7 @@ export function encodeQuote(q: QuoteSettings, mode: AcreageMode = "golf"): Recor
           q_inc: QUOTE_CATEGORIES.filter((c) => q.include[c]).join(","),
           q_pct: String(q.roughPct),
           q_gpct: String(q.grassPct),
+          ...(q.approach && { q_how: q.approach }),
         };
   if (q.override !== null) params.q_ovr = String(q.override);
   return { ...params, ...every };
@@ -166,5 +171,7 @@ export function decodeQuote(params: URLSearchParams): QuoteSettings {
   if (params.has("q_lovr") && Number.isFinite(lovr) && lovr > 0) q.lawnOverride = lovr;
   const every = Number(params.get("q_every"));
   if (MOW_EVERY.includes(every as MowEvery)) q.mowEvery = every as MowEvery;
+  const how = params.get("q_how");
+  if (isApproach(how)) q.approach = how;
   return q;
 }

@@ -60,8 +60,11 @@ describe("share-link round trip", () => {
       sodPct: DEFAULT_QUOTE.sodPct,
       mowEvery: 3,
       lawnOverride: null,
+      approach: "stay",
     };
     expect(decodeQuote(new URLSearchParams(encodeQuote(q)))).toEqual(q);
+    expect(encodeQuote(q).q_how).toBe("stay");
+    expect(encodeQuote({ ...q, approach: null }).q_how).toBeUndefined();
   });
   it("a sod link carries the sod share only", () => {
     const q: QuoteSettings = { ...DEFAULT_QUOTE, sodPct: 75, override: null };
@@ -69,7 +72,7 @@ describe("share-link round trip", () => {
     expect(decodeQuote(new URLSearchParams(encodeQuote(q, "sod")))).toEqual(q);
   });
   it("ignores missing or bad values", () => {
-    expect(decodeQuote(new URLSearchParams("q_pct=abc&q_ovr=-3"))).toEqual(DEFAULT_QUOTE);
+    expect(decodeQuote(new URLSearchParams("q_pct=abc&q_ovr=-3&q_how=walk"))).toEqual(DEFAULT_QUOTE);
   });
 });
 

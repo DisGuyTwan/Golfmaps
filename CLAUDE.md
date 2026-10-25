@@ -10,8 +10,8 @@ mapped in detail), a sod farm's fields from Agriculture Canada's crop map and
 a residential lawn (Quebec cadastre lot minus buildings), for robotic mower
 quoting, plus an
 "Incentives" tab that estimates grant/tax savings on robotic mowers and battery
-tools (Quebec, Ontario, federal) and an "ROI" tab comparing a Kress
-Voyager with a zero-turn crew. Every tab is in English (default) and Quebec
+tools (Quebec, Ontario, federal) and an "ROI" tab comparing Kress robots
+(KR238s that cut and stay, or Voyagers that cut and go) with a zero-turn crew. Every tab is in English (default) and Quebec
 French, with light and dark themes. The tabs are connected (measured acres →
 ROI sizing; the Incentives profile → ROI's net investment) and every tab has a
 share link and a client PDF. The kind of property (course, farm or
@@ -67,7 +67,8 @@ src/components/
   AcreageReport.tsx          print-only Acreage PDF (replaces the map in print)
   SearchBox.tsx              Photon geocoder autocomplete
   IncentivesTab.tsx          incentive checker UI (client-only)
-  RoiTab.tsx                 Voyager ROI calculator UI, printable
+  RoiTab.tsx                 ROI calculator UI (cut and stay KR238 or cut and
+                             go Voyager, mowing every 1-3 days), printable
 src/lib/
   overpass.ts   builds the Overpass QL query; cache route, raced by 3 mirrors
   area.ts       OSM → GeoJSON → categorize → clip → acres  (the core logic)
@@ -95,7 +96,8 @@ src/lib/
   parcel.ts     Quebec cadastre lot lookup and parsing (pure parts tested)
   types.ts      BBox, CourseMeasurement, SatelliteTurf, SodField, SodMeasurement
   incentives.ts program rules, FR/EN copy and savings math (pure, tested)
-  roi.ts        Voyager ROI model sized from acreage, formatting (pure, tested)
+  roi.ts        ROI model (KR238 or Voyager fleet) sized from acreage and
+                mowing frequency, formatting (pure, tested)
   roi-copy.ts   ROI tab copy, FR and EN, incl. "as of" source for each default
   quote.ts      measurement → acres for the quote, share params (pure, tested)
   quote-store.ts  client store shared by the tabs (useSyncExternalStore)
@@ -240,9 +242,10 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   charger): one if it keeps up, else the fewest that each stay under 90 % of
   their capacity (`LIMIT_LOAD`; Voyager fleets fill to 100 % like the ROI
   tab's). A robot's capacity is its rating (every 48 h) × the mowing
-  frequency / 2: `QuoteSettings.mowEvery` is 1, 2 (default) or 3 days, picked
-  in the card (lawns, and golf when fairways are quoted), kept in links as
-  `q_every`; Voyagers follow the ROI tab's defaults whatever it says. A lawn
+  frequency / 2: `QuoteSettings.mowEvery` is 1, 2 (default) or 3 days, asked
+  in the card for every property ("How often do you want to mow?"), kept in
+  links as `q_every`. A Voyager's is its acres per charge × 5 charges a week
+  (the ROI tab's default) shared among the week's mowings (× days / 7). A lawn
   gets home robots only; commercial models join only past three of the
   biggest (`MAX_LAWN_UNITS`), so a steep 3-acre lot gets 2 × KR286, never a
   KR238. The area a unit must keep up with is its zone's area × the layout's
@@ -259,10 +262,18 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   and a lap around a 1 m trunk (`TRUNK_M`), and is listed with that time in
   the score. The charger
   is estimated (next to the house; the middle of the biggest area on a course
-  or farm) unless the rep places it (store `charger`, link `ch`). Golf with
-  fairways is two jobs (the KR238 on the fairways, the best robot on the
-  rest). Voyager units use the ROI tab's defaults (`capacityM2`), and Send to
-  ROI passes the Voyager size (`roiModel`). Specs are dated (`MOWERS_AS_OF`,
+  or farm) unless the rep places it (store `charger`, link `ch`). A golf
+  course asks "Cut and stay or cut and go?" (`recommendBoth`, store
+  `approach`, link `q_how`): cut and stay is KR238s living on the course,
+  cut and go Voyagers (KR800/KR804) the crew brings; each option shows its
+  fleet, and cut and stay is suggested whenever the KR238 can mow it all
+  (it's made to stay on a course). Golf with fairways is two jobs (the KR238
+  on the fairways either way, the chosen approach on the rest). A sod farm
+  is cut and go. Send to ROI passes the approach, the frequency, the
+  Voyager size (`roiModel`, the cut-and-go one on a course) and the layout's
+  extra time (`layoutPct`, never below 0), so the ROI tab sizes the same
+  fleet (it can differ by a unit where the layout reads quicker than a
+  square: the ROI tab never counts that). Specs are dated (`MOWERS_AS_OF`,
   in the copy); `passageM`, `speedMS`, `turnS` and most `runtimeMin` are
   estimates (Kress publishes none). Update both when Kress changes the lineup.
 - **Terrain is HRDEM LiDAR, read sparingly.** geotiff.js would load each 500 km
@@ -295,19 +306,27 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   "not tax advice" disclaimer; only "ok" (in force) items count toward the low
   end of the range.
 - **The ROI compares the same job on both sides.** Both are sized from the
-  acres to mow per week: zero-turn crew in full-time equivalents (paid for the
-  share of their shifts the mowing takes) on whole machines, versus whole
-  Voyager units at their acres per charge, plus supervision time. Existing
-  zero-turns are either a purchase avoided or (already owned) their resale
-  value; grants and the tax credit from the Incentives tab can reduce the
-  Voyager investment (write-offs never do: they're timing). Don't go back to
+  acres and how often they're mowed (every 1, 2 or 3 days, `r_every`; older
+  links' mowings per week map to the nearest): zero-turn crew in full-time
+  equivalents (paid for the share of their shifts the mowing takes) on whole
+  machines, versus whole robots (`r_how`): cut and stay is KR238s at their
+  48 h rating × days / 2, filled to 90 % when there are several
+  (`STAY_LOAD`, like the mower fit), with installation, electricity per acre
+  (`KR238_KWH_PER_ACRE`, an estimate) and a weekly check; cut and go is
+  Voyagers at their acres per charge, plus supervision time. Both take the
+  layout's extra time (`layoutPct`). The robot side keeps its `voy` names.
+  Existing zero-turns are either a purchase avoided or (already owned) their
+  resale value; grants and the tax credit from the Incentives tab can reduce
+  the robot investment (write-offs never do: they're timing). Don't go back to
   "one employee vs one Voyager": the handoff's figures are reproduced in
   `roi.test.ts` only as a formula regression with matching inputs.
 - **ROI defaults are dated market data.** Gas (live from StatCan only once its
   month is at least `DEFAULT_GAS_PERIOD`, since StatCan lags; else the dated
   default; bump both together), the Hydro-Québec Tarif G rate (`HQ_RATE`,
-  update each April 1), payroll rates (each January), Voyager prices and
-  capacities. Each default shows its source under the input (`asOf` in
+  update each April 1), payroll rates (each January), Voyager and KR238
+  prices and capacities (the KR238's US$39,999 dealer price is converted
+  like the Voyager's; its installation, maintenance, checks and energy are
+  estimates). Each default shows its source under the input (`asOf` in
   `roi-copy.ts`); when one changes, update that, the footnote and the
   "defaults" values in `roi.test.ts`. Equipment is counted once in payback/ROI,
   and there is deliberately no "Levier 2" / redeployment profit.

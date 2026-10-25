@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { UI } from "@/lib/i18n";
 import { DEFAULT_INCENTIVE_INPUTS, computeIncentives, describeInputs } from "@/lib/incentives";
 import { useLang } from "@/lib/preferences";
-import { acresForQuote } from "@/lib/quote";
+import { MOW_EVERY, acresForQuote, type MowEvery } from "@/lib/quote";
 import { useIncentiveProfile, useMeasurement, useMode, useQuoteSettings, useRoiImport, useSod } from "@/lib/quote-store";
 import { ROI_COPY } from "@/lib/roi-copy";
 import {
   DEFAULT_GAS_PERIOD,
+  KR238_KWH_PER_ACRE,
   ROI_DEFAULTS,
   VOYAGER_PRESETS,
   computeRoi,
@@ -17,23 +18,24 @@ import {
   fmtNumber,
   formatPayback,
   formatRoi,
+  isApproach,
+  type Approach,
   type RoiInputs,
   type VoyagerModel,
   type ZeroTurnStatus,
 } from "@/lib/roi";
 import { buildShareUrl, prefixed, readParams } from "@/lib/share";
 import { Icon, type IconName } from "./icons";
-import { Pop, SectionTitle, TabHeader, delay, ui } from "./ui";
+import { Pop, SectionTitle, Segmented, TabHeader, delay, ui } from "./ui";
 
-type NumericKey = Exclude<keyof RoiInputs, "batteryKwh" | "ztStatus" | "incentives">;
+type NumericKey = Exclude<keyof RoiInputs, "batteryKwh" | "ztStatus" | "incentives" | "approach" | "mowEvery">;
 /** Field values stay strings so they can be cleared and retyped live. */
 type Fields = Record<NumericKey, string>;
 /** Which incentives from the Incentives tab reduce the Voyager investment. */
 type IncMode = "none" | "low" | "high";
 
-const NUMERIC_KEYS = (Object.keys(ROI_DEFAULTS) as (keyof RoiInputs)[]).filter(
-  (k): k is NumericKey => k !== "batteryKwh" && k !== "ztStatus" && k !== "incentives",
-);
+const NOT_FIELDS = new Set<keyof RoiInputs>(["batteryKwh", "ztStatus", "incentives", "approach", "mowEvery"]);
+const NUMERIC_KEYS = (Object.keys(ROI_DEFAULTS) as (keyof RoiInputs)[]).filter((k): k is NumericKey => !NOT_FIELDS.has(k));
 
 const toFields = (i: RoiInputs): Fields =>
   Object.fromEntries(
@@ -48,6 +50,15 @@ const num = (v: string) => {
 
 const isModel = (v: string | undefined): v is VoyagerModel => v === "7" || v === "19" || v === "custom";
 const isIncMode = (v: string | undefined): v is IncMode => v === "none" || v === "low" || v === "high";
+const isEvery = (n: number): n is MowEvery => MOW_EVERY.includes(n as MowEvery);
+
+/** Days between mowings from a link: r_every, or the nearest to an older link's mowings per week. */
+function everyFromLink(link: Record<string, string>): MowEvery {
+  const every = Number(link.every);
+  if (isEvery(every)) return every;
+  const perWeek = Number(link.mowsPerWeek);
+  return perWeek > 0 ? (Math.min(3, Math.max(1, Math.round(7 / perWeek))) as MowEvery) : (ROI_DEFAULTS.mowEvery as MowEvery);
+}
 
 /** Defaults, overridden by a share link's r_ parameters (r_area=60, r_model=19, …). */
 function initialState() {
@@ -59,6 +70,8 @@ function initialState() {
   const battery = Number(link.battery);
   return {
     fields,
+    approach: isApproach(link.how) ? link.how : ROI_DEFAULTS.approach,
+    every: everyFromLink(link),
     model: isModel(link.model) ? link.model : ("7" as VoyagerModel),
     batteryKwh: Number.isFinite(battery) && battery > 0 ? battery : ROI_DEFAULTS.batteryKwh,
     ztStatus: (link.ztStatus === "own" ? "own" : "replace") as ZeroTurnStatus,
@@ -117,6 +130,42 @@ function Row({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** "label … value" in print, for a choice made with buttons on screen. */
+function PrintLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="hidden items-center gap-2 print:mt-0.5 print:flex">
+      <span className={`${ui.label} flex-1 text-[9px]`}>{label}</span>
+      <span className="text-[11px] font-semibold">{value}</span>
+    </div>
+  );
+}
+
+/** One question answered with buttons (screen), or one line (print). */
+function Choice<T extends string | number>({
+  label,
+  short,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  /** The label in print. */
+  short: string;
+  value: T;
+  options: { value: T; label: string; sub?: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <>
+      <div className="print:hidden">
+        <div className={`${ui.label} mb-1 mt-3 block`}>{label}</div>
+        <Segmented label={label} value={value} options={options} onChange={onChange} size="md" />
+      </div>
+      <PrintLine label={short} value={options.find((o) => o.value === value)?.label ?? ""} />
+    </>
+  );
+}
+
 export default function RoiTab() {
   const lang = useLang();
   const t = ROI_COPY[lang];
@@ -126,13 +175,16 @@ export default function RoiTab() {
   const decimal = (n: number, digits = 2) => n.toLocaleString(locale, { maximumFractionDigits: digits });
 
   const [initial] = useState(initialState);
+  const [approach, setApproach] = useState<Approach>(initial.approach);
+  const [every, setEvery] = useState<MowEvery>(initial.every);
   const [model, setModel] = useState<VoyagerModel>(initial.model);
   const [batteryKwh, setBatteryKwh] = useState(initial.batteryKwh);
   const [fields, setFields] = useState<Fields>(initial.fields);
   const [ztStatus, setZtStatus] = useState<ZeroTurnStatus>(initial.ztStatus);
   const [incMode, setIncMode] = useState<IncMode>(initial.incMode);
 
-  // Acreage sent from the Acreage tab ("Send to ROI"): applied once per send.
+  // Acreage sent from the Acreage tab ("Send to ROI"), with how the robots work, how often and the
+  // layout's extra time from the mower fit: applied once per send.
   const roiImport = useRoiImport();
   const [seenImport, setSeenImport] = useState(0);
   if (roiImport && roiImport.version !== seenImport) {
@@ -142,9 +194,12 @@ export default function RoiTab() {
       setModel(roiImport.model!);
       setBatteryKwh(preset.batteryKwh);
     }
+    if (roiImport.approach) setApproach(roiImport.approach);
+    if (roiImport.every) setEvery(roiImport.every);
     setFields((prev) => ({
       ...prev,
       area: String(Math.round(roiImport.acres * 100) / 100),
+      ...(roiImport.layoutPct !== null && { layoutPct: String(roiImport.layoutPct) }),
       ...(preset && {
         voyPrice: String(preset.voyPrice),
         voyMaint: String(preset.voyMaint),
@@ -183,17 +238,17 @@ export default function RoiTab() {
 
   const base = useMemo<RoiInputs>(() => {
     const parsed = Object.fromEntries(NUMERIC_KEYS.map((k) => [k, num(fields[k])])) as Record<NumericKey, number>;
-    return { ...parsed, batteryKwh, ztStatus, incentives: 0 };
-  }, [fields, batteryKwh, ztStatus]);
+    return { ...parsed, approach, mowEvery: every, batteryKwh, ztStatus, incentives: 0 };
+  }, [fields, approach, every, batteryKwh, ztStatus]);
 
-  // Incentives for this Voyager purchase, priced with the Incentives tab's profile.
+  // Incentives for this robot purchase, priced with the Incentives tab's profile.
   const sized = useMemo(() => computeRoi(base), [base]);
   const profile = useIncentiveProfile() ?? DEFAULT_INCENTIVE_INPUTS;
   const incentives = useMemo(() => {
-    const s = { ...profile, buyRobot: true, robotAmt: sized.units * base.voyPrice, buyTools: false, toolAmt: 0 };
+    const s = { ...profile, buyRobot: true, robotAmt: sized.robotGross, buyTools: false, toolAmt: 0 };
     const res = computeIncentives(s, lang);
     return { low: res.keptLow, high: res.keptHigh, profile: describeInputs(s, res, lang).profile };
-  }, [profile, sized.units, base.voyPrice, lang]);
+  }, [profile, sized.robotGross, lang]);
   const credit = incMode === "low" ? incentives.low : incMode === "high" ? incentives.high : 0;
   const r = useMemo(() => computeRoi({ ...base, incentives: credit }), [base, credit]);
 
@@ -231,7 +286,7 @@ export default function RoiTab() {
   const shareUrl = () =>
     buildShareUrl(
       window.location,
-      prefixed("r_", { ...fields, model, battery: batteryKwh, ztStatus, inc: incMode }),
+      prefixed("r_", { ...fields, every, how: approach, model, battery: batteryKwh, ztStatus, inc: incMode }),
       "#roi",
     );
 
@@ -239,6 +294,8 @@ export default function RoiTab() {
     ? new Date(`${gasLivePeriod}-15T12:00:00`).toLocaleDateString(locale, { month: "long", year: "numeric" })
     : null;
   const cpaSaving = r.ztCpa - r.voyCpa;
+  const stay = approach === "stay";
+  const robotName = stay ? "KR238" : "Voyager";
 
   return (
     // Printed at 80% so the client summary fits one Letter page.
@@ -262,10 +319,6 @@ export default function RoiTab() {
               <Label htmlFor="area">{t.area}</Label>
               {field("area", { min: 0, step: 0.5 })}
             </div>
-            <div>
-              <Label htmlFor="mowsPerWeek">{t.mowsPerWeek}</Label>
-              {field("mowsPerWeek", { min: 0, step: 0.5 })}
-            </div>
           </Row>
           {measuredAcres !== null && Math.abs(measuredAcres - num(fields.area)) > 0.005 && (
             <button
@@ -277,9 +330,69 @@ export default function RoiTab() {
               {t.useAcreage(decimal(measuredAcres))}
             </button>
           )}
-          <Derived>{t.weeklyAcres(decimal(r.weeklyAcres, 1))}</Derived>
+          <Choice
+            label={t.every}
+            short={t.everyShort}
+            value={every}
+            options={MOW_EVERY.map((days) => ({ value: days, label: t.everyOptions[days] }))}
+            onChange={setEvery}
+          />
+          <Derived>{t.weeklyAcres(decimal(r.mowsPerWeek, 1), decimal(r.weeklyAcres, 1))}</Derived>
 
-          <H2 icon="mower">Voyager</H2>
+          <H2 icon="mower">{t.robots}</H2>
+          <Choice
+            label={t.approach}
+            short={t.approachShort}
+            value={approach}
+            options={(["stay", "go"] as const).map((a) => ({ value: a, label: t.approaches[a].name, sub: t.approaches[a].model }))}
+            onChange={setApproach}
+          />
+          <Hint>{t.approaches[approach].hint}</Hint>
+
+          {stay ? (
+            <>
+              <Row>
+                <div>
+                  <Label htmlFor="kr238Price">{t.kr238Price}</Label>
+                  {field("kr238Price")}
+                  <Hint>{t.asOf.kr238Price}</Hint>
+                </div>
+                <div>
+                  <Label htmlFor="kr238Install">{t.kr238Install}</Label>
+                  {field("kr238Install")}
+                  <Hint>{t.asOf.install}</Hint>
+                </div>
+              </Row>
+              <Row>
+                <div>
+                  <Label htmlFor="kr238Acres">{t.kr238Acres}</Label>
+                  {field("kr238Acres", { min: 0, step: 0.5 })}
+                  <Hint>{t.asOf.kr238Acres}</Hint>
+                </div>
+                <div>
+                  <Label htmlFor="kr238Checks">{t.kr238Checks}</Label>
+                  {field("kr238Checks", { min: 0, step: 0.25 })}
+                  <Hint>{t.kr238ChecksHint}</Hint>
+                </div>
+              </Row>
+              <Row>
+                <div>
+                  <Label htmlFor="kr238Energy">{t.kr238Energy}</Label>
+                  <input id="kr238Energy" readOnly value={r.voyEnergy.toFixed(0)} className={readonlyCls} />
+                  <Hint>
+                    {t.kr238EnergyHint(count(r.kwhPerSeason / KR238_KWH_PER_ACRE), decimal(KR238_KWH_PER_ACRE, 1), count(r.kwhPerSeason))} ·{" "}
+                    {t.asOf.hq}
+                  </Hint>
+                </div>
+                <div>
+                  <Label htmlFor="kr238Maint">{t.kr238Maint}</Label>
+                  {field("kr238Maint")}
+                  <Hint>{t.asOf.maint}</Hint>
+                </div>
+              </Row>
+            </>
+          ) : (
+            <>
           <Label htmlFor="model">{t.model}</Label>
           <select id="model" value={model} onChange={(e) => changeModel(e.target.value as VoyagerModel)} className={inputCls}>
             <option value="7">{t.model7}</option>
@@ -325,7 +438,16 @@ export default function RoiTab() {
               <Hint>{t.asOf.maint}</Hint>
             </div>
           </Row>
-          <Derived>{t.fleet(r.units)}</Derived>
+            </>
+          )}
+          <Row>
+            <div>
+              <Label htmlFor="layoutPct">{t.layoutPct}</Label>
+              {field("layoutPct", { min: 0, step: 5 })}
+            </div>
+          </Row>
+          <Hint>{t.layoutHint}</Hint>
+          <Derived>{stay ? t.kr238Fleet(r.units, decimal(r.units > 0 ? num(fields.area) / r.units : 0, 1)) : t.fleet(r.units)}</Derived>
 
           <H2 icon="users">{t.crew}</H2>
           <Row>
@@ -420,7 +542,7 @@ export default function RoiTab() {
           {field("years", { min: 1, max: 10 })}
 
           <div className="print:hidden">
-            <Note>{t.sourcesNote}</Note>
+            <Note>{t.sourcesNote(approach)}</Note>
           </div>
         </section>
 
@@ -432,7 +554,7 @@ export default function RoiTab() {
               <tr className="bg-accent-soft text-accent-ink">
                 <th className="px-2.5 py-2 text-left" />
                 <th className="px-2.5 py-2 text-right">{t.colZt(r.ztMachines)}</th>
-                <th className="px-2.5 py-2 text-right">{t.colVoy(r.units)}</th>
+                <th className="px-2.5 py-2 text-right">{t.colVoy(robotName, r.units)}</th>
               </tr>
             </thead>
             <tbody>
@@ -490,7 +612,7 @@ export default function RoiTab() {
                   cpa: r.ztCpa,
                 },
                 {
-                  title: "Voyager",
+                  title: robotName,
                   icon: "mower",
                   annual: r.voyAnnual,
                   rows: [
@@ -572,7 +694,7 @@ export default function RoiTab() {
 
         {/* In print the sources run full width under both columns, to fit one page. */}
         <div className="hidden print:col-span-2 print:block print:px-2">
-          <Note>{t.sourcesNote}</Note>
+          <Note>{t.sourcesNote(approach)}</Note>
         </div>
       </div>
 

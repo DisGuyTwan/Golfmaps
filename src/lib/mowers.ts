@@ -16,7 +16,7 @@
  */
 import { overhead, share, type Overhead, type Pace } from "./coverage";
 import type { MowEvery } from "./quote";
-import { ROI_DEFAULTS } from "./roi";
+import { ROI_DEFAULTS, type Approach } from "./roi";
 import type { Site } from "./site";
 import type { TerrainStats } from "./terrain";
 
@@ -98,6 +98,11 @@ export function mowerName(m: Mower): string {
   return `Kress ${LINE_NAME[m.line]} ${m.id}${deck}`;
 }
 
+/** How a commercial robot works: the KR238 cuts and stays on the property, a Voyager cuts and goes with the crew. */
+export function approachOf(m: Mower): Approach | null {
+  return m.line === "masterseries" ? "stay" : m.line === "voyager" ? "go" : null;
+}
+
 /** The ROI tab's Voyager preset for a recommended Voyager, if it is one. */
 export function roiModel(m: Mower | undefined | null): "7" | "19" | null {
   return m?.id === "KR800" ? "7" : m?.id === "KR804" ? "19" : null;
@@ -134,12 +139,12 @@ export interface Fit {
 /**
  * Area one unit keeps mowed (m²). Robots are rated for mowing it all every
  * 48 h, so mowing every day halves it and every 3 days adds half. A Voyager
- * mows its rating per charge, so it covers that many days' worth at the ROI
- * tab's defaults (5 mowing days, once a week), so both tabs size the same
- * fleet; the mowing frequency doesn't change it.
+ * mows its rating per charge, one charge per mowing day (5 a week, the ROI
+ * tab's default), shared among the week's mowings, so both tabs size the
+ * same fleet.
  */
 export function capacityM2(mower: Mower, everyDays: MowEvery = 2): number {
-  return mower.line === "voyager" ? (mower.areaM2 * ROI_DEFAULTS.voyDaysPerWeek) / ROI_DEFAULTS.mowsPerWeek : (mower.areaM2 * everyDays) / 2;
+  return mower.line === "voyager" ? (mower.areaM2 * ROI_DEFAULTS.voyDaysPerWeek * everyDays) / 7 : (mower.areaM2 * everyDays) / 2;
 }
 
 /**
@@ -247,16 +252,18 @@ export function fitMower(site: Site, mower: Mower, everyDays: MowEvery = 2): Fit
 /**
  * The robots a recommendation chooses from for each kind of site. A lawn gets
  * home robots (several on a big one); past three of the biggest (at Kress's
- * every-2-days rating), the commercial ones are compared too.
+ * every-2-days rating), the commercial ones are compared too. A sod farm gets
+ * Voyagers; a golf course the commercial robots, or only those that work the
+ * chosen way (cut and stay: the KR238; cut and go: the Voyagers).
  */
-function candidates(site: Site): Mower[] {
+function candidates(site: Site, approach: Approach | null = null): Mower[] {
   if (site.kind === "lawn") {
     const residential = MOWERS.filter((m) => !m.commercial);
     const biggest = Math.max(...residential.map((m) => m.areaM2));
     return site.areaM2 <= MAX_LAWN_UNITS * biggest ? residential : MOWERS;
   }
   if (site.kind === "sod") return MOWERS.filter((m) => m.line === "voyager");
-  return MOWERS.filter((m) => m.commercial);
+  return MOWERS.filter((m) => m.commercial && (!approach || approachOf(m) === approach));
 }
 
 export interface Recommendation {
@@ -281,10 +288,10 @@ const FAIRWAY_CUT_MM = 15;
  * The best robot for a site and the next best, with why. A golf quote with
  * fairways is two jobs: the fairways need a robot that cuts 10-15 mm (the
  * MasterSeries), sized on the fairways alone; the rest goes to whichever
- * robot suits it best, usually a Voyager. Both take the whole turf's layout
- * (its extra time is a ratio).
+ * robot suits it best (of those working the `approach` way, if given). Both
+ * take the whole turf's layout (its extra time is a ratio).
  */
-export function recommend(site: Site, everyDays: MowEvery = 2): Recommendation {
+export function recommend(site: Site, everyDays: MowEvery = 2, approach: Approach | null = null): Recommendation {
   const trimmed = trimmerShare(site);
   if (site.areaM2 <= 0) return { best: null, runnerUp: null, rough: null, fits: [], trimmed: 0 };
   if (site.kind === "golf" && site.fairwayM2 > 0) {
@@ -296,10 +303,34 @@ export function recommend(site: Site, everyDays: MowEvery = 2): Recommendation {
     const ok = fits.filter((f) => f.fits);
     const restM2 = site.areaM2 - site.fairwayM2;
     const rest: Site = { ...site, areaM2: restM2, fairwayM2: 0 };
-    const rough = restM2 > 0 ? (candidates(rest).map((m) => fitMower(rest, m, everyDays)).filter((f) => f.fits).sort(rank)[0] ?? null) : null;
+    const rough =
+      restM2 > 0 ? (candidates(rest, approach).map((m) => fitMower(rest, m, everyDays)).filter((f) => f.fits).sort(rank)[0] ?? null) : null;
     return { best: ok[0] ?? null, runnerUp: ok[1] ?? null, rough, fits, trimmed };
   }
-  const fits = candidates(site).map((m) => fitMower(site, m, everyDays)).sort(rank);
+  const fits = candidates(site, approach).map((m) => fitMower(site, m, everyDays)).sort(rank);
   const ok = fits.filter((f) => f.fits);
   return { best: ok[0] ?? null, runnerUp: ok[1] ?? null, rough: null, fits, trimmed };
+}
+
+/** The robots that mow the whole site, or (golf with fairways) everything but the fairways. */
+export const mainFleet = (r: Recommendation): Fit | null => r.rough ?? r.best;
+
+export interface Approaches {
+  stay: Recommendation;
+  go: Recommendation;
+  /** Shown until the rep picks: cut and stay when the KR238 can mow it all, else cut and go. */
+  suggested: Approach;
+}
+
+/**
+ * A golf course both ways, for the rep to pick: cut and stay (KR238s) and
+ * cut and go (Voyagers; the fairways still go to KR238s, the only robot that
+ * cuts that low). Cut and stay is suggested whenever it fits: the KR238 is
+ * the robot made to stay on a course, while a Voyager's fleet is sized for
+ * a crew moving it around.
+ */
+export function recommendBoth(site: Site, everyDays: MowEvery = 2): Approaches {
+  const stay = recommend(site, everyDays, "stay");
+  const go = recommend(site, everyDays, "go");
+  return { stay, go, suggested: mainFleet(stay) || !mainFleet(go) ? "stay" : "go" };
 }

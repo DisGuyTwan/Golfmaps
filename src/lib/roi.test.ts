@@ -24,7 +24,7 @@ const run = (overrides: Partial<RoiInputs> = {}) => computeRoi({ ...ROI_DEFAULTS
  * model must reproduce the handoff's acceptance values.
  */
 describe("handoff regression: one employee vs one Voyager", () => {
-  const handoff = { area: 82.5, voyAcresPerDay: 16.5, supHrs: 0, gasPrice: 1.8 };
+  const handoff = { area: 82.5, mowEvery: 7, voyAcresPerDay: 16.5, supHrs: 0, gasPrice: 1.8 };
   const r = run(handoff);
 
   it("sizes to exactly one crew member and one Voyager, 825 h of mowing", () => {
@@ -52,10 +52,11 @@ describe("handoff regression: one employee vs one Voyager", () => {
   });
 });
 
-describe("defaults: 35 acres once a week, the same job on both sides", () => {
+describe("defaults: 10 acres every 2 days (35 a week), the same job on both sides", () => {
   const r = run();
 
   it("needs 0,42 of a zero-turn operator but one whole machine, and one Voyager", () => {
+    expect(r.mowsPerWeek).toBe(3.5);
     expect(r.weeklyAcres).toBe(35);
     expect(r.crewFte).toBeCloseTo(35 / 3 / 27.5, 9);
     expect([r.ztMachines, r.units]).toEqual([1, 1]);
@@ -78,7 +79,7 @@ describe("defaults: 35 acres once a week, the same job on both sides", () => {
 });
 
 describe("sizing a bigger job", () => {
-  const r = run({ area: 100, mowsPerWeek: 2 });
+  const r = run({ area: 100, mowEvery: 3.5 });
 
   it("200 acres a week: 2,42 operators on 3 zero-turns vs 6 Voyagers", () => {
     expect(r.crewFte).toBeCloseTo(2.4242, 4);
@@ -90,8 +91,65 @@ describe("sizing a bigger job", () => {
     expect(r.supHoursPerSeason).toBe(6 * 0.5 * 5 * 30);
   });
   it("one 19-acre Voyager mowing 7 days covers 133 acres a week", () => {
-    expect(run({ ...VOYAGER_PRESETS["19"], area: 133, voyDaysPerWeek: 7 }).units).toBe(1);
-    expect(run({ ...VOYAGER_PRESETS["19"], area: 134, voyDaysPerWeek: 7 }).units).toBe(2);
+    expect(run({ ...VOYAGER_PRESETS["19"], area: 133, mowEvery: 7, voyDaysPerWeek: 7 }).units).toBe(1);
+    expect(run({ ...VOYAGER_PRESETS["19"], area: 134, mowEvery: 7, voyDaysPerWeek: 7 }).units).toBe(2);
+  });
+});
+
+describe("cut and stay: KR238s on the property", () => {
+  const stay = (overrides: Partial<RoiInputs> = {}) => run({ approach: "stay", ...overrides });
+
+  it("one KR238 keeps 20 acres mowed every 2 days, half of that daily, 30 acres every 3 days", () => {
+    expect(stay().units).toBe(1);
+    expect(stay({ area: 20 }).units).toBe(1);
+    expect(stay({ area: 10, mowEvery: 1 }).units).toBe(1);
+    expect(stay({ area: 30, mowEvery: 3 }).units).toBe(1);
+  });
+  it("a fleet of several fills each robot to 90 %", () => {
+    expect(stay({ area: 20.5 }).units).toBe(2);
+    expect(stay({ area: 36 }).units).toBe(2);
+    expect(stay({ area: 36.5 }).units).toBe(3);
+    // A big course: 166.7 acres every 2 days, every 3 days, every day.
+    expect([2, 3, 1].map((mowEvery) => stay({ area: 166.7, mowEvery }).units)).toEqual([10, 7, 19]);
+  });
+  it("prices the robot with its installation, a weekly check and electricity per acre", () => {
+    const r = stay();
+    expect(r.robotGross).toBe(55000 + 1500);
+    expect(r.voyMaintTotal).toBe(600);
+    expect(r.supHoursPerSeason).toBe(30);
+    expect(r.charges).toBe(0);
+    expect(r.kwhPerSeason).toBeCloseTo(35 * 30 * 0.3, 9);
+    expect(r.netInvestment).toBe(56500 - 25000);
+  });
+  it("the zero-turn side is the same job whichever robot", () => {
+    const go = run();
+    const r = stay();
+    expect([r.crewFte, r.ztMachines, r.zt.total]).toEqual([go.crewFte, go.ztMachines, go.zt.total]);
+  });
+  it("13 545 $ / an, 12,19 $ per acre, payback 1 an 7 mois, ROI 215 %", () => {
+    const r = stay();
+    expect(plain(fmtMoney(r.annualProfit))).toBe("13 545 $");
+    expect(plain(fmtMoney2(r.voyCpa))).toBe("12,19 $");
+    expect(formatPayback(r.paybackMonths)).toBe("1 an 7 mois");
+    expect(formatRoi(r.roiPct)).toBe("215 %");
+  });
+});
+
+describe("mowing frequency and the property's layout", () => {
+  it("mowing every day is twice the job of every 2 days", () => {
+    expect(run({ mowEvery: 1 }).weeklyAcres).toBe(70);
+    expect(run({ mowEvery: 3 }).weeklyAcres).toBeCloseTo(70 / 3, 9);
+  });
+  it("extra time for the layout takes robot capacity and energy, not the crew's", () => {
+    const plainSquare = run();
+    const ragged = run({ layoutPct: 10 });
+    expect(ragged.units).toBe(2);
+    expect(ragged.charges).toBeCloseTo(plainSquare.charges * 1.1, 9);
+    expect(ragged.crewFte).toBe(plainSquare.crewFte);
+    expect(run({ approach: "stay", area: 18, layoutPct: 15 }).units).toBe(2);
+  });
+  it("a robot never beats its rating: no layout counts as quicker than a plain square", () => {
+    expect(run({ layoutPct: -10 }).charges).toBe(run().charges);
   });
 });
 
@@ -138,6 +196,8 @@ describe("acceptance: edge cases", () => {
   it("empty productivity fields while typing don't divide by zero", () => {
     const r = run({ ztAcresPerHour: 0, voyAcresPerDay: 0, ztMowHrs: 0 });
     expect([r.crewFte, r.units, r.charges]).toEqual([0, 0, 0]);
+    expect(run({ approach: "stay", kr238Acres: 0 }).units).toBe(0);
+    expect(run({ mowEvery: 0 }).weeklyAcres).toBe(0);
   });
 });
 

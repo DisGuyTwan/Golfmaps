@@ -84,6 +84,54 @@ const NOTICE = {
 /** A notice tone's colors, for chips that should match the notices. */
 export const toneClass = (tone: keyof typeof NOTICE) => NOTICE[tone].cls;
 
+/**
+ * One question answered with buttons side by side, the chosen one filled
+ * (how often to mow, cut and stay or cut and go). `sub` is a second line
+ * under an option; "sm" is the Acreage panel's size, "md" the forms'.
+ */
+export function Segmented<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+  size = "sm",
+}: {
+  /** Names the group for screen readers; the caller shows the question. */
+  label: string;
+  value: T;
+  options: { value: T; label: string; sub?: string }[];
+  onChange: (value: T) => void;
+  size?: "sm" | "md";
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className="grid gap-1 rounded-lg border border-line bg-surface-2 p-1"
+      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
+    >
+      {options.map((o) => (
+        <button
+          key={String(o.value)}
+          type="button"
+          aria-pressed={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={`flex flex-col items-center justify-center rounded-md text-center font-semibold transition-all duration-200 active:scale-[0.98] ${
+            size === "sm" ? "min-h-8 px-1 py-1 text-xs" : "min-h-10 px-2 py-1.5 text-sm"
+          } ${value === o.value ? "bg-brand text-white shadow-sm" : "text-muted hover:text-ink"}`}
+        >
+          {o.label}
+          {o.sub && (
+            <span className={`font-medium ${size === "sm" ? "text-[11px]" : "text-xs"} ${value === o.value ? "text-white/80" : "text-faint"}`}>
+              {o.sub}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Short message box with its icon: info (blue), warn (amber) or error (red). */
 export function Notice({ tone, children }: { tone: keyof typeof NOTICE; children: React.ReactNode }) {
   const { icon, cls } = NOTICE[tone];

@@ -35,7 +35,8 @@ surfaces, cadastre lots and the gas price and collect client errors in the
 runtime logs.
 
 The tabs work together: measure a course, choose what's actually mowed, and
-**Send to ROI** sizes the zero-turn crew and the Voyager fleet for those acres;
+**Send to ROI** sizes the zero-turn crew and the robot fleet (KR238s or
+Voyagers, mowing every 1, 2 or 3 days) for those acres;
 the ROI tab prices grants and credits with the profile picked on the
 Incentives tab. Every tab has a **Copy link** (its inputs go in the URL, so a
 quote can be reopened or sent) and a **Print / PDF** for clients.
@@ -285,10 +286,15 @@ hard the property is for a robot and which Kress model to quote:
   Then the fewest drawbacks win (no camera under trees, no 4x4 on slopes over
   14°, no ZeroTrim on lawns that are mostly edges, no obstacle avoidance among
   many obstacles and trees, a passage narrower than the robot, each extra
-  unit), then the lowest outlay. On a course with fairways in the quote, the MasterSeries takes the
-  fairways (it cuts to 10 mm) and the best robot the rest, usually a Voyager;
-  a sod farm gets a Voyager. The card says about how many hours a full mow
-  takes. Send to ROI carries the recommended Voyager size to the ROI tab.
+  unit), then the lowest outlay. The card asks how often to mow (every 1, 2
+  or 3 days). On a golf course it also asks **cut and stay or cut and go**:
+  KR238s that stay on the course, each with its zone and charger, or
+  Voyagers the crew brings (KR800, KR804), each option with its fleet; cut
+  and stay is suggested whenever the KR238 can mow it all. With fairways in
+  the quote, the MasterSeries takes the fairways either way (it cuts to
+  10 mm). A sod farm gets a Voyager. The card says about how many hours a
+  full mow takes. Send to ROI carries the approach, the frequency, the
+  Voyager size and the layout's extra time to the ROI tab.
 
 Kress specs are as of Oct 24, 2026 (`src/lib/mowers.ts`). Kress publishes no
 minimum passage width, mowing speed or (for most models) run time per charge,
@@ -315,10 +321,14 @@ tax advice.
 ## ROI tab
 
 A live ROI calculator for client meetings: a crew on 60" zero-turns versus
-Kress Voyagers **mowing the same acreage**, over a 1 to 10 year horizon. From the
-acres to mow per week it sizes the zero-turn crew (full-time equivalents and
-machines, at about 3 acres/h) and the Voyager fleet (7 or 19 acres per charge),
-adds Voyager supervision time, treats existing zero-turns as either due for
+Kress robots **mowing the same acreage just as often** (every 1, 2 or 3 days),
+over a 1 to 10 year horizon. It asks how the robots will work: **cut and
+stay** (KR238s that live on the property, 20 acres every 48 h each, about
+55,000 $ plus installation; US$39,999 at a US dealer, converted) or **cut and
+go** (Voyagers the crew brings, 7 or 19 acres per charge). From the acres it
+sizes the zero-turn crew (full-time equivalents and machines, at about
+3 acres/h) and the robot fleet (with the layout's extra time from the mower
+fit), adds the robots' checks or supervision time, treats existing zero-turns as either due for
 replacement or already owned (resale value), and can deduct grants and credits
 from the Incentives tab. It shows total cost, profit per year, cost per acre
 mowed and payback/ROI, with the source and date of each default under its
