@@ -63,6 +63,9 @@ describe("when the robots may mow", () => {
     const stay = { ...ROI_DEFAULTS, approach: "stay" as const, area: 60, mowEvery: 2 };
     expect(computeRoi(stay).units).toBe(4);
     expect(computeRoi({ ...stay, window: WINDOW_PRESETS.nights }).units).toBe(7);
+    // Field checks that found the KR238 takes 1.5× our time: 13.3 acres each, 5 for 60 acres.
+    expect(computeRoi({ ...stay, calibration: { KR238: 1.5 } }).units).toBe(5);
+    expect(capacityM2(mower("KR238"), 2, { calibration: { KR238: 1.5 } })).toBeCloseTo(capacityM2(mower("KR238"), 2) / 1.5, 3);
     const go = { ...ROI_DEFAULTS, approach: "go" as const, area: 14, mowEvery: 2 };
     expect(computeRoi(go).units).toBe(2);
     expect(computeRoi({ ...go, window: { from: 7, to: 11, days: 7 } }).units).toBe(3);

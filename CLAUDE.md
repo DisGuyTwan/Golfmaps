@@ -20,11 +20,15 @@ lot) is detected from where the rep taps or what they search, and one engine
 fit: how hard the property is for a robot and which Kress model fits. A
 "grass run" plans a crew's day of cut-and-go stops (several addresses, each
 measured like a lawn) in the order with the least driving, routed on
-OpenStreetMap's roads. No API keys and no
-database: seven small route handlers (Overpass cache, land cover, LiDAR terrain,
-aerial photo surfaces, Quebec cadastre lot, gas price, client error log) run on
-Vercel; everything
-else goes straight from the browser to public APIs (built-in `fetch`).
+OpenStreetMap's roads. A "Proposal" tab turns it into one client document
+with a link the client opens and accepts. Small route handlers run on
+Vercel (Overpass cache, land cover, LiDAR terrain, aerial photo surfaces,
+Quebec cadastre lot, gas price, client error log; proposals, field records
+and usage counts); everything else goes straight from the browser to public
+APIs (built-in `fetch`). The measuring takes no API keys; proposals, records
+and usage keep a small database (Upstash Redis on Vercel, over its REST
+API) and email the rep through Resend, all optional (see .env.example):
+without them the app runs as before and says what isn't connected.
 
 ## Layout
 
@@ -44,6 +48,15 @@ src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
   api/parcel/     the Quebec cadastre lot at a point (CDN 1 week), for lawns
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
+  api/proposals/  POST save one (team key) → /p/<id>; GET the list (team key);
+                  [id] read one; [id]/events open, section read, accept
+                  (the first open and the acceptance email the rep)
+  api/records/    field checks and installs: GET the summary (public, 5 min),
+                  ?all=1 the list, POST add or { delete } (team key)
+  api/usage/      POST count one use (names in usage.ts); GET 30 days (team key)
+  (app)/          the app itself (page.tsx) behind its boot splash (layout.tsx)
+  p/[id]/         a client's proposal (no splash, not indexed)
+  admin/          the team's page: usage, proposals, records (team key)
 src/components/
   ui.tsx                     shared TabHeader, SectionTitle, Notice, Loader, Pop,
                              Segmented; re-exports the style classes
@@ -52,8 +65,14 @@ src/components/
   icons.tsx                  the app's line-icon set (<Icon name>, ICON_PATHS)
   BootSplash.tsx             full-screen boot sequence (server-rendered, fades out
                              after hydration; styles and timeline in app/boot.css)
-  AppTabs.tsx                tab bar (Acreage | Incentives | ROI) + FR/EN and
-                             light/dark buttons; tab in the URL hash
+  AppTabs.tsx                tab bar (Acreage | Incentives | ROI | Proposal) +
+                             FR/EN and light/dark buttons; tab in the URL hash
+  ProposalTab.tsx            builds a proposal from what's measured; creates the
+                             client's link; lists what clients did
+  ProposalView.tsx           the client's proposal page (opens, sections, accept)
+  RecordActuals.tsx          "Record what the field measured" in the mower fit
+                             card (rep only): a field check or an install
+  AdminView.tsx              /admin
   GolfCourseCalculator.tsx   top-level state: detects the property at a tap or
                              a search (selectProperty), orchestrates fetch →
                              measure, the photo / satellite count, sod
@@ -115,6 +134,17 @@ src/lib/
                 client's number against ours, the assumptions list (pure, tested)
   records-store.ts  field-check calibration and installs' spread from
                 /api/records (empty without a database: estimates are used)
+  records.ts    field checks → calibration per model (median, 3+), installs →
+                likely range per basis (p10-p90, 5+) and track record (pure, tested)
+  prices.ts     the dealer's unit prices (UNIT_PRICES, to fill in), the
+                installation estimate, the monthly payment (pure, tested)
+  proposal.ts   a proposal's options, prices, payback, validity, the snapshot
+                saved (ProposalData) (pure, tested)
+  proposal-copy.ts  the client's page and the rep's emails, EN/FR
+  kv-server.ts  Upstash Redis over REST, the team key, ids (routes only)
+  proposal-store-server.ts  proposals and what clients did with them (routes only)
+  email-server.ts  Resend over REST (routes only)
+  usage.ts      the usage events counted, countUse()
   surface.ts    the measuring engine: aerial photo pixels + LiDAR → grass,
                 trees, buildings, paving, water; cover inside an outline, pools
                 and paving on a lot (pure, tested)
@@ -458,6 +488,33 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   in basis), the LiDAR's share steeper than each climbs (the band at or
   under its limit), whether it cuts fairway height. `Battlecard` is
   `print:hidden`. Re-check the figures and the date together.
+- **Proposals are snapshots.** The Proposal tab (`ProposalTab`) builds
+  `ProposalData` from the stores (measurement, `useMowerFit`, the Incentives
+  profile, the ROI tab's inputs once it's been opened, `setRoiInputs`, the
+  records) and saves it as sent: the client's page (`/p/<id>`, the id is the
+  only secret, about 69 bits) never changes after. Options (`proposalOptions`):
+  the fleet recommended, the other way of working (golf and sites), the next
+  best, each different. Unit prices: `UNIT_PRICES` (the dealer's list, null
+  until it's in) or typed; the rep types the installation price, our
+  `installEstimate` (labour per set-up and per metre of edges mapped, a trip,
+  materials) is shown beside it and used when blank. Grants and credits:
+  the Incentives "kept" low end for the equipment. Payback against the crew
+  only for KR238s or Voyagers (what the ROI model prices). Validity 30 days
+  by default; accepting checks it in Quebec's time zone and takes only the
+  first (`HSETNX`). The team key (`TEAM_KEY`) guards creating, listing and
+  records, so the rep emails can't be pointed anywhere by outsiders.
+- **Field records correct the model.** `records.ts`: a field check is a
+  robot timed mowing a known area once (charging left out) against
+  `predictedHours` (the coverage model on a plain square); 3 per model and
+  the median ratio divides that robot's capacity everywhere (mower fit,
+  ROI tab, proposals: `FitOptions.calibration`, `RoiInputs.calibration`). An
+  install is our acreage against the robot's map after installation, by
+  basis; 5 per basis and its p10-p90 is the likely range (`trust.ts`), and
+  the share within 10 % is the track record proposals print. Ratios outside
+  0.2-5 are typos and left out.
+- **Usage is counted, not tracked.** `countUse(name)` (sendBeacon) for the
+  names in `usage.ts` only, per day, 90 days; page views come from Vercel
+  Web Analytics (its script in the root layout, turned on in the project).
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in

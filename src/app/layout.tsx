@@ -45,6 +45,8 @@ export default function RootLayout({
       </head>
       <body className="h-full">
         {children}
+        {/* Vercel Web Analytics (page views), once it's turned on in the project: no package, Vercel serves the script. */}
+        {process.env.NODE_ENV === "production" && <script defer src="/_vercel/insights/script.js" />}
       </body>
     </html>
   );

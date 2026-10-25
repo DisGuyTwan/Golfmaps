@@ -6,6 +6,7 @@ import { pointInGeometry } from "./landcover";
 import { lawnTotals, type LawnMeasurement, type LawnTotals } from "./lawn";
 import { beginStep, endStep, type LiveStep } from "./live";
 import { measureLot } from "./lot-lookups";
+import { countUse } from "./usage";
 import { bboxParam, fetchFairways } from "./overpass";
 import { reportError } from "./report-error";
 import { buildRoadGraph, roadBoxes, routeFrom, snapPlaces, streetOf, type RoadGraph, type RoadLeg, type RoutePlace } from "./roads";
@@ -147,6 +148,7 @@ async function measure(stop: RunStop) {
 
 /** Opens the run planner; with a share link's run, or the lawn on screen as the first stop. */
 export function openRun(link?: RunLink | null, first?: { lawn: LawnMeasurement; terrain: TerrainGrid | null; label: string | null }) {
+  countUse(link?.settings.portfolio ? "portfolio.open" : "run.open");
   if (link) {
     update({
       open: true,
@@ -213,6 +215,7 @@ let importRun = 0;
  * `near` biases the search to where the map is.
  */
 export async function importAddresses(file: Blob, lang: "en" | "fr", near: { lat: number; lon: number } | null): Promise<void> {
+  countUse("run.import");
   const run = ++importRun;
   let progress: RunImport = {
     live: beginStep([], "addresses", null, Date.now()),
@@ -295,6 +298,7 @@ export function setPickingShop(pickingShop: boolean) {
 }
 
 export function setRunSettings(patch: Partial<RunSettings>) {
+  if (patch.portfolio && !state.settings.portfolio) countUse("portfolio.open");
   update({ settings: { ...state.settings, ...patch } });
   // Back to a run from a portfolio: the roads between the stops are needed again.
   if (patch.portfolio === false) scheduleRoads();

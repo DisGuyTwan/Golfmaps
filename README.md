@@ -375,6 +375,40 @@ the other defaults
 are dated market data (Hydro-Québec Rate G, April 1, 2026; KR800 10 kWh,
 KR804 38 kWh) and need refreshing over time.
 
+## Proposals, field records and usage
+
+The **Proposal** tab turns what's measured into one document for the client:
+the property and how sure its numbers are, a few options (the fleet
+recommended, the other way of working, the next best), each priced from the
+dealer's unit prices (`UNIT_PRICES` in `src/lib/prices.ts`, to be filled in)
+or typed by the rep, the rep's installation price beside our estimate,
+grants and credits off, the monthly payment and, for KR238s and Voyagers,
+the payback against a zero-turn crew. "Create the client's link" saves it
+and gives a page (`/p/<id>`) in the client's language that they open and
+accept; the rep is emailed when it's first opened and when it's accepted,
+and the tab lists what each client did (opens, parts read, acceptance).
+
+In the mower fit card, **Record what the field measured** (rep only) saves
+a field check (a robot timed on a known area) or an install (the acreage on
+the robot's map against ours). Once a model has 3 checks its measured pace
+sizes every fleet; once a kind of count has 5 installs, they set its likely
+range, and proposals print the track record. **/admin** (team key) shows
+what reps use, the proposals and the records.
+
+These need a few settings in the Vercel project (Settings → Environment
+Variables), all optional: without them the app works as before and says
+what isn't connected.
+
+| Variable | What for |
+| --- | --- |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | The database: add **Upstash for Redis** from the Vercel Marketplace (Storage → Create Database), which sets both (free tier) |
+| `TEAM_KEY` | A shared secret reps type once to create proposals, record actuals and open /admin |
+| `RESEND_API_KEY` | Emails to the rep (resend.com, free up to 3,000 a month) |
+| `PROPOSAL_FROM` | The sender, e.g. `Calculator <proposals@prodig-e.com>`, on a domain verified in Resend |
+
+Page views come from **Vercel Web Analytics**: turn it on in the project's
+Analytics tab (the page already loads its script).
+
 ## Tech stack
 
 - **Next.js 16 (App Router)** + **React 19** + **TypeScript** + **Tailwind CSS**

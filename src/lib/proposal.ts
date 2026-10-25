@@ -118,6 +118,8 @@ export interface RoiJob {
   layoutPct: number;
   /** The ROI tab's inputs when it's been opened (the client's crew figures), else its defaults. */
   base?: Partial<RoiInputs>;
+  /** The field checks' pace per model (as the ROI tab takes them). */
+  calibration?: Record<string, number>;
 }
 
 /**
@@ -140,6 +142,7 @@ export function priceOption(o: ProposalOption, financing: Financing, incentives:
     const input: RoiInputs = {
       ...ROI_DEFAULTS,
       ...job.base,
+      ...(job.calibration && { calibration: job.calibration }),
       ...(preset ?? {}),
       area: job.acres,
       mowEvery: job.mowEvery,

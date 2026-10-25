@@ -69,6 +69,7 @@ import {
   useSod,
 } from "@/lib/quote-store";
 import { reportError } from "@/lib/report-error";
+import { countUse } from "@/lib/usage";
 import { buildShareUrl, decodePolyline, encodePolyline, encodeView } from "@/lib/share";
 import { useLang } from "@/lib/preferences";
 import type { BBox, CourseMeasurement } from "@/lib/types";
@@ -672,7 +673,9 @@ export default function GolfCourseCalculator() {
       setPing(null);
       setMode(kind);
       // A lot bigger than a house's that isn't a course or a farm is a commercial or municipal site.
-      setQuoteSettings({ commercial: kind === "lawn" && lotM2 !== null && lotM2 >= HOUSE_LOT_M2 });
+      const commercialSite = kind === "lawn" && lotM2 !== null && lotM2 >= HOUSE_LOT_M2;
+      setQuoteSettings({ commercial: commercialSite });
+      countUse(commercialSite ? "measure.site" : `measure.${kind}`);
       setCourseName(name ?? course?.name ?? null);
       const map = mapRef.current;
       if (kind === "golf" && course) {

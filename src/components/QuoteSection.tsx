@@ -6,6 +6,7 @@ import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, lawnQuoteSqft, type Acr
 import { sendAcresToRoi, setQuoteSettings, useQuoteSettings } from "@/lib/quote-store";
 import { mainFleet, roiModel } from "@/lib/mowers";
 import { goToTab } from "@/lib/tabs";
+import { countUse } from "@/lib/usage";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { Icon } from "./icons";
 import { useMowerFit } from "./MowerFit";
@@ -276,6 +277,7 @@ function AcreQuote({
           disabled={acres === null}
           onClick={() => {
             if (acres === null) return;
+            countUse("roi.send");
             sendAcresToRoi({
               acres,
               approach: fit?.approach ?? null,

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { UI, type Lang } from "@/lib/i18n";
 import { Icon, type IconName } from "./icons";
+import { countUse } from "@/lib/usage";
 import { delay, ui } from "./styles";
 
 // Class strings and the stagger helper live in styles.ts, so pages that need
@@ -118,6 +119,7 @@ export function Notice({ tone, children }: { tone: keyof typeof NOTICE; children
  * becomes the suggested PDF file name, so it's set for the duration of the print.
  */
 export function printAs(fileTitle: string) {
+  countUse(/ROI/.test(fileTitle) ? "pdf.roi" : /Incenti/.test(fileTitle) ? "pdf.incentives" : "pdf.acreage");
   const previous = document.title;
   document.title = fileTitle;
   window.addEventListener("afterprint", () => (document.title = previous), { once: true });
@@ -135,6 +137,7 @@ export function CopyLinkButton({ lang, getUrl, className }: { lang: Lang; getUrl
     const url = getUrl();
     try {
       await navigator.clipboard.writeText(url);
+      countUse("link.copy");
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2500);
     } catch {

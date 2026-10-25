@@ -18,7 +18,7 @@ import { acresForQuote, type AcreageMode, type QuoteSettings } from "./quote";
 import type { CourseMeasurement, SodMeasurement } from "./types";
 
 /** What the acres for a quote are counted from. */
-export type AcreBasis = "client" | "mapped" | "photos" | "worldcover" | "sod";
+export type AcreBasis = "client" | "mapped" | "photos" | "worldcover" | "sod" | "lawn";
 
 /**
  * What installs measured against our numbers, by basis: the 10th and 90th

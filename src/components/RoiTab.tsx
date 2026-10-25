@@ -25,18 +25,19 @@ import {
   type ZeroTurnStatus,
 } from "@/lib/roi";
 import { buildShareUrl, prefixed, readParams } from "@/lib/share";
+import { useRecords } from "@/lib/records-store";
 import { Icon, type IconName } from "./icons";
 import WindowPicker, { windowLine } from "./WindowPicker";
 import { decodeWindow, encodeWindow, robotWindowShare, voyagerWindowShare, type MowWindow } from "@/lib/window";
 import { Pop, SectionTitle, Segmented, TabHeader, delay, ui } from "./ui";
 
-type NumericKey = Exclude<keyof RoiInputs, "batteryKwh" | "ztStatus" | "incentives" | "approach" | "mowEvery" | "window">;
+type NumericKey = Exclude<keyof RoiInputs, "batteryKwh" | "ztStatus" | "incentives" | "approach" | "mowEvery" | "window" | "calibration">;
 /** Field values stay strings so they can be cleared and retyped live. */
 type Fields = Record<NumericKey, string>;
 /** Which incentives from the Incentives tab reduce the Voyager investment. */
 type IncMode = "none" | "low" | "high";
 
-const NOT_FIELDS = new Set<keyof RoiInputs>(["batteryKwh", "ztStatus", "incentives", "approach", "mowEvery", "window"]);
+const NOT_FIELDS = new Set<keyof RoiInputs>(["batteryKwh", "ztStatus", "incentives", "approach", "mowEvery", "window", "calibration"]);
 const NUMERIC_KEYS = (Object.keys(ROI_DEFAULTS) as (keyof RoiInputs)[]).filter((k): k is NumericKey => !NOT_FIELDS.has(k));
 
 const toFields = (i: RoiInputs): Fields =>
@@ -207,6 +208,9 @@ export default function RoiTab() {
   const [approach, setApproach] = useState<Approach>(initial.approach);
   const [every, setEvery] = useState<MowEvery>(initial.every);
   const [mowWindow, setMowWindow] = useState<MowWindow | null>(initial.window);
+  // Field checks correct the robots' pace here as in the mower fit.
+  const measured = useRecords().calibration;
+  const calibration = useMemo(() => Object.fromEntries(Object.entries(measured).map(([id, c]) => [id, c.factor])), [measured]);
   // The acreage's likely range (shares of the area), from the Acreage tab: payback is shown across it.
   const [acreShares, setAcreShares] = useState<[number, number] | null>(initial.range);
   const [model, setModel] = useState<VoyagerModel>(initial.model);
@@ -272,8 +276,8 @@ export default function RoiTab() {
 
   const base = useMemo<RoiInputs>(() => {
     const parsed = Object.fromEntries(NUMERIC_KEYS.map((k) => [k, num(fields[k])])) as Record<NumericKey, number>;
-    return { ...parsed, approach, mowEvery: every, window: mowWindow, batteryKwh, ztStatus, incentives: 0 };
-  }, [fields, approach, every, mowWindow, batteryKwh, ztStatus]);
+    return { ...parsed, approach, mowEvery: every, window: mowWindow, calibration, batteryKwh, ztStatus, incentives: 0 };
+  }, [fields, approach, every, mowWindow, calibration, batteryKwh, ztStatus]);
 
   // Incentives for this robot purchase, priced with the Incentives tab's profile.
   const sized = useMemo(() => computeRoi(base), [base]);

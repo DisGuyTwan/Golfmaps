@@ -62,3 +62,16 @@ describe("what a form sends", () => {
     expect(parseRecord({ kind: "install", basis: "mapped", predictedAcres: -1, actualAcres: 55 }, "b", "t")).toBeNull();
   });
 });
+
+describe("what a field check is set against", () => {
+  it("predicts a robot's time to mow a plain area once, more for more area", async () => {
+    const { MOWERS } = await import("./mowers");
+    const { predictedHours } = await import("./records");
+    const kr238 = MOWERS.find((m) => m.id === "KR238")!;
+    const oneAcre = predictedHours(kr238, 4046.86);
+    // 62 cm at 1.5 m/s with 15 % overlap mows about 0.7 ac an hour, plus turns, edges and driving.
+    expect(oneAcre).toBeGreaterThan(1.2);
+    expect(oneAcre).toBeLessThan(2);
+    expect(predictedHours(kr238, 4 * 4046.86)).toBeGreaterThan(3 * oneAcre);
+  });
+});

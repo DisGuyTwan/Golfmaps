@@ -18,7 +18,7 @@ import {
 } from "@/lib/mowers";
 import { measuredRange, type AcreRange } from "@/lib/trust";
 import { MOW_EVERY, acresForQuote, lawnQuoteSqft, type AcreageMode, type MowEvery, type QuoteSettings } from "@/lib/quote";
-import { setQuoteSettings, useCharger, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
+import { setQuoteSettings, useCharger, useCourseName, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
 import { complexity, golfSite, lawnSite, sodSite, type Complexity, type Level, type Reason, type Site } from "@/lib/site";
 import { slopeDeg, type TerrainGrid } from "@/lib/terrain";
 import type { Approach } from "@/lib/roi";
@@ -27,6 +27,7 @@ import { Icon } from "./icons";
 import { Notice, Segmented, toneClass } from "./ui";
 import WindowPicker, { windowLine } from "./WindowPicker";
 import Battlecard from "./Battlecard";
+import RecordActuals from "./RecordActuals";
 import { robotWindowShare, voyagerWindowShare } from "@/lib/window";
 import { useRecords, type Records } from "@/lib/records-store";
 import { ROI_DEFAULTS } from "@/lib/roi";
@@ -277,6 +278,7 @@ export default function MowerFit({
 }) {
   const fit = useMowerFit();
   const { mowEvery, approach: picked, window: mowWindow } = useQuoteSettings();
+  const courseName = useCourseName();
   const { t, reason, units, date, colon } = useCopy(lang);
   if (!fit && !loading) return null;
 
@@ -446,6 +448,15 @@ export default function MowerFit({
             </div>
           )}
           {!print && rec && <Battlecard lang={lang} site={fit.site} rec={rec} approach={approach} />}
+          {!print && (
+            <RecordActuals
+              lang={lang}
+              model={main?.id ?? null}
+              acres={fit.range?.value ?? fit.site.areaM2 / 4046.86}
+              basis={fit.site.kind === "lawn" || fit.site.kind === "site" ? "lawn" : (fit.range?.basis ?? "mapped")}
+              property={courseName ?? ""}
+            />
+          )}
           <p className="text-[10px] leading-snug text-faint">{t.fitSource(date)}</p>
         </>
       )}

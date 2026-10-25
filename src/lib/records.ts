@@ -12,6 +12,8 @@
  * Pure, so it's tested without a browser; the records live in the database
  * (/api/records).
  */
+import { baseline, overhead } from "./coverage";
+import { paceOf, type Mower } from "./mowers";
 import { MIN_RECORD, type AcreBasis, type RecordSpread } from "./trust";
 
 export interface FieldCheck {
@@ -39,12 +41,24 @@ export interface InstallRecord {
 
 export type FieldRecord = FieldCheck | InstallRecord;
 
+/**
+ * Hours we predict a robot takes to mow `areaM2` once (charging left out):
+ * the coverage model on a plain square with the charger at its edge, the
+ * same basis the fit compares every layout with. A field check's time is
+ * set against it.
+ */
+export function predictedHours(mower: Mower, areaM2: number): number {
+  const pace = paceOf(mower);
+  const base = baseline(areaM2, mower.line !== "voyager" && mower.line !== "masterseries", pace.stripeM);
+  return overhead({ areaM2, stripes: base.stripes, reach: base.reach, trees: 0, base }, pace).hours;
+}
+
 /** Field checks a model needs before its measured pace replaces our estimate. */
 export const MIN_CHECKS = 3;
 /** A ratio outside this is a typo (a time in minutes, acres for m²), not a measurement. */
 const SANE: [number, number] = [0.2, 5];
 
-const BASES: AcreBasis[] = ["client", "mapped", "photos", "worldcover", "sod"];
+const BASES: AcreBasis[] = ["client", "mapped", "photos", "worldcover", "sod", "lawn"];
 
 /** The record checked and cleaned up from what a form sent; null when it isn't one. */
 export function parseRecord(raw: unknown, id: string, at: string): FieldRecord | null {

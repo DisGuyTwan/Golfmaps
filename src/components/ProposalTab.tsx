@@ -142,7 +142,14 @@ export default function ProposalTab() {
   };
   const job =
     acres !== null && commercial
-      ? { acres, mowEvery: q.mowEvery, window: q.window, layoutPct: fleet?.work ? Math.max(0, Math.round((fleet.work.factor - 1) * 100)) : 0, base: roiInputs ?? undefined }
+      ? {
+          acres,
+          mowEvery: q.mowEvery,
+          window: q.window,
+          layoutPct: fleet?.work ? Math.max(0, Math.round((fleet.work.factor - 1) * 100)) : 0,
+          base: roiInputs ?? undefined,
+          calibration: Object.fromEntries(Object.entries(records.calibration).map(([id, c]) => [id, c.factor])),
+        }
       : null;
   const options = baseOptions.map((o) => {
     const withInstall: ProposalOption = { ...o, installPrice: numberOr(installs[o.id] ?? "", null) };

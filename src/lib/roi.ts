@@ -79,6 +79,8 @@ export interface RoiInputs {
   layoutPct: number;
   /** When the robots may mow; null = any time. */
   window: MowWindow | null;
+  /** Per model, the time field checks measured over the time we predicted (records.ts); a slower robot keeps less mowed. */
+  calibration: Record<string, number>;
 
   /** KR238 price and installation per robot ($): charger, RTK antenna, mapping. */
   kr238Price: number;
@@ -133,6 +135,7 @@ export const ROI_DEFAULTS: RoiInputs = {
   approach: "go",
   layoutPct: 0,
   window: null,
+  calibration: {},
   // KR238: US$39,999 at a US dealer, converted like the Voyager's price (Oct. 2026); 20 acres every 48 h per Kress.
   // Installation, maintenance and checks are estimates.
   kr238Price: 55000,
@@ -270,13 +273,18 @@ export function computeRoi(input: RoiInputs): RoiResult {
   let supHoursPerSeason: number;
   if (stay) {
     // KR238: rated for mowing it all every 48 h, so every day halves its area and every 3 days adds half.
-    const perUnit = ((input.kr238Acres * input.mowEvery) / 2) * robotWindowShare(input.window, KR238_RUNTIME_MIN);
+    const perUnit =
+      (((input.kr238Acres * input.mowEvery) / 2) * robotWindowShare(input.window, KR238_RUNTIME_MIN)) / (input.calibration.KR238 ?? 1);
     const load = perUnit > 0 ? (area * layout) / perUnit : 0;
     units = load > 1 ? wholeUnits(load / STAY_LOAD) : wholeUnits(load);
     kwhPerSeason = seasonAcres * layout * KR238_KWH_PER_ACRE;
     supHoursPerSeason = units * input.kr238Checks * input.weeks;
   } else {
-    const weeklyCapacity = input.voyAcresPerDay * input.voyDaysPerWeek * voyagerWindowShare(input.window, VOYAGER_RUNTIME_MIN, input.voyDaysPerWeek);
+    // The field checks of the Voyager this many acres a charge is (the KR804's 19, else the KR800).
+    const voyager = input.voyAcresPerDay >= 19 ? "KR804" : "KR800";
+    const weeklyCapacity =
+      (input.voyAcresPerDay * input.voyDaysPerWeek * voyagerWindowShare(input.window, VOYAGER_RUNTIME_MIN, input.voyDaysPerWeek)) /
+      (input.calibration[voyager] ?? 1);
     units = weeklyCapacity > 0 ? wholeUnits((weeklyAcres * layout) / weeklyCapacity) : 0;
     charges = input.voyAcresPerDay > 0 ? ((weeklyAcres * layout) / input.voyAcresPerDay) * input.weeks : 0;
     kwhPerSeason = charges * input.batteryKwh;
