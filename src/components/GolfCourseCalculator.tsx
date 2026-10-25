@@ -39,15 +39,19 @@ import {
   type LawnArea,
   type LawnMeasurement,
 } from "@/lib/lawn";
-import { fetchParcel, inQuebec } from "@/lib/parcel";
+import { inQuebec } from "@/lib/parcel";
+import { lookAround, type Lookups } from "@/lib/lot-lookups";
 import { HOUSE_LOT_M2, SOD_FARM_M, SOD_LOOK_M, SOD_SHARE, golfCourseAt, propertyKind, settledByLot, sodShareAround, sodShareInside, type GolfCourse } from "@/lib/detect";
 import { fetchSurface, fitsSurface, photoTurf, surfaceAreas, surfaceCover, surfaceOverlay, type SurfaceGrid } from "@/lib/surface";
 import { NO_SLOPE, TERRAIN_MAX_SPAN_DEG, fetchTerrain, lidarBuildings, terrainStats, type TerrainGrid } from "@/lib/terrain";
 import { beginStep, endStep, type LiveFinding, type LiveSource, type LiveStep } from "@/lib/live";
 import { encodeQuote, type AcreageMode } from "@/lib/quote";
+import { MAX_STOPS, decodeRun, encodeRun } from "@/lib/run";
+import { addStop, getRun, openRun, setShop, stopTotals, useRun } from "@/lib/run-store";
 import {
   getLawn,
   getSod,
+  getTerrain,
   setCourseName,
   setLawn,
   setMeasurement,
@@ -66,8 +70,9 @@ import { reportError } from "@/lib/report-error";
 import { buildShareUrl, decodePolyline, encodePolyline, encodeView } from "@/lib/share";
 import { useLang } from "@/lib/preferences";
 import type { BBox, CourseMeasurement } from "@/lib/types";
-import type { LiveScan, MapOverlay } from "./GolfMap";
+import type { LiveScan, MapOverlay, MapRun } from "./GolfMap";
 import MeasurePanel from "./MeasurePanel";
+import RunPanel, { useRunPlan } from "./RunPanel";
 import { useMowerFit } from "./MowerFit";
 import SearchBox, { type PlaceResult } from "./SearchBox";
 import { Loader } from "./ui";
@@ -102,23 +107,6 @@ export type TraceKind = "property" | "outline" | "field" | "lot" | "remove" | "d
 
 /** What the next tap picks: the property under it (any kind), or a house lot. */
 export type PickKind = "property" | "lot";
-
-/**
- * The lookups at a point that every kind of property needs, started at once:
- * what OpenStreetMap has around it (buildings, paving, and the golf course
- * holding it), the LiDAR, and the cadastre lot (Quebec).
- */
-function lookAround(lat: number, lon: number) {
-  const around = aroundPoint(lat, lon);
-  const nearby = fetchFairways(around, "lawn");
-  nearby.catch(() => {}); // Handled by whoever uses it, or unused.
-  const terrain = inQuebec(lat, lon) ? fetchTerrain(around) : null;
-  terrain?.catch(() => {}); // Likewise, by loadTerrain.
-  const parcel = inQuebec(lat, lon) ? fetchParcel(lat, lon) : Promise.resolve(null);
-  parcel.catch(() => {}); // Likewise, by runLawn.
-  return { around, nearby, terrain, parcel };
-}
-type Lookups = ReturnType<typeof lookAround>;
 
 const boxPolygon = ({ south, west, north, east }: BBox): Polygon => ({
   type: "Polygon",
@@ -155,11 +143,12 @@ function toMeasureError(err: unknown): MeasureError {
 }
 
 /**
- * Frames a lot in the part of the map the results panel doesn't cover, once
- * the panel has grown to show the results (two frames later).
+ * Frames a lot (or a box: a grass run's stops) in the part of the map the
+ * results panel doesn't cover, once the panel has grown to show the results
+ * (two frames later).
  */
-function fitAbovePanel(map: L.Map, lot: Polygon | MultiPolygon) {
-  const { south, west, north, east } = lotBBox(lot, 0);
+function fitAbovePanel(map: L.Map, shape: Polygon | MultiPolygon | BBox, maxZoom = 19) {
+  const { south, west, north, east } = "type" in shape ? lotBBox(shape, 0) : shape;
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
       const panel = document.querySelector<HTMLElement>("[data-measure-panel]");
@@ -170,10 +159,21 @@ function fitAbovePanel(map: L.Map, lot: Polygon | MultiPolygon) {
           [south, west],
           [north, east],
         ],
-        { paddingTopLeft: [24, 72], paddingBottomRight: [24, Math.min(covered + 16, mapBox.height - 140)], maxZoom: 19 },
+        { paddingTopLeft: [24, 72], paddingBottomRight: [24, Math.min(covered + 16, mapBox.height - 140)], maxZoom },
       );
     }),
   );
+}
+
+/** Frames a grass run's stops and shop above the panel. */
+function fitRun(map: L.Map) {
+  const { stops, shop } = getRun();
+  const points = [...stops.map((s) => s.point), ...(shop ? [shop.point] : [])];
+  if (!points.length) return;
+  const lats = points.map((p) => p[0]);
+  const lons = points.map((p) => p[1]);
+  const pad = 0.0005;
+  fitAbovePanel(map, { south: Math.min(...lats) - pad, west: Math.min(...lons) - pad, north: Math.max(...lats) + pad, east: Math.max(...lons) + pad }, 17);
 }
 
 function viewBBox(map: L.Map): BBox {
@@ -243,6 +243,11 @@ export default function GolfCourseCalculator() {
   const [placingCharger, setPlacingCharger] = useState(false);
   const charger = useCharger();
   const fit = useMowerFit();
+  /** A grass run being planned: taps and searches add its stops (or set its shop) instead. */
+  const run = useRun();
+  const runPlan = useRunPlan();
+  /** Why the last tap or search didn't add a stop (already in the run, or the run is full). */
+  const [runNotice, setRunNotice] = useState<string | null>(null);
 
   const mapRef = useRef<L.Map | null>(null);
   /** Bumped by every new measurement or clear, so a late answer never lands on a newer one. */
@@ -727,6 +732,12 @@ export default function GolfCourseCalculator() {
     (map: L.Map) => {
       mapRef.current = map;
       const params = new URLSearchParams(window.location.search);
+      const linkedRun = decodeRun(params);
+      if (linkedRun) {
+        openRun(linkedRun);
+        map.whenReady(() => fitRun(map));
+        return;
+      }
       const box = parseBBoxParam(params.get("b"));
       const a = params.get("a");
       const linkedMode: AcreageMode = a === "sod" || a === "lawn" ? a : "golf";
@@ -772,6 +783,12 @@ export default function GolfCourseCalculator() {
   const getShareUrl = useCallback(() => {
     const map = mapRef.current;
     const center = map?.getCenter();
+    if (run.open) {
+      return buildShareUrl(window.location, {
+        v: map && center ? encodeView(center.lat, center.lng, map.getZoom()) : undefined,
+        ...encodeRun({ stops: run.stops.map(({ point, label }) => ({ point, label })), shop: run.shop, settings: run.settings }),
+      });
+    }
     const box = scanBox ? { south: scanBox[0], west: scanBox[1], north: scanBox[2], east: scanBox[3] } : null;
     const common = {
       v: map && center ? encodeView(center.lat, center.lng, map.getZoom()) : undefined,
@@ -821,7 +838,7 @@ export default function GolfCourseCalculator() {
       o: traced ? encodePolyline(tracedPoints(traced)) : undefined,
       ...encodeQuote(quoteSettings),
     });
-  }, [mode, scanBox, result, sod, lawn, courseName, quoteSettings, charger]);
+  }, [mode, scanBox, result, sod, lawn, courseName, quoteSettings, charger, run]);
 
   const getSearchBias = useCallback(() => {
     const map = mapRef.current;
@@ -834,6 +851,17 @@ export default function GolfCourseCalculator() {
     (place: PlaceResult) => {
       const map = mapRef.current;
       if (!map) return;
+      // Planning a grass run: the place is the shop, or the next stop; the map frames the run with it.
+      if (getRun().open) {
+        if (getRun().pickingShop) {
+          setShop({ point: [place.lat, place.lon], label: place.primary });
+        } else {
+          const added = addStop([place.lat, place.lon], place.primary);
+          setRunNotice(added === "already" ? UI[lang].run.already : added === "full" ? UI[lang].run.full(MAX_STOPS) : null);
+        }
+        fitRun(map);
+        return;
+      }
       // A golf course found by name: frame it and measure the course in view.
       if (place.isGolf) {
         setChosen(false);
@@ -860,7 +888,7 @@ export default function GolfCourseCalculator() {
       map.setView([place.lat, place.lon], 18);
       void selectProperty(place.lat, place.lon, place.primary);
     },
-    [runMeasure, selectProperty],
+    [runMeasure, selectProperty, lang],
   );
 
   const handleStartSelect = useCallback(() => {
@@ -926,6 +954,15 @@ export default function GolfCourseCalculator() {
 
   const handleMapClick = useCallback(
     (latlng: [number, number]) => {
+      if (getRun().open) {
+        if (getRun().pickingShop) {
+          setShop({ point: latlng, label: null });
+          return;
+        }
+        const added = addStop(latlng);
+        setRunNotice(added === "already" ? UI[lang].run.already : added === "full" ? UI[lang].run.full(MAX_STOPS) : null);
+        return;
+      }
       if (placingCharger) {
         setCharger(latlng);
         setPlacingCharger(false);
@@ -1013,7 +1050,7 @@ export default function GolfCourseCalculator() {
         fields: current.fields.map((f) => (f.id === hit.id ? { ...f, included: !f.included } : f)),
       });
     },
-    [placingCharger, tracing, tracePoints, finishTrace, picking, runLawn, selectProperty, selecting, firstCorner, measure, mode, result, chosen, loading],
+    [placingCharger, tracing, tracePoints, finishTrace, picking, runLawn, selectProperty, selecting, firstCorner, measure, mode, result, chosen, loading, lang],
   );
 
   const resetView = useCallback(() => {
@@ -1050,16 +1087,42 @@ export default function GolfCourseCalculator() {
 
   const totals = useMemo(() => (lawn ? lawnTotals(lawn) : null), [lawn]);
 
-  // The areas being read right now, swept on the map.
-  const scans = useMemo<LiveScan[]>(
-    () =>
-      live
-        .filter((s) => s.state === "active" && s.area)
-        .map((s) => ({ key: s.source, bounds: [[s.area!.south, s.area!.west], [s.area!.north, s.area!.east]] })),
-    [live],
-  );
+  // The areas being read right now, swept on the map (on a grass run, each stop's).
+  const scans = useMemo<LiveScan[]>(() => {
+    const steps = run.open ? run.stops.flatMap((stop) => stop.live.map((step) => ({ step, key: `${stop.id}-${step.source}` }))) : live.map((step) => ({ step, key: step.source }));
+    return steps
+      .filter(({ step }) => step.state === "active" && step.area)
+      .map(({ step, key }) => ({ key, bounds: [[step.area!.south, step.area!.west], [step.area!.north, step.area!.east]] }));
+  }, [live, run]);
+
+  // A grass run on the map: each stop numbered in the run's order, the shop and the route.
+  const mapRun = useMemo<MapRun | null>(() => {
+    if (!run.open) return null;
+    const order = new Map(runPlan.plan.stops.map((p, k) => [p.index, k + 1]));
+    const route = runPlan.plan.stops.map((p) => run.stops[p.index].point);
+    const shop = run.shop?.point ?? null;
+    return {
+      stops: run.stops.map((s, i) => ({ key: s.id, point: s.point, n: order.get(i) ?? null, loading: s.state === "waiting" || s.state === "measuring" })),
+      shop,
+      route: shop && route.length ? [shop, ...route, shop] : route,
+    };
+  }, [run, runPlan]);
 
   const mapGeojson = useMemo<FeatureCollection | null>(() => {
+    if (run.open) {
+      // Each stop's lot, and its lawn once measured.
+      return {
+        type: "FeatureCollection",
+        features: run.stops.flatMap((s) => {
+          if (!s.lawn) return [];
+          const lawnGeom = s.state === "done" ? stopTotals(s.lawn).lawn : null;
+          return [
+            ...(lawnGeom ? [{ type: "Feature" as const, geometry: lawnGeom, properties: { _category: "lawn" } }] : []),
+            { type: "Feature" as const, geometry: s.lawn.lot, properties: { _category: "course" } },
+          ];
+        }),
+      };
+    }
     if (mode === "golf") return result?.geojson ?? null;
     if (mode === "lawn") {
       if (!lawn) return null;
@@ -1097,21 +1160,22 @@ export default function GolfCourseCalculator() {
         properties: { _category: !f.included ? "sod_off" : f.traced ? "sod_traced" : "sod" },
       })),
     };
-  }, [mode, result, sod, lawn, totals, tracing, tracePoints, driveWidthFt]);
+  }, [mode, result, sod, lawn, totals, tracing, tracePoints, driveWidthFt, run]);
 
   return (
     <div className="relative h-full w-full">
       <GolfMap
         lang={lang}
         geojson={mapGeojson}
-        capturing={selecting || picking !== null || placingCharger || tracing !== null}
-        charger={fit?.site.charger ? [fit.site.charger[1], fit.site.charger[0]] : null}
+        capturing={run.open || selecting || picking !== null || placingCharger || tracing !== null}
+        charger={!run.open && fit?.site.charger ? [fit.site.charger[1], fit.site.charger[0]] : null}
         firstCorner={firstCorner}
         tracePoints={tracing ? tracePoints : null}
-        overlay={mode === "golf" ? overlay : null}
-        scanBox={scanBox}
+        overlay={mode === "golf" && !run.open ? overlay : null}
+        scanBox={run.open ? null : scanBox}
         scans={scans}
-        ping={ping}
+        ping={run.open ? null : ping}
+        run={mapRun}
         onMapClick={handleMapClick}
         onMapReady={handleMapReady}
       />
@@ -1120,54 +1184,65 @@ export default function GolfCourseCalculator() {
         onSelect={handleSearchSelect}
         getBias={getSearchBias}
         lang={lang}
-        placeholder={UI[lang].searchAnyPlaceholder}
+        placeholder={run.open ? (run.pickingShop ? UI[lang].run.searchShop : UI[lang].run.searchStop) : UI[lang].searchAnyPlaceholder}
+        clearOnSelect={run.open}
       />
 
-      <MeasurePanel
-        lang={lang}
-        mode={mode}
-        result={mode === "golf" ? result : null}
-        sod={mode === "sod" ? sod : null}
-        lawn={mode === "lawn" ? lawn : null}
-        lawnTotals={mode === "lawn" ? totals : null}
-        picking={picking}
-        chosen={chosen}
-        driveWidthFt={driveWidthFt}
-        onDriveWidth={setDriveWidthFt}
-        onStartPick={(kind) => {
-          setSelecting(false);
-          setTracing(null);
-          setPicking(kind);
-        }}
-        onCancelPick={() => setPicking(null)}
-        loading={loading}
-        error={error}
-        live={live}
-        satError={satError}
-        terrainLoading={terrainLoading}
-        placingCharger={placingCharger}
-        onMoveCharger={() => {
-          setSelecting(false);
-          setTracing(null);
-          setPicking(null);
-          setPlacingCharger(true);
-        }}
-        onCancelCharger={() => setPlacingCharger(false)}
-        selecting={selecting}
-        awaitingSecondCorner={firstCorner !== null}
-        tracing={tracing}
-        tracePointCount={tracePoints.length}
-        onModeChange={handleModeChange}
-        onMeasure={() => void measure()}
-        onStartSelect={handleStartSelect}
-        onCancelSelect={handleCancelSelect}
-        onStartTrace={handleStartTrace}
-        onUndoPoint={() => setTracePoints((points) => points.slice(0, -1))}
-        onFinishTrace={() => finishTrace(tracePoints)}
-        onCancelTrace={handleCancelTrace}
-        onClear={handleClear}
-        getShareUrl={getShareUrl}
-      />
+      {run.open ? (
+        <RunPanel lang={lang} notice={runNotice} planned={runPlan} getShareUrl={getShareUrl} />
+      ) : (
+        <MeasurePanel
+          lang={lang}
+          mode={mode}
+          result={mode === "golf" ? result : null}
+          sod={mode === "sod" ? sod : null}
+          lawn={mode === "lawn" ? lawn : null}
+          lawnTotals={mode === "lawn" ? totals : null}
+          picking={picking}
+          chosen={chosen}
+          driveWidthFt={driveWidthFt}
+          onDriveWidth={setDriveWidthFt}
+          onStartPick={(kind) => {
+            setSelecting(false);
+            setTracing(null);
+            setPicking(kind);
+          }}
+          onCancelPick={() => setPicking(null)}
+          loading={loading}
+          error={error}
+          live={live}
+          satError={satError}
+          terrainLoading={terrainLoading}
+          placingCharger={placingCharger}
+          onMoveCharger={() => {
+            setSelecting(false);
+            setTracing(null);
+            setPicking(null);
+            setPlacingCharger(true);
+          }}
+          onCancelCharger={() => setPlacingCharger(false)}
+          selecting={selecting}
+          awaitingSecondCorner={firstCorner !== null}
+          tracing={tracing}
+          tracePointCount={tracePoints.length}
+          onModeChange={handleModeChange}
+          onMeasure={() => void measure()}
+          onStartSelect={handleStartSelect}
+          onCancelSelect={handleCancelSelect}
+          onStartTrace={handleStartTrace}
+          onUndoPoint={() => setTracePoints((points) => points.slice(0, -1))}
+          onFinishTrace={() => finishTrace(tracePoints)}
+          onCancelTrace={handleCancelTrace}
+          onClear={handleClear}
+          getShareUrl={getShareUrl}
+          runStops={run.stops.length}
+          onStartRun={(withLawn) => {
+            setRunNotice(null);
+            const current = getLawn();
+            openRun(null, withLawn && current ? { lawn: current, terrain: getTerrain(), label: courseName } : undefined);
+          }}
+        />
+      )}
     </div>
   );
 }

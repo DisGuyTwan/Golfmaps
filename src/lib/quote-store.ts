@@ -100,6 +100,8 @@ export const useLawn = () => useStore((s) => s.lawn);
 export const useCourseName = () => useStore((s) => s.courseName);
 export const useRoiImport = () => useStore((s) => s.roiImport);
 export const useTerrain = () => useStore((s) => s.terrain);
+/** The terrain on screen, for event handlers. */
+export const getTerrain = () => current().terrain;
 export const useCharger = () => useStore((s) => s.charger);
 export const useIncentiveProfile = () => useStore((s) => s.incentiveProfile);
 

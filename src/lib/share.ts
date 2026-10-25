@@ -10,7 +10,8 @@
  * point a lawn's lot was picked at, lo a traced lot, lx areas traced out of a
  * lawn, ld traced driveways ("centre line polyline:width in mm"), lk pools
  * and paving from the aerial photos kept as lawn (a point inside each), ch
- * the robot's charger ("lat,lon", when the rep placed it). Shapes travel as
+ * the robot's charger ("lat,lon", when the rep placed it); a=run for a grass
+ * run, with its stops and settings (run.ts encodeRun). Shapes travel as
  * encoded polylines.
  */
 

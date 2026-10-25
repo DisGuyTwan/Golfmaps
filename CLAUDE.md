@@ -17,7 +17,9 @@ ROI sizing; the Incentives profile → ROI's net investment) and every tab has a
 share link and a client PDF. The kind of property (course, farm or
 lot) is detected from where the rep taps or what they search, and one engine
 (aerial photos and LiDAR) measures all three. Every measurement gets a mower
-fit: how hard the property is for a robot and which Kress model fits. No API keys and no
+fit: how hard the property is for a robot and which Kress model fits. A
+"grass run" plans a crew's day of cut-and-go stops (several addresses, each
+measured like a lawn) in the order with the least driving. No API keys and no
 database: seven small route handlers (Overpass cache, land cover, LiDAR terrain,
 aerial photo surfaces, Quebec cadastre lot, gas price, client error log) run on
 Vercel; everything
@@ -64,7 +66,10 @@ src/components/
   QuoteSection.tsx           acres for the quote: categories, % rough (or %
                              satellite grass, or % sod), override, Send to ROI,
                              PDF report, Copy link
-  AcreageReport.tsx          print-only Acreage PDF (replaces the map in print)
+  RunPanel.tsx               grass run panel (stops, shop, Voyager, crew, the
+                             day); useRunPlan() for the panel, map and PDF
+  AcreageReport.tsx          print-only Acreage PDF (replaces the map in print),
+                             or the grass run's run sheet
   SearchBox.tsx              Photon geocoder autocomplete
   IncentivesTab.tsx          incentive checker UI (client-only)
   RoiTab.tsx                 ROI calculator UI (cut and stay KR238 or cut and
@@ -101,8 +106,14 @@ src/lib/
   roi-copy.ts   ROI tab copy, FR and EN, incl. "as of" source for each default
   quote.ts      measurement → acres for the quote, share params (pure, tested)
   quote-store.ts  client store shared by the tabs (useSyncExternalStore)
+  run.ts        grass run: a stop's mowing vs trimming and blowing, driving,
+                the order with the least driving, the day, links (pure, tested)
+  run-store.ts  the grass run being planned: stops measured a few at a time
+  lot-lookups.ts  lookAround (lot, OSM, LiDAR at a point) and measureLot (a
+                lawn filled in source by source), for the lawn mode and runs
   share.ts      share-link helpers + polylines (pure, tested); keys r_ / i_ / q_ /
-                v, m, b, n, a, o, sf, sx, lp, lo, lx, ld, lk, ch
+                v, m, b, n, a, o, sf, sx, lp, lo, lx, ld, lk, ch; a run's a=run,
+                rs, rn, rh, rhn, rv, rc, rk, ru, rt
   gas.ts        StatCan gas price parsing (pure, tested)
   report-error.ts  sendBeacon to /api/log
   tabs.ts       goToTab() for in-app navigation
@@ -276,6 +287,29 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   square: the ROI tab never counts that). Specs are dated (`MOWERS_AS_OF`,
   in the copy); `passageM`, `speedMS`, `turnS` and most `runtimeMin` are
   estimates (Kress publishes none). Update both when Kress changes the lineup.
+- **A grass run is a day of cut-and-go stops.** "Plan a grass run" (or "Add
+  to a grass run" on a measured lawn) opens `RunPanel` in the results panel's
+  place; while it's open, a search or a tap adds a stop (or sets the shop,
+  `pickingShop`) instead of selecting a property, and the map shows numbered
+  stops, the shop and the route. Each stop is measured like a lawn
+  (`measureLot` in `lot-lookups.ts`: cadastre lot, OSM, LiDAR buildings,
+  photo pools and paving), `AT_ONCE` (2) at a time since the Overpass mirrors
+  limit each address, each with its own live list and map sweep. At a stop
+  the crew parks and unloads (`setupMin`), the Voyager mows (the mower fit's
+  full-mow time, `overhead(...).hours`, one unit however big the lawn) while
+  the crew trims every lawn edge (`perimeterM`) at `TRIM_FT_PER_H` (1,500 ft
+  an hour a person) plus the LiDAR trees at 60 an hour, and blows a 3 ft
+  strip along the edges shared with paving (`lawnEdges`) at 25,000 sq ft an
+  hour (SingleOps production rates), shared among the crew: the stop takes
+  set-up plus the longer of the two, and the panel says who waits for whom.
+  Driving is the straight line × `ROAD_FACTOR` (1.3) at an average speed:
+  public routing servers (OSRM's demo, FOSSGIS) aren't for commercial use, so
+  don't call them from here. The order is the least driving (exact
+  Held-Karp up to 12 stops, else nearest neighbour + 2-opt), from the shop
+  and back when there is one; time on site doesn't depend on it. The day
+  warns past 8 h or past one charge's acres (`VOYAGER_PRESETS`). The run
+  stays in `run-store` when closed; links carry `a=run` and its `r*` keys
+  (stops as a polyline, names `|`-separated) and re-measure on open.
 - **Terrain is HRDEM LiDAR, read sparingly.** geotiff.js would load each 500 km
   file's whole tile index (15 MB), so `terrain-server.ts` parses the BigTIFF
   header once per instance and range-reads only the index entries and LZW

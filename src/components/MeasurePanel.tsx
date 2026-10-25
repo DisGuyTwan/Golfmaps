@@ -57,6 +57,9 @@ interface MeasurePanelProps {
   onCancelPick: () => void;
   onClear: () => void;
   getShareUrl: () => string;
+  /** Stops in the grass run kept from before (0 when none), and opening it: with the lawn on screen as a stop, or not. */
+  runStops: number;
+  onStartRun: (withLawn: boolean) => void;
 }
 
 const CATEGORIES = ["fairway", "rough", "green", "tee"] as const;
@@ -126,6 +129,8 @@ export default function MeasurePanel({
   onClear,
   getShareUrl,
   chosen,
+  runStops,
+  onStartRun,
 }: MeasurePanelProps) {
   const t = UI[lang];
   const [changing, setChanging] = useState(false);
@@ -305,6 +310,10 @@ export default function MeasurePanel({
                 <Icon name="pen" />
                 {t.traceProperty}
               </button>
+              <button onClick={() => onStartRun(false)} disabled={loading} className={`${ui.btnSecondary} w-full`}>
+                <Icon name="route" />
+                {runStops ? t.run.reopen(runStops) : t.run.start}
+              </button>
             </div>
             <p className="text-[11px] text-muted">{t.anyHint}</p>
           </div>
@@ -328,6 +337,10 @@ export default function MeasurePanel({
                 <button onClick={() => onStartTrace("remove")} disabled={loading} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
                   <Icon name="close" />
                   {t.removeArea}
+                </button>
+                <button onClick={() => onStartRun(true)} disabled={loading || lawn.lotSource !== "cadastre"} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
+                  <Icon name="route" />
+                  {t.run.addLawn}
                 </button>
               </>
             )}

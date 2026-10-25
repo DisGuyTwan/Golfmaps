@@ -20,6 +20,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import { TURF_COLORS } from "@/lib/area";
 import { UI, type Lang } from "@/lib/i18n";
 import { decodeView } from "@/lib/share";
+import { ICON_PATHS } from "./icons";
 
 import "leaflet/dist/leaflet.css";
 
@@ -84,6 +85,31 @@ function ScanOverlay({ scan }: { scan: LiveScan }) {
   );
 }
 
+/** A grass run on the map: its stops (numbered in the run's order once measured), the shop, and the route between them. */
+export interface MapRun {
+  /** `n` is null for a stop left out of the day (no lot or no lawn there), shown grey. */
+  stops: { key: number; point: [number, number]; n: number | null; loading: boolean }[];
+  shop: [number, number] | null;
+  /** The route in order, [lat, lon], from the shop and back when there is one. */
+  route: [number, number][];
+}
+
+// One icon per look, reused (a new icon each render would reset the marker).
+const runIcons = new Map<string, L.DivIcon>();
+function runIcon(kind: "stop" | "loading" | "off" | "shop", n: number | null = null): L.DivIcon {
+  const key = `${kind}:${n ?? ""}`;
+  let icon = runIcons.get(key);
+  if (!icon) {
+    const html =
+      kind === "shop"
+        ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICON_PATHS.home}"/></svg>`
+        : `<span>${n ?? ""}</span>`;
+    icon = L.divIcon({ className: `run-marker run-${kind}`, html, iconSize: [26, 26] });
+    runIcons.set(key, icon);
+  }
+  return icon;
+}
+
 /** A picture laid over the map, e.g. the satellite grass counted inside an outline. */
 export interface MapOverlay {
   url: string;
@@ -107,6 +133,8 @@ export interface GolfMapProps {
   scans: LiveScan[];
   /** The point tapped or searched, pulsing while the property there is found. */
   ping: [number, number] | null;
+  /** A grass run being planned, or null. */
+  run: MapRun | null;
   onMapClick: (latlng: [number, number]) => void;
   onMapReady: (map: L.Map) => void;
 }
@@ -182,6 +210,7 @@ export default function GolfMap({
   charger,
   scans,
   ping,
+  run,
   onMapClick,
   onMapReady,
 }: GolfMapProps) {
@@ -289,6 +318,14 @@ export default function GolfMap({
       ))}
 
       {ping && <Marker position={ping} icon={PING_ICON} interactive={false} keyboard={false} />}
+
+      {run && run.route.length > 1 && (
+        <Polyline positions={run.route} pathOptions={{ color: "#ffffff", weight: 3, opacity: 0.9, dashArray: "8 7", interactive: false }} />
+      )}
+      {run?.stops.map((s) => (
+        <Marker key={s.key} position={s.point} icon={runIcon(s.loading ? "loading" : s.n === null ? "off" : "stop", s.n)} interactive={false} keyboard={false} />
+      ))}
+      {run?.shop && <Marker position={run.shop} icon={runIcon("shop")} interactive={false} keyboard={false} />}
 
       {charger && (
         <CircleMarker

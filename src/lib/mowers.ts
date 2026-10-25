@@ -109,7 +109,7 @@ export function roiModel(m: Mower | undefined | null): "7" | "19" | null {
 }
 
 /** How a robot works, for coverage.ts: its stripe is the cut width less about 15 % overlap (10 % for the Voyager deck). */
-function paceOf(m: Mower): Pace {
+export function paceOf(m: Mower): Pace {
   return { stripeM: (m.cutWidthCm / 100) * (m.line === "voyager" ? 0.9 : 0.85), speedMS: m.speedMS, turnS: m.turnS, runtimeMin: m.runtimeMin };
 }
 

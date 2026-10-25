@@ -300,6 +300,25 @@ Kress specs are as of Oct 24, 2026 (`src/lib/mowers.ts`). Kress publishes no
 minimum passage width, mowing speed or (for most models) run time per charge,
 so those are estimates: check passages on site.
 
+## Grass run
+
+For a crew working several properties in a day with a cut-and-go Voyager:
+**Plan a grass run** (or **Add to a grass run** on a lawn already measured),
+then search addresses or tap properties to add stops, and optionally set the
+shop the day starts and ends at. Each stop is measured like a residential
+lawn, live, two at a time. At each stop the crew unloads the Voyager, it mows
+while they trim and blow, and they load it back, so a stop takes the set-up
+plus whichever is longer: the Voyager's mowing (the mower fit's full-mow
+time) or the trimming (every lawn edge at 1,500 ft an hour, trees at about 60
+an hour) and blowing (a 3 ft strip along the paving at 25,000 sq ft an hour),
+shared among the crew. Those rates are SingleOps' landscape production
+rates; adjust to your own crew. The stops are put in the order with the least
+driving (straight line × 1.3 at the average speed you set), and the panel
+shows the day: start and finish times, driving (and what the order saves),
+time on site, who waits for whom, and the lawn against one Voyager charge.
+The Voyager and crew-size choices each show the day they'd make. The run has
+its own share link and a one-page run sheet PDF (`src/lib/run.ts`).
+
 ## Incentives tab
 
 A second tab estimates first-year savings on robotic mowers and battery tools

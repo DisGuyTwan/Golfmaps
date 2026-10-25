@@ -6,8 +6,11 @@ import { useLang } from "@/lib/preferences";
 import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, lawnQuoteSqft, quoteBreakdown, satelliteAcres } from "@/lib/quote";
 import { formatSqft, lawnTotals } from "@/lib/lawn";
 import { useCourseName, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
+import { overWorkday } from "@/lib/run";
+import { useRun } from "@/lib/run-store";
 import type { SodField } from "@/lib/types";
 import MowerFit from "./MowerFit";
+import { formatClock, formatDuration, formatLawn, stopName, useRunPlan } from "./RunPanel";
 import { TabHeader, ui } from "./ui";
 
 /** Measured vs counted table: one row per line, "–" when it isn't counted. */
@@ -51,6 +54,8 @@ export default function AcreageReport() {
   const q = useQuoteSettings();
   const courseName = useCourseName();
   const terrain = useTerrain();
+  const run = useRun();
+  if (run.open) return <RunReport />;
   if (mode === "lawn") return <LawnReport />;
   const ac = (n: number) => `${formatAcres(n, lang)} ac`;
   const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
@@ -245,6 +250,112 @@ function LawnReport() {
                 {lawn?.lotSource === "cadastre" && <> · {t.attributionCadastre}</>}
                 {terrain && <> · {t.attributionLidar}</>}
                 {!!lawn?.imagery && <> · {t.attributionPhotos}</>}
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A grass run's PDF: the day at a glance, then each stop in the run's order
+ * with its lawn, the mowing and the crew's trimming and blowing (the longer
+ * in bold) and when the crew gets there and leaves, for the crew's run sheet.
+ */
+function RunReport() {
+  const lang = useLang();
+  const t = UI[lang];
+  const r = t.run;
+  const run = useRun();
+  const { plan, works, lawnM2 } = useRunPlan();
+  const s = run.settings;
+  const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
+  const saved = plan.enteredDriveMin - plan.driveMin;
+  const lidar = run.stops.some((stop) => stop.terrain);
+  const photos = run.stops.some((stop) => !!stop.lawn?.imagery);
+
+  return (
+    <div className="hidden bg-white text-ink print:block">
+      <TabHeader
+        lang={lang}
+        icon="route"
+        eyebrow={`Calculator · ${date}`}
+        title={r.title}
+        lede={r.reportLede}
+        printTitle={`Calculator - ${r.title}`}
+      />
+      <div className="space-y-3 px-4 py-4">
+        {plan.stops.length === 0 ? (
+          <p className="text-sm text-muted">{r.empty}</p>
+        ) : (
+          <>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              <dt className="font-semibold text-ink-2">{r.shop}</dt>
+              <dd>{run.shop ? (run.shop.label ?? r.shopLabel) : r.shopNone}</dd>
+              <dt className="font-semibold text-ink-2">{t.reportDate}</dt>
+              <dd>{date}</dd>
+            </dl>
+            <p className="text-sm">{r.reportSettings(`Kress Voyager ${s.voyager}`, r.crewOption(s.crew), s.speedKmh, s.setupMin)}</p>
+
+            <div className="flex items-center justify-between rounded-xl bg-brand px-5 py-3 text-white">
+              <span className="text-sm font-semibold">
+                {r.day} · {r.dayLine(formatClock(s.startMin, lang), formatClock(plan.endMin, lang))}
+              </span>
+              <span className={ui.kpi}>{formatDuration(plan.totalMin)}</span>
+            </div>
+            <p className="text-xs text-ink-2">
+              {[
+                `${r.drive(formatDuration(plan.driveMin))}${saved >= 1 ? ` (${r.saves(formatDuration(saved))})` : ""}`,
+                r.onSite(formatDuration(plan.onSiteMin)),
+                r.waits(formatDuration(plan.crewWaitMin), formatDuration(plan.mowerWaitMin)),
+                r.battery(formatAcres(plan.acres, lang), plan.chargeAcres),
+              ].join(" · ")}
+            </p>
+
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="bg-accent-soft text-accent-ink">
+                  {r.reportHead.map((h, i) => (
+                    <th key={h} className={`px-2 py-1.5 ${i <= 1 ? "text-left" : "text-right"}`}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {plan.stops.map((p, k) => {
+                  const stop = run.stops[p.index];
+                  const w = works[p.index]!;
+                  const crewLonger = p.crewMin > p.mowMin;
+                  return (
+                    <tr key={stop.id} className="border-b border-line">
+                      <td className="px-2 py-1 font-bold">{k + 1}</td>
+                      <td className="px-2 py-1">
+                        {stopName(stop, lang)}
+                        {(!w.fits || w.notes.length > 0) && <span className="text-muted"> ({r.voyagerCheck})</span>}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{formatLawn(lawnM2[p.index], lang)}</td>
+                      <td className={`whitespace-nowrap px-2 py-1 text-right tabular-nums ${crewLonger ? "" : "font-bold"}`}>{formatDuration(p.mowMin)}</td>
+                      <td className={`whitespace-nowrap px-2 py-1 text-right tabular-nums ${crewLonger ? "font-bold" : ""}`}>{formatDuration(p.crewMin)}</td>
+                      <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{formatClock(p.arriveMin, lang)}</td>
+                      <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{formatClock(p.leaveMin, lang)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {run.shop && <p className="text-xs text-ink-2">{r.backToShop(formatDuration(plan.returnMin))}</p>}
+
+            <div className={`${ui.note} space-y-1`}>
+              {plan.acres > plan.chargeAcres && <p>{r.overBattery(plan.chargeAcres)}</p>}
+              {overWorkday(plan) && <p>{r.overDay}</p>}
+              <p>{r.sources}</p>
+              <p>
+                {t.attribution} · {t.attributionCadastre}
+                {lidar && <> · {t.attributionLidar}</>}
+                {photos && <> · {t.attributionPhotos}</>}
               </p>
             </div>
           </>

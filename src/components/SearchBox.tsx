@@ -22,6 +22,8 @@ interface SearchBoxProps {
   getBias: () => { lat: number; lon: number } | null;
   /** Replaces the default "Search a golf course or address". */
   placeholder?: string;
+  /** Empties the box once a place is picked, for the next one (a grass run's stops). */
+  clearOnSelect?: boolean;
 }
 
 const PHOTON_URL = "https://photon.komoot.io/api/";
@@ -89,7 +91,7 @@ function parsePhoton(data: unknown): PlaceResult[] {
   return results;
 }
 
-export default function SearchBox({ lang, onSelect, getBias, placeholder }: SearchBoxProps) {
+export default function SearchBox({ lang, onSelect, getBias, placeholder, clearOnSelect = false }: SearchBoxProps) {
   const t = UI[lang];
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<PlaceResult[]>([]);
@@ -149,7 +151,7 @@ export default function SearchBox({ lang, onSelect, getBias, placeholder }: Sear
   }, [query, getBias, lang]);
 
   const choose = (place: PlaceResult) => {
-    setQuery(place.primary);
+    setQuery(clearOnSelect ? "" : place.primary);
     setOpen(false);
     setSuggestions([]);
     onSelect(place);

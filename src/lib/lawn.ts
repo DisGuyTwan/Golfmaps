@@ -81,6 +81,8 @@ export interface LawnTotals {
   lawnSqft: number;
   /** The lawn itself, for the map; null if nothing is left. */
   lawn: Polygon | MultiPolygon | null;
+  /** The paving on the lot (driveways, walks, parking), for the edges a crew blows clear. */
+  paved?: Polygon | MultiPolygon | null;
 }
 
 type Poly = Feature<Polygon | MultiPolygon>;
@@ -252,6 +254,7 @@ export function lawnTotals(m: LawnMeasurement): LawnTotals {
       tracedSqft: sqft(traced),
       lawnSqft: sqft(lawn),
       lawn: lawn?.geometry ?? null,
+      paved: paved?.geometry ?? null,
     };
   } catch {
     // Invalid geometry: fall back to plain sums (may double count overlaps).
@@ -277,6 +280,42 @@ export function lawnTotals(m: LawnMeasurement): LawnTotals {
 const ODD_LOT_M2 = 5000;
 /** Below this compactness (4πA/P², 1 for a circle) a lot is a strip, like a street. */
 const ODD_LOT_COMPACTNESS = 0.2;
+
+/** Length of every ring of a shape (m), on a local flat projection: plenty for lot-sized shapes. */
+export function perimeterM(g: Polygon | MultiPolygon): number {
+  const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+  let total = 0;
+  for (const rings of polys) {
+    for (const ring of rings) {
+      for (let i = 1; i < ring.length; i++) {
+        const [lon0, lat0] = ring[i - 1];
+        const [lon1, lat1] = ring[i];
+        const kx = 111_320 * Math.cos((((lat0 + lat1) / 2) * Math.PI) / 180);
+        total += Math.hypot((lon1 - lon0) * kx, (lat1 - lat0) * 111_320);
+      }
+    }
+  }
+  return total;
+}
+
+/**
+ * The lawn's edges a crew trims (all of them: walls, beds, fences, paving,
+ * lot lines a mower can't cut right up to) and those along paving on the lot,
+ * where clippings land and are blown clear (m). The shared edge is what
+ * merging the lawn with the paving dissolves.
+ */
+export function lawnEdges(totals: LawnTotals): { edgeM: number; hardEdgeM: number } {
+  if (!totals.lawn) return { edgeM: 0, hardEdgeM: 0 };
+  const edgeM = perimeterM(totals.lawn);
+  if (!totals.paved) return { edgeM, hardEdgeM: 0 };
+  try {
+    const merged = merge([totals.lawn, totals.paved]);
+    const shared = merged ? (edgeM + perimeterM(totals.paved) - perimeterM(merged.geometry)) / 2 : 0;
+    return { edgeM, hardEdgeM: Math.min(edgeM, Math.max(0, shared)) };
+  } catch {
+    return { edgeM, hardEdgeM: 0 };
+  }
+}
 
 /**
  * True when the lot doesn't look like a house lot: very large, or a long

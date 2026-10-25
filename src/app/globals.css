@@ -142,6 +142,38 @@ body {
   }
 }
 
+/* A grass run's stops (numbered in the run's order) and the shop. leaflet.css
+   loads after this file and sets markers to display: block, hence the extra class. */
+.leaflet-marker-icon.run-marker {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+  font: 700 12px/1 ui-sans-serif, system-ui, sans-serif;
+  color: #fff;
+}
+.run-stop {
+  background: rgb(var(--brand));
+}
+.run-loading {
+  background: rgb(var(--live));
+  animation: run-pulse 1.2s ease-in-out infinite;
+}
+.run-shop {
+  background: #f59e0b;
+}
+.run-off {
+  background: #94a3b8;
+}
+/* Opacity, not transform: Leaflet places markers with a transform. */
+@keyframes run-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
 /* Push the layer toggle below the floating top search bar. */
 .leaflet-top.leaflet-right .leaflet-control-layers {
   margin-top: 3.75rem;
