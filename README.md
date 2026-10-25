@@ -306,8 +306,14 @@ so those are estimates: check passages on site.
 
 For a crew working several properties in a day with a cut-and-go Voyager:
 **Plan a grass run** (or **Add to a grass run** on a lawn already measured),
-then search addresses or tap properties to add stops, and optionally set the
-shop the day starts and ends at. Each stop is measured like a residential
+then search addresses or tap properties to add stops, or **Import addresses
+(Excel or CSV)**: one address a row, in a column titled Address (or number,
+street and city columns), with an optional Name or Client column; the
+headers can be in English or French. Each address is placed on the map
+(OpenStreetMap's Photon geocoder, in Quebec); the panel lists the rows it
+couldn't find and flags the stops it could only place on their street, to
+check. Older .xls workbooks need saving as .xlsx or .csv first. Optionally
+set the shop the day starts and ends at. Each stop is measured like a residential
 lawn, live, two at a time. At each stop the crew unloads the Voyager, it mows
 while they trim and blow, and they load it back, so a stop takes the set-up
 plus whichever is longer: the Voyager's mowing (the mower fit's full-mow
@@ -323,7 +329,9 @@ shows the day: start and finish times, driving in minutes and kilometres
 against one Voyager charge; each leg says which streets it takes, and
 **Directions in Google Maps** opens the run in order for turn-by-turn.
 The Voyager and crew-size choices each show the day they'd make. The run has
-its own share link and a one-page run sheet PDF (`src/lib/run.ts`).
+its own share link and a one-page run sheet PDF (`src/lib/run.ts`). On a
+phone, drag the panel's handle to give the map more room (tap it to fold the
+panel down to its title).
 
 ## Incentives tab
 

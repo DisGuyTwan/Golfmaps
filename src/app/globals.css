@@ -253,3 +253,8 @@ html.theme-fade * {
     transition: none !important;
   }
 }
+
+/* iPhones centre a time field's value; the app's inputs read from the left. */
+input[type="time"]::-webkit-date-and-time-value {
+  text-align: left;
+}

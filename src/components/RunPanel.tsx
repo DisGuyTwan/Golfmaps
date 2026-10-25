@@ -6,6 +6,7 @@ import { formatSqft, SQ_M_TO_SQ_FT } from "@/lib/lawn";
 import type { RoadLeg } from "@/lib/roads";
 import {
   CREW_SIZES,
+  MAX_STOPS,
   RUN_VOYAGERS,
   SHOP,
   directionsLinks,
@@ -24,6 +25,8 @@ import {
 import {
   clearRun,
   closeRun,
+  dismissImport,
+  importAddresses,
   legKey,
   removeStop,
   retryRoads,
@@ -33,11 +36,13 @@ import {
   setShop,
   stopSiteOf,
   useRun,
+  type RunImport,
   type RunPlace,
   type RunRoads,
   type RunStop,
 } from "@/lib/run-store";
 import { Icon } from "./icons";
+import Sheet from "./Sheet";
 import LiveSteps from "./LiveSteps";
 import { CopyLinkButton, Notice, Pop, Segmented, printAs, ui } from "./ui";
 
@@ -55,6 +60,8 @@ export interface RunPlanResult {
   route: [number, number][];
   /** Kilometres driven in the day, when every leg is on the roads. */
   driveKm: number | null;
+  /** Legs of the day driven by the straight line, once the roads have loaded (or failed to). */
+  straightLegs: number;
 }
 
 type PlanInputs = [RunStop[], RunPlace | null, RunSettings, RunRoads];
@@ -72,7 +79,8 @@ function computePlan(...inputs: PlanInputs): RunPlanResult {
   const all = Object.fromEntries(RUN_VOYAGERS.map((v) => [v, worksFor(v)])) as Record<RunVoyager, (StopWork | null)[]>;
   // Driving on the roads once they've loaded; the straight line until then, and for a leg they don't join.
   const at = (i: number) => (i === SHOP ? shopPoint! : points[i]);
-  const leg = (a: number, b: number) => (roads.state === "ready" ? (roads.legs.get(legKey(at(a), at(b))) ?? null) : null);
+  // Legs routed before stay while more load: the roads between two places don't change.
+  const leg = (a: number, b: number) => roads.legs.get(legKey(at(a), at(b))) ?? null;
   const straight = straightDrive(points, shopPoint, settings.speedKmh);
   const drive: DriveFn = (a, b) => leg(a, b)?.minutes ?? straight(a, b);
   // Both Voyagers measure the same stops, so one order serves every choice.
@@ -90,6 +98,7 @@ function computePlan(...inputs: PlanInputs): RunPlanResult {
     leg,
     route: places.map(at),
     driveKm: legs.length && legs.every(Boolean) ? legs.reduce((t, l) => t + l!.km, 0) : null,
+    straightLegs: roads.state === "ready" || roads.state === "failed" ? legs.filter((l) => !l).length : 0,
   };
   lastPlan = { inputs, result };
   return result;
@@ -138,6 +147,9 @@ export function stopName(stop: RunStop, lang: Lang): string {
   return `${stop.point[0].toFixed(5)}, ${stop.point[1].toFixed(5)}`;
 }
 
+/** The run's small inputs, all one height (an iPhone's time field is otherwise taller). */
+const SMALL_INPUT = "block h-[34px] min-w-0 py-1.5 text-sm";
+
 const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 
 /**
@@ -148,7 +160,7 @@ const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:
 function SettingInput({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (n: number) => void }) {
   const [text, setText] = useState<string | null>(null);
   return (
-    <label className="space-y-1">
+    <label className="min-w-0 space-y-1">
       <span className="block text-xs font-semibold text-ink-2">{label}</span>
       <input
         type="number"
@@ -162,7 +174,7 @@ function SettingInput({ label, value, min, max, onChange }: { label: string; val
           if (e.target.value !== "" && n >= min && n <= max) onChange(n);
         }}
         onBlur={() => setText(null)}
-        className={`${ui.input} py-1.5 text-sm`}
+        className={`${ui.input} ${SMALL_INPUT}`}
       />
     </label>
   );
@@ -183,24 +195,64 @@ function Loading({ stop, lang }: { stop: RunStop; lang: Lang }) {
   );
 }
 
+/** Sheets the import reads (an .xls is offered too, to say it should be saved as .xlsx). */
+const SHEET_TYPES = ".xlsx,.csv,.tsv,.txt,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel";
+
+/** What came of a sheet of addresses: added, not found, on their street only, left out; or why it couldn't be read. */
+function ImportResult({ imported: im, lang }: { imported: RunImport; lang: Lang }) {
+  const r = UI[lang].run;
+  const lines = im.error
+    ? [im.error === "xls" ? r.importXls : im.error === "empty" ? r.importEmpty : r.importFailed]
+    : [
+        r.importDone(im.added, im.total),
+        im.missed.length ? r.importMissed(im.missed.map((m) => r.importRow(m.row, m.address)).join(", ")) : "",
+        im.onStreet ? r.importStreet(im.onStreet) : "",
+        im.already ? r.importAlready(im.already) : "",
+        im.over ? r.importOver(im.over, MAX_STOPS) : "",
+      ].filter(Boolean);
+  return (
+    <Notice tone={im.error || im.missed.length || im.onStreet || im.over ? "warn" : "info"}>
+      <span className="flex items-start gap-2">
+        <span className="min-w-0 flex-1 space-y-0.5">
+          {lines.map((line) => (
+            <span key={line} className="block">
+              {line}
+            </span>
+          ))}
+        </span>
+        <button onClick={dismissImport} aria-label={r.close} className="shrink-0 rounded p-0.5 opacity-70 transition hover:opacity-100">
+          <Icon name="close" className="h-3.5 w-3.5" />
+        </button>
+      </span>
+    </Notice>
+  );
+}
+
 /**
  * Planning a grass run: stops added by search or a tap (each measured like a
  * lawn, live), the shop the day starts and ends at, the Voyager and the crew,
  * and the day in the order with the least driving: at each stop the set-up
  * plus the longer of the mowing and the crew's trimming and blowing, with
- * who waits for whom. Takes the single-property panel's place.
+ * who waits for whom. Stops can also come from a sheet of addresses (Excel
+ * or CSV). Takes the single-property panel's place.
  */
 export default function RunPanel({
   lang,
   notice,
-  planned: { plan, works, lawnM2, byVoyager, byCrew, leg, route, driveKm },
+  planned: { plan, works, lawnM2, byVoyager, byCrew, leg, route, driveKm, straightLegs },
   getShareUrl,
+  getBias,
+  onImported,
 }: {
   lang: Lang;
   notice: string | null;
   /** The day, planned by the caller once for the panel and the map (useRunPlan). */
   planned: RunPlanResult;
   getShareUrl: () => string;
+  /** Where the map is, to place a sheet's addresses near it. */
+  getBias: () => { lat: number; lon: number } | null;
+  /** A sheet's addresses are all placed: frame the run. */
+  onImported: () => void;
 }) {
   const t = UI[lang];
   const r = t.run;
@@ -212,9 +264,18 @@ export default function RunPanel({
   const others = run.stops.filter((_, i) => !position.has(i));
   const saved = plan.enteredDriveMin - plan.driveMin;
   const fitNote = (n: string) => t.fitNote[n as keyof typeof t.fitNote] ?? n;
-  // The set speed only counts where the roads didn't load: then it's asked, and why.
-  const straightLine = run.roads.state === "failed" || run.roads.state === "tooFar";
+  // The set speed only counts for legs the roads don't join: then it's asked, and why.
+  const straightLine = straightLegs > 0;
+  const roadsNote =
+    run.roads.state === "failed" && !run.roads.legs.size
+      ? r.roadsFailed
+      : run.roads.tooFar
+        ? r.roadsTooFar
+        : run.roads.missed
+          ? r.roadsMissed(straightLegs)
+          : r.roadsUnjoined(straightLegs);
   const lastStop = plan.stops.at(-1)?.index;
+  const importing = !!run.imported && !run.imported.done;
   const directions = plan.stops.length ? directionsLinks(route) : [];
 
   return (
@@ -222,10 +283,7 @@ export default function RunPanel({
       className="pointer-events-none absolute inset-x-0 bottom-0 z-[1200] flex justify-center p-3"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      <div
-        data-measure-panel
-        className="pointer-events-auto max-h-[70dvh] w-full max-w-md animate-fade-up space-y-3 overflow-y-auto rounded-2xl bg-surface/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur dark:ring-white/10"
-      >
+      <Sheet handleLabel={t.sheetHandle}>
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-bold text-ink">
             <Icon name="route" className="h-[18px] w-[18px] text-accent" />
@@ -252,6 +310,33 @@ export default function RunPanel({
           <p className="text-[11px] text-muted">{r.hint}</p>
         )}
         {notice && <Notice tone="info">{notice}</Notice>}
+
+        {/* A sheet of addresses: each placed in turn and added as a stop. */}
+        {!run.pickingShop && (
+          <div className="space-y-1">
+            <label
+              className={`${ui.btnSecondary} w-full cursor-pointer focus-within:ring-2 focus-within:ring-accent ${importing ? "pointer-events-none opacity-60" : ""}`}
+            >
+              <Icon name="table" />
+              {r.importSheet}
+              <input
+                type="file"
+                accept={SHEET_TYPES}
+                disabled={importing}
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  // Cleared, so the same file can be picked again.
+                  e.target.value = "";
+                  if (file) void importAddresses(file, lang, getBias()).then(onImported);
+                }}
+              />
+            </label>
+            {run.stops.length === 0 && !run.imported && <p className="text-[11px] text-muted">{r.importHint}</p>}
+          </div>
+        )}
+        {run.imported && <LiveSteps lang={lang} steps={run.imported.live} />}
+        {run.imported?.done && <ImportResult imported={run.imported} lang={lang} />}
 
         {/* The shop */}
         <div className="flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2">
@@ -300,7 +385,7 @@ export default function RunPanel({
           />
         </div>
         <div className={`grid ${straightLine ? "grid-cols-[1.3fr_1fr_1fr]" : "grid-cols-2"} items-end gap-2`}>
-          <label className="space-y-1">
+          <label className="min-w-0 space-y-1">
             <span className="block text-xs font-semibold text-ink-2">{r.startTime}</span>
             <input
               type="time"
@@ -311,7 +396,8 @@ export default function RunPanel({
                 if (Number.isFinite(h) && Number.isFinite(m)) setRunSettings({ startMin: h * 60 + m });
               }}
               onBlur={() => setStartText(null)}
-              className={`${ui.input} py-1.5 text-sm`}
+              // iPhones draw a time field at its own width and height, over the field beside it: drawn plainly, it fits its cell.
+              className={`${ui.input} ${SMALL_INPUT} appearance-none`}
             />
           </label>
           {straightLine && (
@@ -357,8 +443,8 @@ export default function RunPanel({
         <LiveSteps lang={lang} steps={run.roads.live} />
         {straightLine && (
           <Notice tone="warn">
-            {run.roads.state === "tooFar" ? r.roadsTooFar : r.roadsFailed}
-            {run.roads.state === "failed" && (
+            {roadsNote}
+            {run.roads.missed && (
               <button onClick={retryRoads} className="ml-1.5 font-semibold underline underline-offset-2">
                 {r.retryRoads}
               </button>
@@ -402,6 +488,7 @@ export default function RunPanel({
                             {r.trimBlow(formatDuration(p.crewMin))}
                           </span>
                         </div>
+                        {stop.onStreet && <div className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-300">{r.onStreet}</div>}
                         {(!w.fits || w.notes.length > 0) && (
                           <div className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-300">
                             {r.voyagerCheck}: {[...(w.fits ? [] : [r.tooSteep]), ...w.notes.filter((n) => n !== "tooSteep").map(fitNote)].join(", ")}
@@ -427,6 +514,7 @@ export default function RunPanel({
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-ink">{stopName(stop, lang)}</div>
+                      {stop.onStreet && <div className="text-[11px] text-amber-700 dark:text-amber-300">{r.onStreet}</div>}
                       {stop.state === "waiting" || stop.state === "measuring" ? (
                         <Loading stop={stop} lang={lang} />
                       ) : (
@@ -492,7 +580,7 @@ export default function RunPanel({
           )}
         </div>
         <p className="text-[10px] leading-snug text-faint">{r.sources}</p>
-      </div>
+      </Sheet>
     </div>
   );
 }

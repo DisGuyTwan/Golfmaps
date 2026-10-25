@@ -376,22 +376,65 @@ export function routeAll(g: RoadGraph, places: [number, number][]): (RoadLeg | n
 /** Main roads are read this far past the run's places (degrees), and boxes snap to this grid so nearby runs share them. */
 const ROADS_MARGIN_DEG = 0.02;
 const GRID_DEG = 0.01;
-/** Largest main-road box (degrees per side, the cache route's limit): a run spread wider is driven by the straight line. */
+/** Largest main-road box (degrees per side, the cache route's limit): a run spread wider is driven by the straight line between neighbourhoods. */
 const MAX_ROADS_DEG = 0.3;
+/** Largest box of every street (degrees per side, the cache route's limit for "streets"). */
+const MAX_STREETS_DEG = 0.05;
+
+type Box = { south: number; west: number; north: number; east: number };
 
 export interface RoadBoxes {
-  /** The main roads across the run; null when the run is spread too wide for one lookup. */
-  roads: { south: number; west: number; north: number; east: number } | null;
-  /** Every street in the neighbourhood of each place: its grid cell and the cells around (about 3 × 2 km), each box once. */
-  streets: { south: number; west: number; north: number; east: number }[];
+  /**
+   * Every street around the places: each place's grid cell and the cells
+   * around it (about 3 × 2 km), neighbourhoods merged while they fit one
+   * lookup, so a run in one part of town is a single lookup.
+   */
+  streets: Box[];
+  /** The main roads across the run, to join neighbourhoods; null when there's one, or the run is too wide. */
+  roads: Box | null;
+  /** The neighbourhoods are spread too wide for one main-road lookup: the legs between them are the straight line. */
+  tooFar: boolean;
 }
 
 const down = (v: number) => Math.floor(v / GRID_DEG + 1e-9) * GRID_DEG;
 const round5 = (v: number) => Math.round(v * 1e5) / 1e5;
+const union = (a: Box, b: Box): Box => ({
+  south: Math.min(a.south, b.south),
+  west: Math.min(a.west, b.west),
+  north: Math.max(a.north, b.north),
+  east: Math.max(a.east, b.east),
+});
+const fitsStreets = (b: Box) => b.north - b.south <= MAX_STREETS_DEG + 1e-9 && b.east - b.west <= MAX_STREETS_DEG + 1e-9;
 
-/** The Overpass boxes a run's roads come from, snapped to a 0.01° grid so the cache route serves them again. */
+/**
+ * The Overpass boxes a run's roads come from, on a 0.01° grid so the cache
+ * route serves them again. Fewer lookups matter more than smaller ones: the
+ * mirrors turn away an address asking several at once.
+ */
 export function roadBoxes(places: [number, number][]): RoadBoxes {
-  if (!places.length) return { roads: null, streets: [] };
+  if (!places.length) return { streets: [], roads: null, tooFar: false };
+  let streets: Box[] = [];
+  for (const [lat, lon] of places) {
+    const south = round5(down(lat) - GRID_DEG);
+    const west = round5(down(lon) - GRID_DEG);
+    if (!streets.some((b) => b.south === south && b.west === west))
+      streets.push({ south, west, north: round5(south + 3 * GRID_DEG), east: round5(west + 3 * GRID_DEG) });
+  }
+  // Merge the two neighbourhoods whose box together is smallest, while it fits one lookup.
+  for (;;) {
+    let best: [number, number, Box] | null = null;
+    for (let i = 0; i < streets.length; i++)
+      for (let j = i + 1; j < streets.length; j++) {
+        const u = union(streets[i], streets[j]);
+        if (fitsStreets(u) && (!best || (u.north - u.south) * (u.east - u.west) < (best[2].north - best[2].south) * (best[2].east - best[2].west)))
+          best = [i, j, u];
+      }
+    if (!best) break;
+    const [i, j, u] = best;
+    streets = [...streets.filter((_, k) => k !== i && k !== j), u];
+  }
+  if (streets.length === 1) return { streets, roads: null, tooFar: false };
+
   const lats = places.map((p) => p[0]);
   const lons = places.map((p) => p[1]);
   const roads = {
@@ -401,11 +444,5 @@ export function roadBoxes(places: [number, number][]): RoadBoxes {
     east: round5(down(Math.max(...lons) + ROADS_MARGIN_DEG) + GRID_DEG),
   };
   const fits = roads.north - roads.south <= MAX_ROADS_DEG + 1e-9 && roads.east - roads.west <= MAX_ROADS_DEG + 1e-9;
-  const streets = new Map<string, RoadBoxes["streets"][number]>();
-  for (const [lat, lon] of places) {
-    const south = round5(down(lat) - GRID_DEG);
-    const west = round5(down(lon) - GRID_DEG);
-    streets.set(`${south},${west}`, { south, west, north: round5(south + 3 * GRID_DEG), east: round5(west + 3 * GRID_DEG) });
-  }
-  return { roads: fits ? roads : null, streets: [...streets.values()] };
+  return { streets, roads: fits ? roads : null, tooFar: !fits };
 }

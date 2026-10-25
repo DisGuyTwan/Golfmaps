@@ -6,6 +6,7 @@ import { liveSeconds, liveVisible, type LiveFinding, type LiveSource, type LiveS
 import { Icon, type IconName } from "./icons";
 
 const SOURCE_ICON: Record<LiveSource, IconName> = {
+  addresses: "table",
   lot: "home",
   crop: "sprout",
   osm: "map",
@@ -37,6 +38,8 @@ function finding(source: LiveSource, found: LiveFinding | null, lang: Lang): str
       return t.grass(formatAcres(found.acres, lang));
     case "roads":
       return t.roads(found.places);
+    case "addresses":
+      return t.addresses(found.found, found.total);
     case "none":
       return source === "lot" ? t.noLot : t.none;
     default:

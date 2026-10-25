@@ -297,7 +297,7 @@ function RunReport() {
               <dt className="font-semibold text-ink-2">{t.reportDate}</dt>
               <dd>{date}</dd>
             </dl>
-            <p className="text-sm">{r.reportSettings(`Kress Voyager ${s.voyager}`, r.crewOption(s.crew), s.speedKmh, s.setupMin)}</p>
+            <p className="text-sm">{r.reportSettings(`Kress Voyager ${s.voyager}`, r.crewOption(s.crew), driveKm === null ? s.speedKmh : null, s.setupMin)}</p>
 
             <div className="flex items-center justify-between rounded-xl bg-brand px-5 py-3 text-white">
               <span className="text-sm font-semibold">

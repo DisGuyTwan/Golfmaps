@@ -14,6 +14,7 @@ import LiveSteps from "./LiveSteps";
 import MowerFit from "./MowerFit";
 import QuoteSection from "./QuoteSection";
 import { Icon } from "./icons";
+import Sheet from "./Sheet";
 import { Notice, Pop, ui } from "./ui";
 
 interface MeasurePanelProps {
@@ -173,9 +174,7 @@ export default function MeasurePanel({
       className="pointer-events-none absolute inset-x-0 bottom-0 z-[1200] flex justify-center p-3"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
-      <div
-        data-measure-panel
-        className="pointer-events-auto max-h-[70dvh] w-full max-w-md animate-fade-up space-y-3 overflow-y-auto rounded-2xl bg-surface/95 p-4 shadow-2xl ring-1 ring-black/10 backdrop-blur dark:ring-white/10">
+      <Sheet handleLabel={t.sheetHandle}>
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-bold text-ink">
             <Icon name={modeIcon} className="h-[18px] w-[18px] text-accent" />
@@ -552,7 +551,7 @@ export default function MeasurePanel({
           {terrain && <> · {t.attributionLidar}</>}
           {mode === "lawn" && !!lawn?.imagery && <> · {t.attributionPhotos}</>}
         </p>
-      </div>
+      </Sheet>
     </div>
   );
 }

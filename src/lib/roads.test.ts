@@ -99,23 +99,35 @@ describe("routes on the streets", () => {
 });
 
 describe("where a run's roads come from", () => {
-  it("reads the main roads across the run and every street around each place, on a shared grid", () => {
+  it("reads a run in one part of town in a single lookup of every street, on a shared grid", () => {
     const boxes = roadBoxes([
       [45.4442, -73.3335],
       [45.4505, -73.312],
       [45.4449, -73.3331],
     ]);
-    expect(boxes.roads).toEqual({ south: 45.42, west: -73.36, north: 45.48, east: -73.29 });
-    // The first and third places share a neighbourhood box.
-    expect(boxes.streets).toEqual([
-      { south: 45.43, west: -73.35, north: 45.46, east: -73.32 },
-      { south: 45.44, west: -73.33, north: 45.47, east: -73.3 },
-    ]);
-    for (const b of boxes.streets) expect(b.north - b.south).toBeLessThanOrEqual(0.05);
+    // The three neighbourhoods fit one box, and the streets in it join them: no main-road lookup.
+    expect(boxes).toEqual({ streets: [{ south: 45.43, west: -73.35, north: 45.47, east: -73.3 }], roads: null, tooFar: false });
   });
 
-  it("leaves the main roads out when the run is spread too wide for one lookup", () => {
-    expect(roadBoxes([[45.4, -73.5], [45.9, -73.5]]).roads).toBeNull();
+  it("joins neighbourhoods across town by the main roads", () => {
+    const boxes = roadBoxes([
+      [45.4442, -73.3335],
+      [45.4449, -73.3331],
+      [45.5301, -73.4612],
+    ]);
+    expect(boxes.streets).toEqual([
+      { south: 45.43, west: -73.35, north: 45.46, east: -73.32 },
+      { south: 45.52, west: -73.48, north: 45.55, east: -73.45 },
+    ]);
+    expect(boxes.roads).toEqual({ south: 45.42, west: -73.49, north: 45.56, east: -73.31 });
+    expect(boxes.tooFar).toBe(false);
+  });
+
+  it("keeps each neighbourhood's streets when the run is spread too wide for the main roads", () => {
+    const boxes = roadBoxes([[45.4, -73.5], [45.9, -73.5]]);
+    expect(boxes.roads).toBeNull();
+    expect(boxes.tooFar).toBe(true);
+    expect(boxes.streets).toHaveLength(2);
     expect(roadBoxes([]).streets).toEqual([]);
   });
 });

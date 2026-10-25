@@ -48,8 +48,9 @@ const en = {
   live: {
     title: "Reading live",
     ready: "Read",
-    sources: { lot: "Cadastre lot", crop: "Crop map", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Aerial photos", satellite: "Satellite land cover", roads: "Road map" },
+    sources: { addresses: "Addresses", lot: "Cadastre lot", crop: "Crop map", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Aerial photos", satellite: "Satellite land cover", roads: "Road map" },
     reading: {
+      addresses: "Placing the sheet’s addresses",
       lot: "Finding the lot under the point",
       crop: "Looking for sod fields",
       osm: "Buildings, paving and golf courses",
@@ -74,6 +75,7 @@ const en = {
         : [pools ? (pools === 1 ? "1 pool" : `${pools} pools`) : "", paved ? (paved === 1 ? "1 paved area" : `${paved} paved areas`) : ""].filter(Boolean).join(", "),
     grass: (acres: string) => `${acres} ac of grass`,
     roads: (n: number) => `Routes between ${n} places`,
+    addresses: (found: number, total: number) => `${found} of ${total} found`,
     read: "Read",
     none: "No data here",
   },
@@ -81,6 +83,7 @@ const en = {
   tapFirst: "Tap one corner of the area to scan",
   tapSecond: "Tap the opposite corner of the scan area",
   cancel: "Cancel",
+  sheetHandle: "Drag to resize the panel, tap to fold it",
   measure: "Measure course in view",
   selectArea: "Select area",
   notFound:
@@ -319,6 +322,22 @@ const en = {
     reopen: (n: number) => `Grass run (${n === 1 ? "1 stop" : `${n} stops`})`,
     addLawn: "Add to a grass run",
     hint: "Search an address or tap a property to add a stop. The stops are put in the order with the least driving.",
+    importSheet: "Import addresses (Excel or CSV)",
+    importHint: "One address a row, in a column titled Address (or number, street and city columns); a Name or Client column names the stops.",
+    importDone: (added: number, total: number) => `${added} of ${total} ${total === 1 ? "address" : "addresses"} added to the run.`,
+    importRow: (row: number, address: string) => `row ${row} (${address})`,
+    importMissed: (rows: string) => `Not found: ${rows}. Search them or tap them on the map.`,
+    importStreet: (n: number) =>
+      n === 1
+        ? "1 was placed on its street, not the house (its number isn’t in OpenStreetMap): check its pin."
+        : `${n} were placed on their street, not the house (their numbers aren’t in OpenStreetMap): check their pins.`,
+    importAlready: (n: number) => (n === 1 ? "1 was already in the run." : `${n} were already in the run.`),
+    importOver: (n: number, max: number) =>
+      `A run holds up to ${max} stops: ${n === 1 ? "the last address was" : `the last ${n} addresses were`} left out.`,
+    importXls: "Older .xls workbooks can’t be read: save the sheet as .xlsx or .csv (File, Save As) and import it again.",
+    importEmpty: "No addresses found in that sheet: put them in a column titled Address (or number, street and city columns), one a row.",
+    importFailed: "Couldn’t read that file: import an Excel workbook (.xlsx) or a CSV.",
+    onStreet: "Placed on the street (its number isn’t in OpenStreetMap): check the pin is the house",
     shop: "Start and finish",
     shopNone: "No shop set: the day starts at the first stop.",
     setShop: "Set the shop",
@@ -339,7 +358,11 @@ const en = {
     driveKm: (d: string, km: string) => `Driving: ${d}, ${km} km`,
     via: (streets: string) => `via ${streets}`,
     roadsFailed: "Couldn’t load the road map: driving is estimated from the straight line at the speed below.",
-    roadsTooFar: "The stops are spread too wide for one road map: driving is estimated from the straight line at the speed below.",
+    roadsTooFar: "The stops are spread too wide to join every neighbourhood by road: the legs between them are estimated from the straight line at the speed below.",
+    roadsMissed: (n: number) =>
+      `The road map didn’t fully load: ${n === 1 ? "1 leg is" : `${n} legs are`} estimated from the straight line at the speed below.`,
+    roadsUnjoined: (n: number) =>
+      `The mapped roads don’t join ${n === 1 ? "1 leg" : `${n} legs`} (a stop far from a road?): estimated from the straight line at the speed below.`,
     retryRoads: "Try the roads again",
     directions: "Directions in Google Maps",
     directionsPart: (k: number, n: number) => `Directions in Google Maps, part ${k} of ${n}`,
@@ -371,8 +394,8 @@ const en = {
       "Trimming 1,500 ft of edge and about 60 trees an hour a person, a backpack blower 25,000 sq ft an hour over 3 ft along the paving (SingleOps production rates). Mowing time from the mower fit (turns, edges, trees, driving on the lot). Driving: the fastest route on OpenStreetMap’s roads, at about 80% of the speed limit (typical speeds where none is mapped), one-way streets included. Adjust to your crew’s own times.",
     reportLede: "The day’s stops in the order with the least driving. The Voyager mows while the crew trims and blows.",
     reportHead: ["#", "Stop", "Lawn", "Mow", "Trim and blow", "Arrive", "Leave"] as string[],
-    reportSettings: (voyager: string, crew: string, speed: number, setup: number) =>
-      `${voyager}, ${crew} trimming and blowing, ${speed} km/h on the road, ${setup} min to set up a stop.`,
+    reportSettings: (voyager: string, crew: string, speed: number | null, setup: number) =>
+      `${voyager}, ${crew} trimming and blowing, ${speed === null ? "driving on OpenStreetMap’s roads" : `${speed} km/h where the roads didn’t load`}, ${setup} min to set up a stop.`,
   },
 };
 
@@ -408,8 +431,9 @@ const fr: UiStrings = {
   live: {
     title: "Lecture en direct",
     ready: "Lu",
-    sources: { lot: "Lot du cadastre", crop: "Carte des cultures", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Photos aériennes", satellite: "Couverture du sol par satellite", roads: "Réseau routier" },
+    sources: { addresses: "Adresses", lot: "Lot du cadastre", crop: "Carte des cultures", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Photos aériennes", satellite: "Couverture du sol par satellite", roads: "Réseau routier" },
     reading: {
+      addresses: "Repérage des adresses du fichier",
       lot: "Recherche du lot au point touché",
       crop: "Recherche de champs de gazon",
       osm: "Bâtiments, pavé et terrains de golf",
@@ -434,6 +458,7 @@ const fr: UiStrings = {
         : [pools ? (pools === 1 ? "1 piscine" : `${pools} piscines`) : "", paved ? (paved === 1 ? "1 surface pavée" : `${paved} surfaces pavées`) : ""].filter(Boolean).join(", "),
     grass: (acres: string) => `${acres} ac de gazon`,
     roads: (n: number) => `Itinéraires entre ${n} lieux`,
+    addresses: (found: number, total: number) => `${found} sur ${total} trouvées`,
     read: "Lu",
     none: "Aucune donnée ici",
   },
@@ -441,6 +466,7 @@ const fr: UiStrings = {
   tapFirst: "Touchez un coin de la zone à analyser",
   tapSecond: "Touchez le coin opposé de la zone à analyser",
   cancel: "Annuler",
+  sheetHandle: "Glisser pour redimensionner le panneau, toucher pour le replier",
   measure: "Mesurer le terrain affiché",
   selectArea: "Choisir une zone",
   notFound:
@@ -685,6 +711,23 @@ const fr: UiStrings = {
     reopen: (n: number) => `Tournée de tonte (${n === 1 ? "1 arrêt" : `${n} arrêts`})`,
     addLawn: "Ajouter à une tournée",
     hint: "Cherchez une adresse ou touchez une propriété pour ajouter un arrêt. Les arrêts sont placés dans l’ordre qui demande le moins de route.",
+    importSheet: "Importer des adresses (Excel ou CSV)",
+    importHint: "Une adresse par ligne, dans une colonne Adresse (ou des colonnes numéro, rue et ville) ; une colonne Nom ou Client nomme les arrêts.",
+    importDone: (added: number, total: number) =>
+      `${added} ${added <= 1 ? "adresse" : "adresses"} sur ${total} ${added <= 1 ? "ajoutée" : "ajoutées"} à la tournée.`,
+    importRow: (row: number, address: string) => `ligne ${row} (${address})`,
+    importMissed: (rows: string) => `Introuvables : ${rows}. Cherchez-les ou touchez-les sur la carte.`,
+    importStreet: (n: number) =>
+      n === 1
+        ? "1 adresse a été placée sur sa rue, pas sur la maison (son numéro est absent d’OpenStreetMap) : vérifiez son repère."
+        : `${n} adresses ont été placées sur leur rue, pas sur la maison (leurs numéros sont absents d’OpenStreetMap) : vérifiez leurs repères.`,
+    importAlready: (n: number) => (n === 1 ? "1 adresse était déjà dans la tournée." : `${n} adresses étaient déjà dans la tournée.`),
+    importOver: (n: number, max: number) =>
+      `Une tournée compte au plus ${max} arrêts : ${n === 1 ? "la dernière adresse a été laissée de côté" : `les ${n} dernières adresses ont été laissées de côté`}.`,
+    importXls: "Les anciens classeurs .xls ne peuvent pas être lus : enregistrez la feuille en .xlsx ou .csv (Fichier, Enregistrer sous) et importez-la de nouveau.",
+    importEmpty: "Aucune adresse trouvée dans cette feuille : mettez-les dans une colonne Adresse (ou des colonnes numéro, rue et ville), une par ligne.",
+    importFailed: "Impossible de lire ce fichier : importez un classeur Excel (.xlsx) ou un CSV.",
+    onStreet: "Placé sur la rue (son numéro est absent d’OpenStreetMap) : vérifiez que le repère est sur la maison",
     shop: "Départ et retour",
     shopNone: "Pas d’atelier : la journée commence au premier arrêt.",
     setShop: "Choisir l’atelier",
@@ -705,7 +748,11 @@ const fr: UiStrings = {
     driveKm: (d: string, km: string) => `Route : ${d}, ${km} km`,
     via: (streets: string) => `par ${streets}`,
     roadsFailed: "Impossible de charger le réseau routier : la route est estimée en ligne droite à la vitesse ci-dessous.",
-    roadsTooFar: "Les arrêts sont trop éloignés pour un seul réseau routier : la route est estimée en ligne droite à la vitesse ci-dessous.",
+    roadsTooFar: "Les arrêts sont trop éloignés pour relier chaque secteur par la route : les trajets entre eux sont estimés en ligne droite à la vitesse ci-dessous.",
+    roadsMissed: (n: number) =>
+      `Le réseau routier n’a pas fini de charger : ${n === 1 ? "1 trajet est estimé" : `${n} trajets sont estimés`} en ligne droite à la vitesse ci-dessous.`,
+    roadsUnjoined: (n: number) =>
+      `${n === 1 ? "1 trajet n’est pas relié" : `${n} trajets ne sont pas reliés`} par les routes cartographiées (un arrêt loin d’une route ?) : ${n === 1 ? "il est estimé" : "ils sont estimés"} en ligne droite à la vitesse ci-dessous.`,
     retryRoads: "Réessayer les routes",
     directions: "Itinéraire dans Google Maps",
     directionsPart: (k: number, n: number) => `Itinéraire dans Google Maps, partie ${k} de ${n}`,
@@ -737,8 +784,8 @@ const fr: UiStrings = {
       "Coupe-bordure : 1 500 pi de bordure et environ 60 arbres à l’heure par personne; souffleur à dos : 25 000 pi² à l’heure sur 3 pi le long des surfaces pavées (taux de production SingleOps). Temps de tonte selon le choix du robot (virages, bordures, arbres, déplacements sur le terrain). Route : le trajet le plus rapide sur les routes d’OpenStreetMap, à environ 80 % de la limite de vitesse (vitesses habituelles là où aucune n’est indiquée), sens uniques compris. Ajustez selon les temps de votre équipe.",
     reportLede: "Les arrêts de la journée dans l’ordre qui demande le moins de route. Le Voyager tond pendant que l’équipe fait les bordures et le soufflage.",
     reportHead: ["#", "Arrêt", "Pelouse", "Tonte", "Bordures et soufflage", "Arrivée", "Départ"] as string[],
-    reportSettings: (voyager: string, crew: string, speed: number, setup: number) =>
-      `${voyager}, ${crew} aux bordures et au souffleur, ${speed} km/h sur la route, ${setup} min d’installation par arrêt.`,
+    reportSettings: (voyager: string, crew: string, speed: number | null, setup: number) =>
+      `${voyager}, ${crew} aux bordures et au souffleur, ${speed === null ? "trajets sur les routes d’OpenStreetMap" : `${speed} km/h là où les routes n’ont pas chargé`}, ${setup} min d’installation par arrêt.`,
   },
 };
 

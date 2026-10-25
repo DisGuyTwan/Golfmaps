@@ -61,6 +61,8 @@ src/components/
   GolfMap.tsx                Leaflet map; client-only (dynamic import, ssr: false)
   LiveSteps.tsx              the measurement loading live: each source being
                              read, for how long, and what it found
+  Sheet.tsx                  the panel over the map as a sheet the rep sizes
+                             (drag or arrow keys on its handle, tap to fold)
   MeasurePanel.tsx           results panel + legend; "Select a property" until
                              something is measured, then the detected kind with
                              a Change switch (Golf course | Sod farm | Lawn)
@@ -71,7 +73,8 @@ src/components/
                              satellite grass, or % sod), override, Send to ROI,
                              PDF report, Copy link
   RunPanel.tsx               grass run panel (stops, shop, Voyager, crew, the
-                             day); useRunPlan() for the panel, map and PDF
+                             day, a sheet of addresses to import); useRunPlan()
+                             for the panel, map and PDF
   AcreageReport.tsx          print-only Acreage PDF (replaces the map in print),
                              or the grass run's run sheet
   SearchBox.tsx              Photon geocoder autocomplete
@@ -116,6 +119,8 @@ src/lib/
                 then the roads between them loaded and routed
   roads.ts      OpenStreetMap roads → a graph; fastest legs (Dijkstra) with
                 their path, km and streets; the Overpass boxes (pure, tested)
+  addresses.ts  a sheet of addresses (.xlsx read as a zip, or CSV) → address
+                columns by header (EN/FR) → Photon in Quebec (pure parts tested)
   lot-lookups.ts  lookAround (lot, OSM, LiDAR at a point) and measureLot (a
                 lawn filled in source by source), for the lawn mode and runs
   share.ts      share-link helpers + polylines (pure, tested); keys r_ / i_ / q_ /
@@ -300,7 +305,17 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   to a grass run" on a measured lawn) opens `RunPanel` in the results panel's
   place; while it's open, a search or a tap adds a stop (or sets the shop,
   `pickingShop`) instead of selecting a property, and the map shows numbered
-  stops, the shop and the route. Each stop is measured like a lawn
+  stops, the shop and the route. "Import addresses (Excel or CSV)" adds a
+  sheet's addresses as stops (`importAddresses`, `addresses.ts`): an .xlsx
+  is read as a zip (DecompressionStream, no spreadsheet library) and its
+  first visible sheet's XML parsed; a CSV may use commas, semicolons (French
+  Excel) or tabs, in UTF-8 or Windows-1252. Columns are found by their
+  headers in English or French (address, or number and street; city,
+  province, postal code; name or client), else each row's first cell that
+  starts with a civic number. Each address is placed with Photon in Quebec,
+  a house first (`layer=house`), else the street, flagged `onStreet` when the
+  house number isn't the one asked; the summary lists the rows not found.
+  An old .xls (binary) isn't read: the rep saves it as .xlsx or .csv. Each stop is measured like a lawn
   (`measureLot` in `lot-lookups.ts`: cadastre lot, OSM, LiDAR buildings,
   photo pools and paving), `AT_ONCE` (2) at a time since the Overpass mirrors
   limit each address, each with its own live list and map sweep. At a stop
@@ -314,18 +329,25 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   Driving is on OpenStreetMap's roads, routed in the browser (`roads.ts`):
   public routing servers (OSRM's demo, FOSSGIS) aren't for commercial use and
   the app takes no API keys, so don't call them from here. Once no stop is
-  still being measured, `run-store` reads Overpass `roads` (motorway down to
-  unclassified, over the run's box + 0.02°) and `streets` (every drivable
-  street in a 0.03° box around each place), both on a 0.01° grid so the
-  cache route and nearby runs share them, builds the graph (one-way streets,
+  still being measured, `run-store` reads Overpass `streets` (every drivable
+  street in a 0.03° box around each place, neighbourhoods merged while they
+  fit 0.05°, so a run in one part of town is one lookup) and, only to join
+  several neighbourhoods, `roads` (motorway down to unclassified, over the
+  run's box + 0.02°), all on a 0.01° grid so the cache route and nearby runs
+  share them, two at a time (the mirrors turn away an address asking
+  several: on production the main-road lookup failed while the streets
+  loaded, and every leg fell back to the straight line). It routes on
+  whatever answered (`missed` when some didn't, retried once on its own
+  after 3 s), and builds the graph (one-way streets,
   roundabouts, motorways; about 80 % of `maxspeed`, else `TYPICAL_KMH`), snaps
   each place to the biggest connected piece within 400 m, and runs Dijkstra
   from each place in turn (pausing between, so the page stays responsive).
   Each leg keeps its path, km and up to three street names (`via`). The road
   lookup is a live step ("Road map") swept on the map. Where the roads don't
-  join two places, or don't load, or the run spans over 0.3°, that leg is the
-  straight line × `ROAD_FACTOR` (1.3) at the set speed (`DriveFn`
-  `straightDrive`), and the speed input only shows then. The order is the
+  join two places, or don't load, or the neighbourhoods span over 0.3°, that
+  leg is the straight line × `ROAD_FACTOR` (1.3) at the set speed (`DriveFn`
+  `straightDrive`), and the speed input and a notice saying why only show
+  then (`straightLegs`). Legs routed before stay while more load. The order is the
   least driving (exact Held-Karp up to 12 stops, else nearest neighbour +
   2-opt), from the shop and back when there is one; time on site doesn't
   depend on it, so `runOrder` is worked out once per change and shared by
@@ -355,6 +377,12 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   shows once both OSM and the LiDAR have answered and found nothing. Don't drop
   the smoothing, the plane fit under trees or the patch filter: flat lawns
   then read as steep and get a 4x4.
+- **The panel over the map is a sheet the rep sizes** (`Sheet.tsx`, both the
+  results and the grass run panel): it fits its content up to 70 % of the
+  screen until its handle is dragged (or moved with the arrow keys), folds
+  to its title row on a tap, and keeps that height across panels. On a phone
+  it otherwise covered the map the rep taps. `fitAbovePanel` frames the map
+  above whatever height it has.
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in
@@ -459,5 +487,5 @@ npm install
 npm run dev      # http://localhost:3000
 npm run build    # type check + production build
 npm run lint
-npm test         # vitest: acreage pipeline, land cover, terrain, photos, detection, mower fit, coverage, quote, grass run, incentives, ROI model, share links
+npm test         # vitest: acreage pipeline, land cover, terrain, photos, detection, mower fit, coverage, quote, grass run, road routing, address sheets, incentives, ROI model, share links
 ```

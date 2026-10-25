@@ -1199,7 +1199,14 @@ export default function GolfCourseCalculator() {
       />
 
       {run.open ? (
-        <RunPanel lang={lang} notice={runNotice} planned={runPlan} getShareUrl={getShareUrl} />
+        <RunPanel
+          lang={lang}
+          notice={runNotice}
+          planned={runPlan}
+          getShareUrl={getShareUrl}
+          getBias={getSearchBias}
+          onImported={() => mapRef.current && fitRun(mapRef.current)}
+        />
       ) : (
         <MeasurePanel
           lang={lang}
