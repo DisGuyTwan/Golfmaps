@@ -8,7 +8,7 @@ import { beginStep, endStep, type LiveStep } from "./live";
 import { measureLot } from "./lot-lookups";
 import { bboxParam, fetchFairways } from "./overpass";
 import { reportError } from "./report-error";
-import { buildRoadGraph, roadBoxes, routeFrom, snapPlaces, type RoadGraph, type RoadLeg } from "./roads";
+import { buildRoadGraph, roadBoxes, routeFrom, snapPlaces, streetOf, type RoadGraph, type RoadLeg, type RoutePlace } from "./roads";
 import { DEFAULT_RUN, MAX_STOPS, stopSite, type RunLink, type RunSettings, type StopSite } from "./run";
 import type { TerrainGrid } from "./terrain";
 
@@ -324,10 +324,20 @@ export function stopSiteOf(stop: RunStop): StopSite | null {
 export const legKey = (a: [number, number], b: [number, number]) =>
   `${a[0].toFixed(5)},${a[1].toFixed(5)}>${b[0].toFixed(5)},${b[1].toFixed(5)}`;
 
-/** The places routed between: the shop and every stop measured. */
-const routedPlaces = (): [number, number][] => [
-  ...(state.shop ? [state.shop.point] : []),
-  ...state.stops.filter((s) => s.state === "done").map((s) => s.point),
+/**
+ * The places routed between: the shop and every stop measured, each with the
+ * street of its address and its cadastre lot, so the route reaches a stop
+ * from its own street at the front of the lot.
+ */
+const routedPlaces = (): RoutePlace[] => [
+  ...(state.shop ? [{ at: state.shop.point, street: streetOf(state.shop.label) }] : []),
+  ...state.stops
+    .filter((s) => s.state === "done")
+    .map((s) => ({
+      at: s.point,
+      street: streetOf(s.label),
+      lot: s.lawn ? ((s.lawn.lot.type === "Polygon" ? s.lawn.lot.coordinates : s.lawn.lot.coordinates.flat()) as [number, number][][]) : null,
+    })),
 ];
 
 /** Overpass answers by box, kept for the session (a box that failed is dropped, to try again). */
@@ -392,7 +402,8 @@ async function inTurn<T, R>(items: T[], at: number, fn: (item: T) => Promise<R>)
 }
 
 async function loadRoads() {
-  const places = routedPlaces();
+  const routed = routedPlaces();
+  const places = routed.map((p) => p.at);
   const key = places.map((p) => legKey(p, p)).join("|");
   const { roads } = state;
   if (key === routedKey && (roads.state === "loading" || (roads.state === "ready" && !roads.missed))) return;
@@ -431,12 +442,12 @@ async function loadRoads() {
       graph = { key: graphKey, graph: buildRoadGraph(...answers.filter((a) => a !== null)) };
     }
     const g = graph.graph;
-    const snapped = snapPlaces(g, places);
+    const snapped = snapPlaces(g, routed);
     const legs = new Map<string, RoadLeg | null>();
     for (let i = 0; i < places.length; i++) {
       await pause(); // One place at a time, so the page stays responsive.
       if (run !== roadsRun) return;
-      routeFrom(g, places, snapped, i).forEach((leg, j) => {
+      routeFrom(g, snapped, i).forEach((leg, j) => {
         if (j !== i) legs.set(legKey(places[i], places[j]), leg);
       });
     }

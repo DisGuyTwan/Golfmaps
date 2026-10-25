@@ -219,24 +219,6 @@ export function buildRoadGraph(...answers: unknown[]): RoadGraph {
   return g;
 }
 
-/** The node of the main network nearest a point ([lat, lon]) within MAX_SNAP_M, or -1. */
-export function snap(g: RoadGraph, [lat, lon]: [number, number], maxM = MAX_SNAP_M): number {
-  const kx = Math.cos(lat * RAD);
-  let best = -1;
-  let bestD = Infinity;
-  for (let i = 0; i < g.lat.length; i++) {
-    if (g.comp[i] !== g.main) continue;
-    const dy = g.lat[i] - lat;
-    const dx = (g.lon[i] - lon) * kx;
-    const d = dx * dx + dy * dy;
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  return best >= 0 && metres(lat, lon, g.lat[best], g.lon[best]) <= maxM ? best : -1;
-}
-
 /** A binary heap of nodes by time, for Dijkstra (stale entries are skipped when popped). */
 class Heap {
   private node: number[] = [];
@@ -286,91 +268,297 @@ class Heap {
 export interface RoadLeg {
   minutes: number;
   km: number;
-  /** The way along the streets, [lat, lon], from the place left to the place reached. */
+  /** The way along the streets, [lat, lon], from the place left (its lot's front) to the place reached. */
   path: [number, number][];
   /** The main roads taken, in order (up to three, the longest stretches). */
   via: string[];
 }
 
-/** The road node each place ([lat, lon]) starts from, -1 for a place too far from any road. */
-export function snapPlaces(g: RoadGraph, places: [number, number][]): number[] {
-  return places.map((p) => snap(g, p));
+/**
+ * A place to route to: where it is and, for a stop, its lot (GeoJSON rings,
+ * [lon, lat]) and the street of its address, so it's reached from its own
+ * street at the front of the lot, not across the neighbours' yards.
+ */
+export interface RoutePlace {
+  at: [number, number];
+  lot?: [number, number][][] | null;
+  street?: string | null;
 }
 
 /**
- * The fastest legs from one place to each of the others (Dijkstra from its
- * road node, stopping once every other place's node is reached). legs[j] is
- * null for itself, or a place it can't reach on these roads.
+ * Where a place meets the roads: a point on a road segment between nodes u
+ * and v (u < v), `t` of the way from u to v, and the place's door (its
+ * lot's edge nearest that road, or the place itself without a lot).
  */
-export function routeFrom(g: RoadGraph, places: [number, number][], snapped: number[], source: number): (RoadLeg | null)[] {
-  const legs: (RoadLeg | null)[] = places.map(() => null);
-  const s = snapped[source];
-  if (s < 0) return legs;
+export interface PlaceSnap {
+  u: number;
+  v: number;
+  t: number;
+  /** The segment's edge from u to v, and from v to u: -1 where it's one way the other way. */
+  uv: number;
+  vu: number;
+  road: [number, number];
+  door: [number, number];
+  /** Metres from the road to the door. */
+  access: number;
+}
+
+const placeOf = (p: [number, number] | RoutePlace): RoutePlace => (Array.isArray(p) ? { at: p } : p);
+
+/** Words that don't tell two streets apart: kinds of road, articles, directions, saints ("boul. St-Laurent" is "Boulevard Saint-Laurent"). */
+const GENERIC = new Set(
+  (
+    "rue avenue av ave boulevard boul bd blvd chemin ch route rte rang montee place pl croissant crois terrasse impasse allee " +
+    "promenade carre cote street st road rd drive dr court ct crescent cres lane ln way circle cir saint sainte ste " +
+    "de du des la le les l d the nord sud est ouest north south east west n s e o w"
+  ).split(" "),
+);
+/** A street name's distinctive words: "boul. De Montarville" and "Boulevard De Montarville" both give "montarville". */
+export const nameCore = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w && !GENERIC.has(w))
+    .join(" ");
+/** Whether a road's name is the street of an address (by their distinctive words). */
+export function sameStreet(a: string, b: string): boolean {
+  const x = nameCore(a);
+  const y = nameCore(b);
+  return !!x && !!y && (x === y || (x.length >= 4 && y.includes(x)) || (y.length >= 4 && x.includes(y)));
+}
+
+/** The street of an address ("1225 rue Lionel-Daunais, Boucherville" → "rue Lionel-Daunais"); null without a civic number. */
+export function streetOf(label: string | null | undefined): string | null {
+  if (!label) return null;
+  // An imported stop is "Name · address"; the street is in the address's first part.
+  const first = label.split(" · ").at(-1)!.split(",")[0].trim();
+  const m = first.match(/^\d+[a-zA-Z]?(?:[-–]\d+[a-zA-Z]?)?\s+(.+)$/);
+  return m && /[a-zA-ZÀ-ÿ]{2}/.test(m[1]) ? m[1].trim() : null;
+}
+
+/** Within this of a lot, a road with the address's street name is the one it's reached by (m). */
+const STREET_M = 150;
+/** The road straight in front of the place still counts as the lot's front within this of its nearest point (m). */
+const FRONT_M = 15;
+
+/** t along segment a-b (2D) of the point nearest p. */
+function along(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  return l2 ? Math.min(1, Math.max(0, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+}
+
+/**
+ * Where a place meets the main network: the road segment nearest its lot
+ * (or the place, without one), within `maxM`; a road named like the
+ * address's street wins within STREET_M of the lot, so a lot with a street
+ * behind it is reached from its front. Ties go to the road nearer the place.
+ * Null when no road is that close.
+ */
+export function snapPlace(g: RoadGraph, place: [number, number] | RoutePlace, maxM = MAX_SNAP_M): PlaceSnap | null {
+  const p = placeOf(place);
+  const [lat0, lon0] = p.at;
+  // Metres east and north of the place.
+  const kx = Math.cos(lat0 * RAD) * R * RAD;
+  const ky = R * RAD;
+  const X = (lon: number) => (lon - lon0) * kx;
+  const Y = (lat: number) => (lat - lat0) * ky;
+  // The lot's edges, or the place as a point.
+  const sides: [number, number, number, number][] = [];
+  for (const ring of p.lot?.length ? p.lot : [[[lon0, lat0]] as [number, number][]]) {
+    if (ring.length === 1) sides.push([X(ring[0][0]), Y(ring[0][1]), X(ring[0][0]), Y(ring[0][1])]);
+    for (let i = 0; i + 1 < ring.length; i++) sides.push([X(ring[i][0]), Y(ring[i][1]), X(ring[i + 1][0]), Y(ring[i + 1][1])]);
+  }
+  const minX = Math.min(...sides.map((e) => Math.min(e[0], e[2]))) - maxM;
+  const maxX = Math.max(...sides.map((e) => Math.max(e[0], e[2]))) + maxM;
+  const minY = Math.min(...sides.map((e) => Math.min(e[1], e[3]))) - maxM;
+  const maxY = Math.max(...sides.map((e) => Math.max(e[1], e[3]))) + maxM;
+  const wanted = p.street ? p.street : null;
+  const matches = wanted ? g.names.map((n) => sameStreet(n, wanted)) : null;
+
+  let best: { e: number; u: number; d: number; t: number; dx: number; dy: number; named: boolean; near: number } | null = null;
+  for (let u = 0; u < g.lat.length; u++) {
+    if (g.comp[u] !== g.main) continue;
+    const ax = X(g.lon[u]);
+    const ay = Y(g.lat[u]);
+    for (let e = g.start[u]; e < g.start[u + 1]; e++) {
+      const v = g.to[e];
+      const bx = X(g.lon[v]);
+      const by = Y(g.lat[v]);
+      if (Math.max(ax, bx) < minX || Math.min(ax, bx) > maxX || Math.max(ay, by) < minY || Math.min(ay, by) > maxY) continue;
+      // The closest the road segment comes to the lot: an end of one projected on the other.
+      let d = Infinity;
+      let t = 0;
+      let dx = 0;
+      let dy = 0;
+      for (const [cx, cy, ex, ey] of sides) {
+        const tryPair = (tt: number, qx: number, qy: number) => {
+          const rx = ax + (bx - ax) * tt;
+          const ry = ay + (by - ay) * tt;
+          const dd = Math.hypot(rx - qx, ry - qy);
+          if (dd < d) [d, t, dx, dy] = [dd, tt, qx, qy];
+        };
+        tryPair(along(cx, cy, ax, ay, bx, by), cx, cy);
+        tryPair(along(ex, ey, ax, ay, bx, by), ex, ey);
+        for (const [tt, ox, oy] of [
+          [0, ax, ay],
+          [1, bx, by],
+        ] as const) {
+          const s2 = along(ox, oy, cx, cy, ex, ey);
+          tryPair(tt, cx + (ex - cx) * s2, cy + (ey - cy) * s2);
+        }
+      }
+      if (d > maxM) continue;
+      const named = !!matches && g.name[e] >= 0 && matches[g.name[e]] && d <= STREET_M;
+      const near = Math.hypot(ax + (bx - ax) * t, ay + (by - ay) * t);
+      const better =
+        !best ||
+        (named !== best.named ? named : Math.abs(d - best.d) > 1 ? d < best.d : near < best.near);
+      if (better) best = { e, u, d, t, dx, dy, named, near };
+    }
+  }
+  if (!best) return null;
+  const a = best.u;
+  const b = g.to[best.e];
+
+  // A street along the lot is nearest at a corner as much as anywhere along its front: meet it straight in front of the place.
+  if (p.lot?.length) {
+    const [ax, ay, bx, by] = [X(g.lon[a]), Y(g.lat[a]), X(g.lon[b]), Y(g.lat[b])];
+    const tp = along(0, 0, ax, ay, bx, by);
+    const rx = ax + (bx - ax) * tp;
+    const ry = ay + (by - ay) * tp;
+    let front: [number, number, number] = [Infinity, 0, 0];
+    for (const [cx, cy, ex, ey] of sides) {
+      const k = along(rx, ry, cx, cy, ex, ey);
+      const qx = cx + (ex - cx) * k;
+      const qy = cy + (ey - cy) * k;
+      const dd = Math.hypot(qx - rx, qy - ry);
+      if (dd < front[0]) front = [dd, qx, qy];
+    }
+    if (front[0] <= best.d + FRONT_M) [best.t, best.dx, best.dy] = [tp, front[1], front[2]];
+  }
+
+  // The segment from its lower node, with each way it can be driven.
+  const edgeFrom = (from: number, to: number) => {
+    for (let e = g.start[from]; e < g.start[from + 1]; e++) if (g.to[e] === to) return e;
+    return -1;
+  };
+  const [u, v, t] = a < b ? [a, b, best.t] : [b, a, 1 - best.t];
+  const road: [number, number] = [g.lat[u] + (g.lat[v] - g.lat[u]) * t, g.lon[u] + (g.lon[v] - g.lon[u]) * t];
+  const door: [number, number] = p.lot?.length ? [lat0 + best.dy / ky, lon0 + best.dx / kx] : p.at;
+  return { u, v, t, uv: edgeFrom(u, v), vu: edgeFrom(v, u), road, door, access: metres(road[0], road[1], door[0], door[1]) };
+}
+
+/** Where each place meets the roads (null for a place too far from any). */
+export function snapPlaces(g: RoadGraph, places: ([number, number] | RoutePlace)[]): (PlaceSnap | null)[] {
+  return places.map((p) => snapPlace(g, p));
+}
+
+/**
+ * The fastest legs from one place to each of the others: from its point on
+ * the road both ways the road allows, Dijkstra over the nodes (stopping once
+ * every other place's segment is reached), then along the last segment to
+ * the place's point. legs[j] is null for itself, or a place it can't reach.
+ */
+export function routeFrom(g: RoadGraph, snaps: (PlaceSnap | null)[], source: number): (RoadLeg | null)[] {
+  const legs: (RoadLeg | null)[] = snaps.map(() => null);
+  const s = snaps[source];
+  if (!s) return legs;
   const nodes = g.lat.length;
   const dist = new Float64Array(nodes).fill(Infinity);
   const prevEdge = new Int32Array(nodes).fill(-1);
   const prevNode = new Int32Array(nodes).fill(-1);
   const done = new Uint8Array(nodes);
-  const wanted = new Set(snapped.filter((n, j) => j !== source && n >= 0));
   const heap = new Heap();
-  dist[s] = 0;
-  heap.push(s, 0);
+  // Off the place's segment toward v (with the road's direction), or toward u (against it). At an end, that end is free.
+  const seed = (n: number, cost: number) => {
+    if (cost < dist[n]) {
+      dist[n] = cost;
+      heap.push(n, cost);
+    }
+  };
+  if (s.uv >= 0) seed(s.v, (1 - s.t) * g.sec[s.uv]);
+  else if (s.t >= 1 - 1e-9) seed(s.v, 0);
+  if (s.vu >= 0) seed(s.u, s.t * g.sec[s.vu]);
+  else if (s.t <= 1e-9) seed(s.u, 0);
+  const wanted = new Set(snaps.flatMap((t, j) => (j !== source && t ? [t.u, t.v] : [])));
   while (heap.size && wanted.size) {
-    const [u, d] = heap.pop();
-    if (done[u] || d > dist[u]) continue;
-    done[u] = 1;
-    wanted.delete(u);
-    for (let e = g.start[u]; e < g.start[u + 1]; e++) {
-      const v = g.to[e];
+    const [n, d] = heap.pop();
+    if (done[n] || d > dist[n]) continue;
+    done[n] = 1;
+    wanted.delete(n);
+    for (let e = g.start[n]; e < g.start[n + 1]; e++) {
+      const w = g.to[e];
       const nd = d + g.sec[e];
-      if (nd < dist[v]) {
-        dist[v] = nd;
-        prevEdge[v] = e;
-        prevNode[v] = u;
-        heap.push(v, nd);
+      if (nd < dist[w]) {
+        dist[w] = nd;
+        prevEdge[w] = e;
+        prevNode[w] = n;
+        heap.push(w, nd);
       }
     }
   }
 
-  const [lat0, lon0] = places[source];
-  const accessIn = metres(lat0, lon0, g.lat[s], g.lon[s]);
-  places.forEach((place, j) => {
-    const t = snapped[j];
-    if (j === source || t < 0 || !Number.isFinite(dist[t])) return;
-    const nodesOnPath: number[] = [];
-    const byName = new Map<number, number>();
-    const order: number[] = [];
-    let metresOnRoads = 0;
-    for (let v = t; v !== s; v = prevNode[v]) {
-      nodesOnPath.push(v);
-      const e = prevEdge[v];
-      metresOnRoads += g.len[e];
-      const n = g.name[e];
-      if (n >= 0) {
-        if (!byName.has(n)) order.push(n);
-        byName.set(n, (byName.get(n) ?? 0) + g.len[e]);
-      }
+  // The first stretch, off the place's segment (to the node the chain starts from).
+  const firstStretch = (n: number): [number, number] => (n === s.v && s.uv >= 0 ? [s.uv, 1 - s.t] : n === s.u && s.vu >= 0 ? [s.vu, s.t] : [-1, 0]);
+  snaps.forEach((tj, j) => {
+    if (j === source || !tj) return;
+    // Arriving from u (along u to v), from v (along v to u), or straight along the segment both are on.
+    const options: { cost: number; from: number; edge: number; share: number }[] = [];
+    if (Number.isFinite(dist[tj.u]) && (tj.uv >= 0 || tj.t <= 1e-9)) options.push({ cost: dist[tj.u] + (tj.uv >= 0 ? tj.t * g.sec[tj.uv] : 0), from: tj.u, edge: tj.uv, share: tj.t });
+    if (Number.isFinite(dist[tj.v]) && (tj.vu >= 0 || tj.t >= 1 - 1e-9))
+      options.push({ cost: dist[tj.v] + (tj.vu >= 0 ? (1 - tj.t) * g.sec[tj.vu] : 0), from: tj.v, edge: tj.vu, share: 1 - tj.t });
+    if (tj.u === s.u && tj.v === s.v) {
+      if (tj.t >= s.t && s.uv >= 0) options.push({ cost: (tj.t - s.t) * g.sec[s.uv], from: -1, edge: s.uv, share: tj.t - s.t });
+      if (tj.t <= s.t && s.vu >= 0) options.push({ cost: (s.t - tj.t) * g.sec[s.vu], from: -1, edge: s.vu, share: s.t - tj.t });
     }
-    nodesOnPath.push(s);
-    nodesOnPath.reverse();
-    const accessOut = metres(g.lat[t], g.lon[t], place[0], place[1]);
-    const access = accessIn + accessOut;
-    // The longest stretches, kept in the order they're driven (names were collected from the end back).
+    if (!options.length) return;
+    const best = options.reduce((a, b) => (b.cost < a.cost ? b : a));
+
+    // The stretches driven, in order: [edge, share of it].
+    const stretches: [number, number][] = [];
+    const chain: number[] = [];
+    if (best.from >= 0) {
+      let n = best.from;
+      for (; prevNode[n] >= 0; n = prevNode[n]) {
+        chain.push(n);
+        stretches.push([prevEdge[n], 1]);
+      }
+      chain.push(n);
+      stretches.push(firstStretch(n));
+      chain.reverse();
+      stretches.reverse();
+    }
+    if (best.edge >= 0) stretches.push([best.edge, best.share]);
+    const byName = new Map<number, number>();
+    let onRoads = 0;
+    for (const [e, share] of stretches) {
+      if (e < 0 || share <= 0) continue;
+      const m = g.len[e] * share;
+      onRoads += m;
+      if (g.name[e] >= 0) byName.set(g.name[e], (byName.get(g.name[e]) ?? 0) + m);
+    }
+    const order = [...new Set(stretches.filter(([e, share]) => e >= 0 && share > 0 && g.name[e] >= 0).map(([e]) => g.name[e]))];
     const longest = new Set([...byName].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n]) => n));
+    const access = s.access + tj.access;
+    const path: [number, number][] = [s.door, s.road, ...chain.map((n): [number, number] => [g.lat[n], g.lon[n]]), tj.road, tj.door];
     legs[j] = {
-      minutes: (dist[t] + access / (ACCESS_KMH / 3.6)) / 60,
-      km: (metresOnRoads + access) / 1000,
-      path: [places[source], ...nodesOnPath.map((v): [number, number] => [g.lat[v], g.lon[v]]), place],
-      via: order.reverse().filter((n) => longest.has(n)).map((n) => g.names[n]),
+      minutes: (best.cost + access / (ACCESS_KMH / 3.6)) / 60,
+      km: (onRoads + access) / 1000,
+      path: path.filter((pt, k) => k === 0 || pt[0] !== path[k - 1][0] || pt[1] !== path[k - 1][1]),
+      via: order.filter((n) => longest.has(n)).map((n) => g.names[n]),
     };
   });
   return legs;
 }
 
 /** Every leg between the places (legs[i][j], i to j), on the roads. */
-export function routeAll(g: RoadGraph, places: [number, number][]): (RoadLeg | null)[][] {
-  const snapped = snapPlaces(g, places);
-  return places.map((_, i) => routeFrom(g, places, snapped, i));
+export function routeAll(g: RoadGraph, places: ([number, number] | RoutePlace)[]): (RoadLeg | null)[][] {
+  const snaps = snapPlaces(g, places);
+  return places.map((_, i) => routeFrom(g, snaps, i));
 }
 
 /** Main roads are read this far past the run's places (degrees), and boxes snap to this grid so nearby runs share them. */

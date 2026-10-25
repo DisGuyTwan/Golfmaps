@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRoadGraph, maxspeedKmh, oneway, roadBoxes, roadKmh, routeAll, snap } from "./roads";
+import { buildRoadGraph, maxspeedKmh, oneway, roadBoxes, roadKmh, routeAll, sameStreet, snapPlace, streetOf } from "./roads";
 
 /** Overpass JSON for roads drawn in metres from 45.5 N, -73.5 (a node per distinct point, shared where roads meet). */
 const M_LAT = 1 / 111_320;
@@ -65,9 +65,9 @@ describe("routes on the streets", () => {
   const g = buildRoadGraph(json);
 
   it("leaves paths out and keeps the connected network as the main one", () => {
-    const a = snap(g, at(500, 10));
-    expect(a).toBeGreaterThanOrEqual(0);
-    expect(snap(g, at(3050, 3005))).toBe(-1);
+    // Beside the footpath, the place is on Rue Sud (10 m), not the path (0 m).
+    expect(snapPlace(g, at(500, 10))).toMatchObject({ access: expect.closeTo(10, 0) });
+    expect(snapPlace(g, at(3050, 3005))).toBeNull();
   });
 
   it("follows the streets between two stops, with its length, time and the streets taken", () => {
@@ -95,6 +95,50 @@ describe("routes on the streets", () => {
 
   it("takes each way once across several answers (main roads and streets overlap)", () => {
     expect(buildRoadGraph(json, json).to.length).toBe(g.to.length);
+  });
+});
+
+describe("reaching a lot from its own street", () => {
+  // Rue Avant and, 70 m behind, Rue Arrière: long straight streets, joined only at their ends (no node near the lots).
+  const json = roads(
+    [[[0, 0], [600, 0]], street("Rue Avant")],
+    [[[0, 70], [600, 70]], street("Rue Arrière")],
+    [[[0, 0], [0, 70]], street("Rue Ouest")],
+    [[[600, 0], [600, 70]], street("Rue Est")],
+  );
+  const g = buildRoadGraph(json);
+  /** A lot's ring, [lon, lat], x0..x1 by y0..y1 m. */
+  const lot = (x0: number, x1: number, y0: number, y1: number) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]].map(([x, y]) => [at(x, y)[1], at(x, y)[0]] as [number, number]);
+
+  it("meets the street nearest the lot along it, not at the nearest corner, and stops at the lot's front", () => {
+    const [[, leg]] = routeAll(g, [{ at: at(100, 25), lot: [lot(90, 110, 10, 40)] }, { at: at(400, 25), lot: [lot(390, 410, 10, 40)] }]);
+    // Along Rue Avant from x 100 to 400, plus 10 m each end from the street to the lot.
+    expect(leg!.km).toBeCloseTo(0.32, 2);
+    expect(leg!.via).toEqual(["Rue Avant"]);
+    // From the front of the lot, straight in front of the house, not its corner.
+    expect(leg!.path[0][0]).toBeCloseTo(at(100, 10)[0], 6);
+    expect(leg!.path[0][1]).toBeCloseTo(at(100, 10)[1], 6);
+    expect(leg!.path[1][0]).toBeCloseTo(at(100, 0)[0], 6);
+    expect(leg!.path[1][1]).toBeCloseTo(at(100, 0)[1], 6);
+    expect(leg!.path.at(-1)![0]).toBeCloseTo(at(400, 10)[0], 6);
+  });
+
+  it("takes the address's street when the lot is nearer the one behind it", () => {
+    // The lot runs from 20 m to 65 m: 5 m from Rue Arrière, 20 m from Rue Avant.
+    const deep = { at: at(300, 40), lot: [lot(290, 310, 20, 65)] };
+    expect(snapPlace(g, deep)!.access).toBeCloseTo(5, 0);
+    const front = snapPlace(g, { ...deep, street: streetOf("312 boul. de l'Avant, Carignan") ?? "" });
+    expect(front!.access).toBeCloseTo(20, 0);
+    expect(front!.road[0]).toBeCloseTo(at(300, 0)[0], 6);
+  });
+
+  it("reads the street of an address and matches it to the map's name", () => {
+    expect(streetOf("1225 rue Lionel-Daunais, Boucherville")).toBe("rue Lionel-Daunais");
+    expect(streetOf("Tremblay · 45 Rue B, Carignan")).toBe("Rue B");
+    expect(streetOf("Garage Bélanger")).toBeNull();
+    expect(sameStreet("boul. De Montarville", "Boulevard De Montarville")).toBe(true);
+    expect(sameStreet("rue St-Laurent", "Rue Saint-Laurent")).toBe(true);
+    expect(sameStreet("rue Lionel-Daunais", "Rue Gilbert-Martel")).toBe(false);
   });
 });
 

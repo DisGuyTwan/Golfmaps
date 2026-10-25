@@ -339,9 +339,15 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   loaded, and every leg fell back to the straight line). It routes on
   whatever answered (`missed` when some didn't, retried once on its own
   after 3 s), and builds the graph (one-way streets,
-  roundabouts, motorways; about 80 % of `maxspeed`, else `TYPICAL_KMH`), snaps
-  each place to the biggest connected piece within 400 m, and runs Dijkstra
-  from each place in turn (pausing between, so the page stays responsive).
+  roundabouts, motorways; about 80 % of `maxspeed`, else `TYPICAL_KMH`). Each
+  place meets the biggest connected piece at a point on a road segment
+  (`snapPlace`), not a node: the segment nearest its cadastre lot within
+  400 m, the address's street first (`streetOf`, `sameStreet`, within
+  150 m), and its leg ends at the lot's edge facing that road. Snapping to
+  the nearest node sent a leg across the neighbours' yards to the street
+  behind, where a long straight street had no node near the lot. Dijkstra
+  runs from each place in turn, off its segment both ways the road allows
+  (pausing between, so the page stays responsive).
   Each leg keeps its path, km and up to three street names (`via`). The road
   lookup is a live step ("Road map") swept on the map. Where the roads don't
   join two places, or don't load, or the neighbourhoods span over 0.3°, that
