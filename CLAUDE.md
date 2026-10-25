@@ -63,6 +63,10 @@ src/components/
                              read, for how long, and what it found
   Sheet.tsx                  the panel over the map as a sheet the rep sizes
                              (drag or arrow keys on its handle, tap to fold)
+  WindowPicker.tsx           "When may the robots mow?" (any time, nights,
+                             weekdays, custom), in the mower fit and ROI tab
+  Sources.tsx                "Where these numbers come from": each assumption
+                             with its kind, folded in the panel, page 2 of the PDF
   MeasurePanel.tsx           results panel + legend; "Select a property" until
                              something is measured, then the detected kind with
                              a Change switch (Golf course | Sod farm | Lawn)
@@ -99,6 +103,11 @@ src/lib/
                 between zones, against a square of the same area; one unit's
                 share when several split it (pure, tested)
   mowers.ts     the 12 Kress models quoted and the fit / recommendation (pure, tested)
+  window.ts     when the robots may mow → share of a robot's capacity (pure, tested)
+  trust.ts      likely ranges (acres, from calibration or installs), the
+                client's number against ours, the assumptions list (pure, tested)
+  records-store.ts  field-check calibration and installs' spread from
+                /api/records (empty without a database: estimates are used)
   surface.ts    the measuring engine: aerial photo pixels + LiDAR → grass,
                 trees, buildings, paving, water; cover inside an outline, pools
                 and paving on a lot (pure, tested)
@@ -326,6 +335,13 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   strip along the edges shared with paving (`lawnEdges`) at 25,000 sq ft an
   hour (SingleOps production rates), shared among the crew: the stop takes
   set-up plus the longer of the two, and the panel says who waits for whom.
+  The rep puts in the crew's own rates ("Your crew's rates": `trimFtPerH`,
+  `blowSqftPerH`, links `rtr`, `rbr`). "Today against the Voyager" plans the
+  same stops and route with the crew mowing too (`todayDay`: one person mows
+  with the crew's mower, `crewMower`/`rm`, while the rest trim and blow;
+  alone, one does all three), at `crewMowSqftPerH` (deck × mph × 50 % ÷ 8.25,
+  the field-capacity formula, or the rep's `mowSqftPerH`/`rmr`), and says
+  lawns per 8 h day and per week (`lawnsPerDay`) both ways.
   Driving is on OpenStreetMap's roads, routed in the browser (`roads.ts`):
   public routing servers (OSRM's demo, FOSSGIS) aren't for commercial use and
   the app takes no API keys, so don't call them from here. Once no stop is
@@ -389,6 +405,27 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   to its title row on a tap, and keeps that height across panels. On a phone
   it otherwise covered the map the rep taps. `fitAbovePanel` frames the map
   above whatever height it has.
+- **Every number says how sure it is.** The client's own acreage (`override`,
+  "Client's acreage") replaces ours, and the panel shows ours beside it with
+  whether theirs falls in our likely range (`trust.ts` `compareClient`). The
+  likely range is the photo or satellite count's calibrated range, or, once
+  a basis has `MIN_RECORD` (5) installs, the 10th-90th percentile of what
+  installs measured over ours (`RecordSpread`); mapped OSM turf has none
+  until then (don't invent one). The fleet is sized at both ends of the
+  range (`unitsAt` in MowerFit) and the ROI tab shows payback across it
+  (`RoiImport.range`, link `r_range`). Every assumption is listed with its
+  kind (measured, Kress rating, estimate, client, rule) in "Where these
+  numbers come from" and on page 2 of the Acreage PDF, so the Acreage PDF is
+  now 2 pages (the grass run sheet stays 1). The ROI PDF lists the inputs
+  the client changed from our defaults (`CLIENT_KEYS`).
+- **When the robots may mow sizes the fleet.** `QuoteSettings.window`
+  (`q_win=20-7-7`, from-to-days; null any time) and the ROI tab's own
+  (`r_win`): `window.ts` takes Kress's ratings as round-the-clock (an
+  assumption), each window starting on a full battery, then runs and charges
+  in turn (`CHARGE_PER_RUN` 1, an estimate); a Voyager loses what its day is
+  shorter than its run time, and days past the crew's. Nights only (8 pm to
+  7 am) leaves a KR238 54 % of its rating: 60 acres every 2 days goes from 4
+  to 7 KR238s. Fit functions take `FitOptions` ({ window, calibration }).
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in
@@ -474,7 +511,8 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   `globals.css` that swap in dark mode, so one class covers both themes. Dark
   values sit under `@media screen`, so printing stays light.
 - **Print / PDF is a client deliverable.** Acreage prints `AcreageReport`
-  (1 page; mapped course, satellite count or sod farm), Incentives the profile and results (about 2 pages, form hidden),
+  (the report on page 1, mapped course, satellite count, sod farm or lawn,
+  and its assumptions and sources on page 2; a grass run's sheet is 1 page), Incentives the profile and results (about 2 pages, form hidden),
   ROI one Letter page (printed at 80%, inputs as "label … value", sources full
   width). Check page counts with print emulation after layout changes.
 - **Share links** put a tab's inputs in the query string (`share.ts`); tabs read

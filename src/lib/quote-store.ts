@@ -5,6 +5,7 @@ import type { IncentiveInputs } from "./incentives";
 import { DEFAULT_QUOTE, decodeQuote, type AcreageMode, type MowEvery, type QuoteSettings } from "./quote";
 import type { LawnMeasurement } from "./lawn";
 import type { Approach, VoyagerModel } from "./roi";
+import type { MowWindow } from "./window";
 import type { TerrainGrid } from "./terrain";
 import type { CourseMeasurement, SodMeasurement } from "./types";
 
@@ -31,6 +32,10 @@ export interface RoiImport {
   model: VoyagerModel | null;
   /** Extra robot time for the property's layout (%), from the mower fit. */
   layoutPct: number | null;
+  /** When the robots may mow (null: any time); always applied, like the frequency. */
+  window: MowWindow | null;
+  /** The acres' likely range, as shares of `acres` ([0.82, 1.39]); null without one. */
+  range: [number, number] | null;
   version: number;
 }
 

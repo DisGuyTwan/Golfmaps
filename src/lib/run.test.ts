@@ -7,6 +7,7 @@ import {
   ROAD_FACTOR,
   TRIM_FT_PER_H,
   bestOrder,
+  crewMowSqftPerH,
   decodeRun,
   distanceKm,
   driveMin,
@@ -17,6 +18,8 @@ import {
   runOrder,
   straightDrive,
   directionsLinks,
+  lawnsPerDay,
+  todayDay,
   type DriveFn,
   stopSite,
   stopWork,
@@ -114,7 +117,7 @@ describe("the day", () => {
   // Three stops 1 km apart going north, entered out of order; a shop 1 km south of the first.
   const p = (km: number): [number, number] => [45.5 + km / 111.2, -73.5];
   const points = [p(2), p(0), p(1)];
-  const work = (mowMin: number, trimMin: number, blowMin: number): StopWork => ({ mowMin, trimMin, blowMin, fits: true, notes: [] });
+  const work = (mowMin: number, trimMin: number, blowMin: number, crewMowMin = 25): StopWork => ({ mowMin, trimMin, blowMin, crewMowMin, fits: true, notes: [] });
   const works = [work(30, 40, 4), work(20, 10, 2), null];
   const settings = { ...DEFAULT_RUN, crew: 2, setupMin: 10, speedKmh: 30, startMin: 7 * 60 };
 
@@ -167,6 +170,27 @@ describe("the day", () => {
     expect(plan.enteredDriveMin).toBe(41);
   });
 
+  it("compares the same stops today, the crew mowing too", () => {
+    // Stops 1 and 0: today one person mows (25 min each) while the other trims and blows.
+    const plan = planRun(points, works, [1000, 800, 900], p(-1), settings);
+    const today = todayDay(plan, works, settings);
+    expect(today.driveMin).toBeCloseTo(plan.driveMin, 6);
+    // Stop 1: 10 + max(25, 12) = 35; stop 0: 10 + max(25, 44) = 54.
+    expect(today.onSiteMin).toBeCloseTo(89, 6);
+    // With the Voyager: 10 + max(20, 6) = 30 and 10 + max(30, 22) = 40.
+    expect(plan.onSiteMin).toBeCloseTo(70, 6);
+    // Alone, one person does it all: 10 + 25 + 12 and 10 + 25 + 44.
+    expect(todayDay(plan, works, { ...settings, crew: 1 }).onSiteMin).toBeCloseTo(126, 6);
+    expect(lawnsPerDay(2, 120)).toBe(8);
+    expect(lawnsPerDay(0, 0)).toBe(0);
+  });
+
+  it("estimates the crew's mowing rate from the mower's deck and speed", () => {
+    // 52 in. at 6 mph, 50 % efficient: 4.33 × 6 × 0.5 ÷ 8.25 = 1.58 ac/h.
+    expect(crewMowSqftPerH("standOn52")).toBe(68_600);
+    expect(crewMowSqftPerH("push21")).toBeLessThan(crewMowSqftPerH("walk36"));
+  });
+
   it("says what the order saves against the order entered", () => {
     const three = [work(10, 10, 1), work(10, 10, 1), work(10, 10, 1)];
     const plan = planRun(points, three, [1, 1, 1], null, settings);
@@ -184,10 +208,22 @@ describe("share link", () => {
         { point: [45.45, -73.34] as [number, number], label: null },
       ],
       shop: { point: [45.4, -73.3] as [number, number], label: "Garage" },
-      settings: { voyager: "KR804" as const, crew: 3, speedKmh: 40, setupMin: 15, startMin: 6 * 60 + 45 },
+      settings: {
+        ...DEFAULT_RUN,
+        voyager: "KR804" as const,
+        crew: 3,
+        speedKmh: 40,
+        setupMin: 15,
+        startMin: 6 * 60 + 45,
+        crewMower: "push21" as const,
+        mowSqftPerH: 9000,
+        trimFtPerH: 1200,
+        blowSqftPerH: 20000,
+      },
     };
     const params = new URLSearchParams(Object.entries(encodeRun(run)).filter((e): e is [string, string] => e[1] !== undefined));
     expect(params.get("rt")).toBe("06:45");
+    expect(params.get("rm")).toBe("push21");
     expect(decodeRun(params)).toEqual(run);
   });
 

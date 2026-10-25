@@ -19,6 +19,7 @@ import type { MowEvery } from "./quote";
 import { ROI_DEFAULTS, type Approach } from "./roi";
 import type { Site } from "./site";
 import type { TerrainStats } from "./terrain";
+import { robotWindowShare, voyagerWindowShare, type MowWindow } from "./window";
 
 export const MOWERS_AS_OF = "2026-10-24";
 
@@ -141,10 +142,29 @@ export interface Fit {
  * 48 h, so mowing every day halves it and every 3 days adds half. A Voyager
  * mows its rating per charge, one charge per mowing day (5 a week, the ROI
  * tab's default), shared among the week's mowings, so both tabs size the
- * same fleet.
+ * same fleet. Only part of it when the robots may mow only at some hours or
+ * on some days (window.ts).
  */
-export function capacityM2(mower: Mower, everyDays: MowEvery = 2): number {
-  return mower.line === "voyager" ? (mower.areaM2 * ROI_DEFAULTS.voyDaysPerWeek * everyDays) / 7 : (mower.areaM2 * everyDays) / 2;
+export function capacityM2(mower: Mower, everyDays: MowEvery = 2, opts: FitOptions = {}): number {
+  const { window = null, calibration = {} } = opts;
+  // Field checks: a robot that really takes longer than we predict keeps less mowed.
+  const measured = 1 / (calibration[mower.id] ?? 1);
+  return (
+    measured *
+    (mower.line === "voyager"
+      ? ((mower.areaM2 * ROI_DEFAULTS.voyDaysPerWeek * everyDays) / 7) * voyagerWindowShare(window, mower.runtimeMin, ROI_DEFAULTS.voyDaysPerWeek)
+      : ((mower.areaM2 * everyDays) / 2) * robotWindowShare(window, mower.runtimeMin))
+  );
+}
+
+/**
+ * What else sizes a fleet: when the robots may mow (window.ts) and, per
+ * model, the time field checks measured over the time we predicted
+ * (calibration.ts; 1 or missing until there are enough).
+ */
+export interface FitOptions {
+  window?: MowWindow | null;
+  calibration?: Record<string, number>;
 }
 
 /**
@@ -183,13 +203,13 @@ function overLimit(terrain: TerrainStats, limitPct: number): number {
  * only within its own zone). Ground steeper than any robot can climb is left
  * to a trimmer (trimmerShare).
  */
-export function fitMower(site: Site, mower: Mower, everyDays: MowEvery = 2): Fit {
+export function fitMower(site: Site, mower: Mower, everyDays: MowEvery = 2, opts: FitOptions = {}): Fit {
   const notes: FitNote[] = [];
   let fits = true;
   let penalty = 0;
   const { terrain, shape } = site;
   const pace = paceOf(mower);
-  const capacity = capacityM2(mower, everyDays);
+  const capacity = capacityM2(mower, everyDays, opts);
   const left = trimmerShare(site);
   const areaM2 = site.areaM2 * (1 - left);
   const zone = (units: number) => (site.coverage ? overhead(share(site.coverage, units), pace) : null);
@@ -291,23 +311,23 @@ const FAIRWAY_CUT_MM = 15;
  * robot suits it best (of those working the `approach` way, if given). Both
  * take the whole turf's layout (its extra time is a ratio).
  */
-export function recommend(site: Site, everyDays: MowEvery = 2, approach: Approach | null = null): Recommendation {
+export function recommend(site: Site, everyDays: MowEvery = 2, approach: Approach | null = null, opts: FitOptions = {}): Recommendation {
   const trimmed = trimmerShare(site);
   if (site.areaM2 <= 0) return { best: null, runnerUp: null, rough: null, fits: [], trimmed: 0 };
   if (site.kind === "golf" && site.fairwayM2 > 0) {
     const fairways: Site = { ...site, areaM2: site.fairwayM2 };
     const fits = candidates(site)
       .filter((m) => m.minCutMm <= FAIRWAY_CUT_MM)
-      .map((m) => fitMower(fairways, m, everyDays))
+      .map((m) => fitMower(fairways, m, everyDays, opts))
       .sort(rank);
     const ok = fits.filter((f) => f.fits);
     const restM2 = site.areaM2 - site.fairwayM2;
     const rest: Site = { ...site, areaM2: restM2, fairwayM2: 0 };
     const rough =
-      restM2 > 0 ? (candidates(rest, approach).map((m) => fitMower(rest, m, everyDays)).filter((f) => f.fits).sort(rank)[0] ?? null) : null;
+      restM2 > 0 ? (candidates(rest, approach).map((m) => fitMower(rest, m, everyDays, opts)).filter((f) => f.fits).sort(rank)[0] ?? null) : null;
     return { best: ok[0] ?? null, runnerUp: ok[1] ?? null, rough, fits, trimmed };
   }
-  const fits = candidates(site, approach).map((m) => fitMower(site, m, everyDays)).sort(rank);
+  const fits = candidates(site, approach).map((m) => fitMower(site, m, everyDays, opts)).sort(rank);
   const ok = fits.filter((f) => f.fits);
   return { best: ok[0] ?? null, runnerUp: ok[1] ?? null, rough: null, fits, trimmed };
 }
@@ -329,8 +349,8 @@ export interface Approaches {
  * the robot made to stay on a course, while a Voyager's fleet is sized for
  * a crew moving it around.
  */
-export function recommendBoth(site: Site, everyDays: MowEvery = 2): Approaches {
-  const stay = recommend(site, everyDays, "stay");
-  const go = recommend(site, everyDays, "go");
+export function recommendBoth(site: Site, everyDays: MowEvery = 2, opts: FitOptions = {}): Approaches {
+  const stay = recommend(site, everyDays, "stay", opts);
+  const go = recommend(site, everyDays, "go", opts);
   return { stay, go, suggested: mainFleet(stay) || !mainFleet(go) ? "stay" : "go" };
 }

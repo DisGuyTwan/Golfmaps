@@ -13,6 +13,7 @@ import type { LiveStep } from "@/lib/live";
 import LiveSteps from "./LiveSteps";
 import MowerFit from "./MowerFit";
 import QuoteSection from "./QuoteSection";
+import Sources from "./Sources";
 import { Icon } from "./icons";
 import Sheet from "./Sheet";
 import { Notice, Pop, ui } from "./ui";
@@ -541,6 +542,8 @@ export default function MeasurePanel({
             {sod && !error && <QuoteSection lang={lang} mode="sod" result={null} sod={sod} lawn={null} getShareUrl={getShareUrl} />}
           </>
         )}
+
+        {!error && (lawn || sod || result?.found) && <Sources lang={lang} />}
 
         <p className="text-center text-[10px] text-faint">
           {t.attribution}

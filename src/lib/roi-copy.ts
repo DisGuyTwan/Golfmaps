@@ -55,6 +55,8 @@ const fr = {
   energyHint: (charges: string, kwh: number, kwhSeason: string) => `≈ ${charges} charges × ${kwh} kWh = ${kwhSeason} kWh/saison`,
   fleet: (n: number) => `= ${n} Voyager ${plural(n, "nécessaire")}`,
 
+  clientFigures: (list: string) => `Chiffres du client (au lieu de nos valeurs par défaut) : ${list}.`,
+  ours: (v: string) => `nous : ${v}`,
   crew: "Équipe zero-turn remplacée, saisonnière",
   wage: "Salaire horaire ($/h)",
   burden: "Charges sociales (%)",
@@ -200,6 +202,8 @@ const en: RoiCopy = {
   energyHint: (charges, kwh, kwhSeason) => `≈ ${charges} charges × ${kwh} kWh = ${kwhSeason} kWh/season`,
   fleet: (n) => `= ${n} ${plural(n, "Voyager")} needed`,
 
+  clientFigures: (list: string) => `The client's figures (instead of our defaults): ${list}.`,
+  ours: (v: string) => `ours ${v}`,
   crew: "Zero-turn crew replaced, seasonal",
   wage: "Hourly wage ($/h)",
   burden: "Payroll burden (%)",

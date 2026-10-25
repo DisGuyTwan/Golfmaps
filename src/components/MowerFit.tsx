@@ -6,14 +6,17 @@ import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, photoAreas, type LawnMeasurement
 import {
   MOWERS_AS_OF,
   capacityM2,
+  fitMower,
   mainFleet,
   mowerName,
   recommend,
   recommendBoth,
   type Approaches,
   type Fit,
+  type FitOptions,
   type Recommendation,
 } from "@/lib/mowers";
+import { measuredRange, type AcreRange } from "@/lib/trust";
 import { MOW_EVERY, acresForQuote, lawnQuoteSqft, type AcreageMode, type MowEvery, type QuoteSettings } from "@/lib/quote";
 import { setQuoteSettings, useCharger, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
 import { complexity, golfSite, lawnSite, sodSite, type Complexity, type Level, type Reason, type Site } from "@/lib/site";
@@ -22,6 +25,10 @@ import type { Approach } from "@/lib/roi";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { Icon } from "./icons";
 import { Notice, Segmented, toneClass } from "./ui";
+import WindowPicker, { windowLine } from "./WindowPicker";
+import { robotWindowShare, voyagerWindowShare } from "@/lib/window";
+import { useRecords, type Records } from "@/lib/records-store";
+import { ROI_DEFAULTS } from "@/lib/roi";
 
 export interface MowerFitResult {
   site: Site;
@@ -32,6 +39,10 @@ export interface MowerFitResult {
   approaches: Approaches | null;
   /** How the robots work: picked by the rep, else suggested (golf); always cut and go on a sod farm; null on a lawn. */
   approach: Approach | null;
+  /** The acres we measured and their likely range (null on a lawn, or while the client's number is used). */
+  range: AcreRange | null;
+  /** What sized the fleet besides the site: the window and the field checks. */
+  opts: FitOptions;
 }
 
 type FitInputs = [
@@ -42,6 +53,8 @@ type FitInputs = [
   QuoteSettings,
   TerrainGrid | null,
   [number, number] | null,
+  Records["calibration"],
+  Records["spread"],
 ];
 
 /** The last fit, so the panel, the PDF and the quote share one computation per change. */
@@ -49,7 +62,8 @@ let last: { inputs: FitInputs; result: MowerFitResult | null } | null = null;
 
 function computeFit(...inputs: FitInputs): MowerFitResult | null {
   if (last && inputs.every((v, i) => v === last!.inputs[i])) return last.result;
-  const [mode, lawn, measurement, sod, q, terrain, placed] = inputs;
+  const [mode, lawn, measurement, sod, q, terrain, placed, measured, spread] = inputs;
+  const opts = { window: q.window, calibration: Object.fromEntries(Object.entries(measured).map(([id, c]) => [id, c.factor])) };
   // The store keeps [lat, lon] like the map; sites work in GeoJSON's [lon, lat].
   const charger: [number, number] | null = placed && [placed[1], placed[0]];
   let site: Site | null = null;
@@ -70,12 +84,13 @@ function computeFit(...inputs: FitInputs): MowerFitResult | null {
   }
   let result: MowerFitResult | null = null;
   if (site) {
-    const approaches = site.kind === "golf" ? recommendBoth(site, q.mowEvery) : null;
+    const approaches = site.kind === "golf" ? recommendBoth(site, q.mowEvery, opts) : null;
     const approach = approaches ? (q.approach ?? approaches.suggested) : site.kind === "sod" ? "go" : null;
-    const recommendation = approaches && approach ? approaches[approach] : recommend(site, q.mowEvery);
+    const recommendation = approaches && approach ? approaches[approach] : recommend(site, q.mowEvery, null, opts);
     // Each unit drives within its own zone: the fleet covering the whole site sets the zones (on a course with fairways, the rough's).
     const fleet = mainFleet(recommendation);
-    result = { site, complexity: complexity(site, fleet?.units ?? 1), recommendation, approaches, approach };
+    const range = mode !== "lawn" && q.override === null ? measuredRange(mode, measurement, sod, q, spread) : null;
+    result = { site, complexity: complexity(site, fleet?.units ?? 1), recommendation, approaches, approach, range, opts };
   }
   last = { inputs, result };
   return result;
@@ -94,9 +109,10 @@ export function useMowerFit(): MowerFitResult | null {
   const q = useQuoteSettings();
   const terrain = useTerrain();
   const charger = useCharger();
+  const { calibration, spread } = useRecords();
   return useMemo(
-    () => computeFit(mode, lawn, measurement, sod, q, terrain, charger),
-    [mode, lawn, measurement, sod, q, terrain, charger],
+    () => computeFit(mode, lawn, measurement, sod, q, terrain, charger, calibration, spread),
+    [mode, lawn, measurement, sod, q, terrain, charger, calibration, spread],
   );
 }
 
@@ -181,8 +197,34 @@ function fleetText(r: Recommendation, none: string): string {
   return units.size ? [...units].map(([id, n]) => `${n} × ${id}`).join(" + ") : none;
 }
 
+/** Units at the ends of the likely acreage, when it has a range and they differ. */
+function unitsAt(fit: Fit, site: Site, days: MowEvery, range: AcreRange | null, opts: FitOptions): [number, number] | null {
+  if (!range || range.low === null || range.high === null || range.value <= 0) return null;
+  const at = (acres: number) => {
+    const f = acres / range.value;
+    return fitMower({ ...site, areaM2: site.areaM2 * f, fairwayM2: site.fairwayM2 * f }, fit.mower, days, opts).units;
+  };
+  const span: [number, number] = [at(range.low), at(range.high)];
+  return span[0] === span[1] && span[0] === fit.units ? null : span;
+}
+
 /** One recommended robot: name, units, why, and what to check on site. */
-function Pick({ label, fit, site, days, lang }: { label: string; fit: Fit; site: Site; days: MowEvery; lang: Lang }) {
+function Pick({
+  label,
+  fit,
+  site,
+  days,
+  lang,
+  span = null,
+}: {
+  label: string;
+  fit: Fit;
+  site: Site;
+  days: MowEvery;
+  lang: Lang;
+  /** Units at the ends of the likely acreage. */
+  span?: [number, number] | null;
+}) {
   const { t, why, units, colon } = useCopy(lang);
   return (
     <div className="rounded-lg bg-accent-soft px-3 py-2 print:border print:border-line">
@@ -191,6 +233,7 @@ function Pick({ label, fit, site, days, lang }: { label: string; fit: Fit; site:
         {mowerName(fit.mower)}
         {units(fit, site)}
       </div>
+      {span && <div className="text-[11px] font-medium text-accent-ink/80">{t.sources.unitsRange(span[0], span[1])}</div>}
       <ul className="mt-0.5 space-y-0.5 text-[11px] text-accent-ink">
         {why(fit, site, days).map((line) => (
           <li key={line} className="flex items-start gap-1">
@@ -230,7 +273,7 @@ export default function MowerFit({
   onMoveCharger?: () => void;
 }) {
   const fit = useMowerFit();
-  const { mowEvery, approach: picked } = useQuoteSettings();
+  const { mowEvery, approach: picked, window: mowWindow } = useQuoteSettings();
   const { t, reason, units, date, colon } = useCopy(lang);
   if (!fit && !loading) return null;
 
@@ -247,6 +290,14 @@ export default function MowerFit({
   const approaches = fit?.approaches;
   const approach = fit?.approach ?? null;
   const trimmedM2 = fit && rec ? rec.trimmed * fit.site.areaM2 : 0;
+  // How much of its round-the-clock capacity the robot doing most of the work keeps in the window.
+  const main = rec ? mainFleet(rec)?.mower : undefined;
+  const windowShare = main
+    ? main.line === "voyager"
+      ? voyagerWindowShare(mowWindow, main.runtimeMin, ROI_DEFAULTS.voyDaysPerWeek)
+      : robotWindowShare(mowWindow, main.runtimeMin)
+    : undefined;
+  const windowText = windowLine(mowWindow, lang);
   const trimmedArea =
     fit?.site.kind === "lawn" ? formatSqft(trimmedM2 * SQ_M_TO_SQ_FT, lang) : `${formatAcres(trimmedM2 / 4046.86, lang)} ac`;
 
@@ -287,6 +338,16 @@ export default function MowerFit({
                   {colon}
                 </span>
                 {t.fitEvery.options[mowEvery].toLowerCase()}
+                {windowText && (
+                  <>
+                    {" · "}
+                    <span className="font-semibold">
+                      {t.fitWindow.label}
+                      {colon}
+                    </span>
+                    {windowText}
+                  </>
+                )}
                 {approaches && approach && (
                   <>
                     {" · "}
@@ -306,6 +367,7 @@ export default function MowerFit({
                   options={MOW_EVERY.map((days) => ({ value: days, label: t.fitEvery.options[days] }))}
                   onChange={(days) => setQuoteSettings({ mowEvery: days })}
                 />
+                <WindowPicker lang={lang} value={mowWindow} onChange={(w) => setQuoteSettings({ window: w })} share={windowShare} />
                 {approaches && approach && (
                   <div className="space-y-1">
                     <Question
@@ -334,11 +396,21 @@ export default function MowerFit({
               site={fit.site}
               days={mowEvery}
               lang={lang}
+              span={rec.rough ? null : unitsAt(rec.best, fit.site, mowEvery, fit.range, fit.opts)}
             />
           ) : (
             <Notice tone="warn">{t.fitNone}</Notice>
           )}
-          {rec?.rough && <Pick label={t.fitRough} fit={rec.rough} site={{ ...fit.site, fairwayM2: 0 }} days={mowEvery} lang={lang} />}
+          {rec?.rough && (
+            <Pick
+              label={t.fitRough}
+              fit={rec.rough}
+              site={{ ...fit.site, fairwayM2: 0, areaM2: fit.site.areaM2 - fit.site.fairwayM2 }}
+              days={mowEvery}
+              lang={lang}
+              span={unitsAt(rec.rough, { ...fit.site, fairwayM2: 0, areaM2: fit.site.areaM2 - fit.site.fairwayM2 }, mowEvery, fit.range, fit.opts)}
+            />
+          )}
           {rec && rec.trimmed > 0 && <Notice tone="warn">{t.fitTrimmer(trimmedArea)}</Notice>}
           {runnerUp && (
             <p className="text-[11px] text-muted">

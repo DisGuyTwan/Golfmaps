@@ -6,10 +6,11 @@ import { useLang } from "@/lib/preferences";
 import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, lawnQuoteSqft, quoteBreakdown, satelliteAcres } from "@/lib/quote";
 import { formatSqft, lawnTotals } from "@/lib/lawn";
 import { useCourseName, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
-import { SHOP, overWorkday } from "@/lib/run";
+import { SHOP, lawnsPerDay, overWorkday } from "@/lib/run";
 import { useRun } from "@/lib/run-store";
 import type { SodField } from "@/lib/types";
-import MowerFit from "./MowerFit";
+import MowerFit, { useMowerFit } from "./MowerFit";
+import Sources from "./Sources";
 import { formatClock, formatDuration, formatKm, formatLawn, legLine, stopName, useRunPlan } from "./RunPanel";
 import { TabHeader, ui } from "./ui";
 
@@ -55,6 +56,7 @@ export default function AcreageReport() {
   const courseName = useCourseName();
   const terrain = useTerrain();
   const run = useRun();
+  const range = useMowerFit()?.range ?? null;
   if (run.open) return <RunReport />;
   if (mode === "lawn") return <LawnReport />;
   const ac = (n: number) => `${formatAcres(n, lang)} ac`;
@@ -123,7 +125,14 @@ export default function AcreageReport() {
             {rows.length > 0 && <ReportTable head={head} rows={rows} />}
 
             <div className="flex items-center justify-between rounded-xl bg-brand px-5 py-3 text-white">
-              <span className="text-sm font-semibold">{t.quoteTotal}</span>
+              <span className="text-sm font-semibold">
+                {t.quoteTotal}
+                {range?.low != null && range.high != null && (
+                  <span className="block text-xs font-medium text-white/80">
+                    {t.sources.likely(formatAcres(range.low, lang), ac(range.high))}
+                  </span>
+                )}
+              </span>
               <span className={ui.kpi}>{total !== null ? ac(total) : "–"}</span>
             </div>
 
@@ -164,6 +173,7 @@ export default function AcreageReport() {
                 {terrain && <> · {t.attributionLidar}</>}
               </p>
             </div>
+            <Sources lang={lang} print />
           </>
         )}
       </div>
@@ -252,6 +262,7 @@ function LawnReport() {
                 {!!lawn?.imagery && <> · {t.attributionPhotos}</>}
               </p>
             </div>
+            <Sources lang={lang} print />
           </>
         )}
       </div>
@@ -269,7 +280,8 @@ function RunReport() {
   const t = UI[lang];
   const r = t.run;
   const run = useRun();
-  const { plan, works, lawnM2, leg, driveKm } = useRunPlan();
+  const { plan, works, lawnM2, leg, driveKm, today } = useRunPlan();
+  const perDay = (min: number) => lawnsPerDay(plan.stops.length, min).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA", { maximumFractionDigits: 1 });
   const s = run.settings;
   const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
   const saved = plan.enteredDriveMin - plan.driveMin;
@@ -358,6 +370,10 @@ function RunReport() {
             <div className={`${ui.note} space-y-1`}>
               {plan.acres > plan.chargeAcres && <p>{r.overBattery(plan.chargeAcres)}</p>}
               {overWorkday(plan) && <p>{r.overDay}</p>}
+              <p>
+                {r.reportCompare(formatDuration(today.totalMin), formatDuration(plan.totalMin), perDay(today.totalMin), perDay(plan.totalMin))}{" "}
+                {r.compareNote(r.crewMowers[s.crewMower])}
+              </p>
               <p>{r.sources}</p>
               <p>
                 {t.attribution} · {t.attributionCadastre}

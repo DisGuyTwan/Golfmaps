@@ -8,12 +8,20 @@
  *
  * Crew rates are SingleOps' landscape production rates: string trimming
  * 1,500 ft of edge an hour and about 60 obstacles (trees) an hour, a backpack
- * blower 25,000 sq ft an hour over a 3 ft strip along the hard edges. Mowing
+ * blower 25,000 sq ft an hour over a 3 ft strip along the hard edges; the rep
+ * puts in the crew's own (`trimFtPerH`, `blowSqftPerH`). Mowing
  * is the mower fit's full-mow time for the Voyager (coverage.ts: stripes,
  * turns, edges, trees, driving on the lot). Driving is the fastest route on
  * OpenStreetMap's roads (roads.ts) once they've loaded, given as a DriveFn;
  * until then, or where a stop has no road, the straight line × ROAD_FACTOR
  * at an average speed.
+ *
+ * The same stops today, with the crew mowing too (`todayDay`): one person
+ * mows with the crew's mower while the others trim and blow (alone, one does
+ * it all), on the same route. Mowing rates are the field-capacity formula
+ * (Turf Magazine, ASABE): acres an hour = deck (ft) × speed (mph) ×
+ * efficiency ÷ 8.25, at 50 % efficiency on house lots (turns, obstacles,
+ * bagging), an estimate the rep replaces with the crew's own.
  * Pure, so the timing and the routing are tested without a browser.
  */
 import { lawnEdges, lawnTotals, photoAreas, SQ_M_TO_SQ_FT, type LawnMeasurement } from "./lawn";
@@ -42,10 +50,34 @@ const EXACT_MAX = 12;
 const FT_PER_M = 3.28084;
 const ACRE_M2 = 4046.86;
 
+/** What the crew mows with today, without the Voyager. */
+export type CrewMower = "push21" | "walk36" | "standOn52" | "zeroTurn60";
+export const CREW_MOWERS: CrewMower[] = ["push21", "walk36", "standOn52", "zeroTurn60"];
+/** Deck (in.) and working speed (mph) of each, for the field-capacity formula. */
+const CREW_MOWER_SPECS: Record<CrewMower, { deckIn: number; mph: number }> = {
+  push21: { deckIn: 21, mph: 2.5 },
+  walk36: { deckIn: 36, mph: 3.5 },
+  standOn52: { deckIn: 52, mph: 6 },
+  zeroTurn60: { deckIn: 60, mph: 7 },
+};
+/** Share of a mower's full speed and width a house lot gets (turns, obstacles, bagging). */
+export const LOT_EFFICIENCY = 0.5;
+/** Square feet an hour the crew mows a house lot with this mower (an estimate). */
+export function crewMowSqftPerH(m: CrewMower): number {
+  const { deckIn, mph } = CREW_MOWER_SPECS[m];
+  return Math.round(((((deckIn / 12) * mph * LOT_EFFICIENCY) / 8.25) * ACRE_M2 * 10.7639) / 100) * 100;
+}
+
 export interface RunSettings {
   voyager: RunVoyager;
   /** People trimming and blowing while the Voyager mows. */
   crew: number;
+  /** What the crew mows with today, and its rate (sq ft an hour; null: the estimate for that mower). */
+  crewMower: CrewMower;
+  mowSqftPerH: number | null;
+  /** The crew's trimming (ft of edge an hour) and blowing (sq ft an hour) rates. */
+  trimFtPerH: number;
+  blowSqftPerH: number;
   /** Average driving speed between stops (km/h). */
   speedKmh: number;
   /** Minutes per stop to park, unload the Voyager, start it and load it back. */
@@ -54,7 +86,17 @@ export interface RunSettings {
   startMin: number;
 }
 
-export const DEFAULT_RUN: RunSettings = { voyager: "KR800", crew: 2, speedKmh: 35, setupMin: 10, startMin: 7 * 60 + 30 };
+export const DEFAULT_RUN: RunSettings = {
+  voyager: "KR800",
+  crew: 2,
+  crewMower: "standOn52",
+  mowSqftPerH: null,
+  trimFtPerH: TRIM_FT_PER_H,
+  blowSqftPerH: BLOW_SQFT_PER_H,
+  speedKmh: 35,
+  setupMin: 10,
+  startMin: 7 * 60 + 30,
+};
 export const CREW_SIZES = [1, 2, 3];
 
 /** What a stop's lawn is for a run: its layout for the Voyager, and what the crew trims and blows. */
@@ -86,6 +128,8 @@ export interface StopWork {
   mowMin: number;
   trimMin: number;
   blowMin: number;
+  /** Minutes for one person to mow it with the crew's mower, today. */
+  crewMowMin: number;
   /** False when the Voyager can't mow it (too steep); `notes` say what to check on site. */
   fits: boolean;
   notes: FitNote[];
@@ -93,18 +137,22 @@ export interface StopWork {
 
 const voyagerOf = (id: RunVoyager) => MOWERS.find((m) => m.id === id)!;
 
-/** What one stop takes: the Voyager's full mow (one unit, however big), and the crew's trimming and blowing. */
-export function stopWork(s: StopSite, voyager: RunVoyager): StopWork {
+/** The crew's rates in a run's settings. */
+export type CrewRates = Pick<RunSettings, "crewMower" | "mowSqftPerH" | "trimFtPerH" | "blowSqftPerH">;
+
+/** What one stop takes: the Voyager's full mow (one unit, however big), the crew's trimming and blowing, and their own mowing today. */
+export function stopWork(s: StopSite, voyager: RunVoyager, rates: CrewRates = DEFAULT_RUN): StopWork {
   const mower = voyagerOf(voyager);
   const pace = paceOf(mower);
   const c = s.site.coverage;
   const mowH = c ? (overhead(c, pace).hours * s.lawnM2) / c.areaM2 : s.lawnM2 / (pace.stripeM * pace.speedMS) / 3600;
   const fit: Fit = fitMower(s.site, mower);
-  const trimMin = ((s.edgeM * FT_PER_M) / TRIM_FT_PER_H + s.trees / OBSTACLES_PER_H) * 60;
-  const blowMin = ((s.hardEdgeM * FT_PER_M * BLOW_STRIP_FT) / BLOW_SQFT_PER_H) * 60;
+  const trimMin = ((s.edgeM * FT_PER_M) / Math.max(1, rates.trimFtPerH) + s.trees / OBSTACLES_PER_H) * 60;
+  const blowMin = ((s.hardEdgeM * FT_PER_M * BLOW_STRIP_FT) / Math.max(1, rates.blowSqftPerH)) * 60;
+  const crewMowMin = ((s.lawnM2 * SQ_M_TO_SQ_FT) / Math.max(1, rates.mowSqftPerH ?? crewMowSqftPerH(rates.crewMower))) * 60;
   // A fleet's notes (near its limit) don't apply: one Voyager mows each stop in turn.
   const notes = fit.notes.filter((n) => n !== "atLimit");
-  return { mowMin: mowH * 60, trimMin, blowMin, fits: fit.fits, notes };
+  return { mowMin: mowH * 60, trimMin, blowMin, crewMowMin, fits: fit.fits, notes };
 }
 
 /** Straight-line distance between two [lat, lon] points (km). */
@@ -339,6 +387,31 @@ export function planRun(
 /** True when the day is longer than a workday (8 h, like the ROI tab's). */
 export const overWorkday = (plan: RunPlan) => plan.totalMin > HOURS_PER_WORKDAY * 60;
 
+export interface TodayDay {
+  /** The same stops and route with the crew mowing too: driving, on site, the whole day (min). */
+  driveMin: number;
+  onSiteMin: number;
+  totalMin: number;
+}
+
+/**
+ * The run's stops today, without the Voyager: the same route and set-up, one
+ * person mowing with the crew's mower while the rest trim and blow (alone,
+ * one person does all three).
+ */
+export function todayDay(plan: RunPlan, works: (StopWork | null)[], s: RunSettings): TodayDay {
+  const crew = Math.max(1, s.crew);
+  const onSite = plan.stops.reduce((t, p) => {
+    const w = works[p.index]!;
+    const work = crew === 1 ? w.crewMowMin + w.trimMin + w.blowMin : Math.max(w.crewMowMin, (w.trimMin + w.blowMin) / (crew - 1));
+    return t + s.setupMin + work;
+  }, 0);
+  return { driveMin: plan.driveMin, onSiteMin: onSite, totalMin: plan.driveMin + onSite };
+}
+
+/** Lawns a crew does in an 8 h workday at this pace (driving included). */
+export const lawnsPerDay = (stops: number, totalMin: number) => (totalMin > 0 ? (stops * HOURS_PER_WORKDAY * 60) / totalMin : 0);
+
 export interface RunLink {
   stops: { point: [number, number]; label: string | null }[];
   shop: { point: [number, number]; label: string | null } | null;
@@ -350,7 +423,8 @@ const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:
 /**
  * Share-link parameters: a=run, rs the stops (polyline), rn their names
  * ("|"-separated), rh the shop ("lat,lon") and rhn its name, rv the Voyager,
- * rc the crew, rk the speed, ru the set-up minutes, rt the start ("07:30").
+ * rc the crew, rk the speed, ru the set-up minutes, rt the start ("07:30");
+ * the crew's mower rm and rates rmr (mowing), rtr (trimming), rbr (blowing).
  */
 export function encodeRun(run: RunLink): Record<string, string | undefined> {
   const s = run.settings;
@@ -366,6 +440,10 @@ export function encodeRun(run: RunLink): Record<string, string | undefined> {
     rk: s.speedKmh !== d.speedKmh ? String(s.speedKmh) : undefined,
     ru: s.setupMin !== d.setupMin ? String(s.setupMin) : undefined,
     rt: s.startMin !== d.startMin ? hhmm(s.startMin) : undefined,
+    rm: s.crewMower !== d.crewMower ? s.crewMower : undefined,
+    rmr: s.mowSqftPerH !== null ? String(s.mowSqftPerH) : undefined,
+    rtr: s.trimFtPerH !== d.trimFtPerH ? String(s.trimFtPerH) : undefined,
+    rbr: s.blowSqftPerH !== d.blowSqftPerH ? String(s.blowSqftPerH) : undefined,
   };
 }
 
@@ -389,6 +467,10 @@ export function decodeRun(params: URLSearchParams): RunLink | null {
       speedKmh: num("rk", 5, 100, d.speedKmh),
       setupMin: num("ru", 0, 60, d.setupMin),
       startMin: Number.isFinite(h) && Number.isFinite(m) && params.has("rt") ? Math.min(23 * 60 + 59, Math.max(0, h * 60 + m)) : d.startMin,
+      crewMower: CREW_MOWERS.find((m) => m === params.get("rm")) ?? d.crewMower,
+      mowSqftPerH: params.has("rmr") ? num("rmr", 1000, 500_000, 0) || null : null,
+      trimFtPerH: num("rtr", 100, 10_000, d.trimFtPerH),
+      blowSqftPerH: num("rbr", 1000, 200_000, d.blowSqftPerH),
     },
   };
 }

@@ -9,6 +9,8 @@ import { goToTab } from "@/lib/tabs";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { Icon } from "./icons";
 import { useMowerFit } from "./MowerFit";
+import { useRecords } from "@/lib/records-store";
+import { compareClient, measuredRange, type AcreRange } from "@/lib/trust";
 import { CopyLinkButton, Notice, Pop, printAs, ui } from "./ui";
 
 /** A 0–100 % input bound to one quote setting. */
@@ -28,6 +30,33 @@ function PctInput({ label, field, q }: { label: string; field: "roughPct" | "gra
       />
     </label>
   );
+}
+
+/**
+ * How sure the acres are: our likely range (and where it comes from), or,
+ * when the client gave their own number, ours beside it and whether theirs
+ * falls in our range.
+ */
+function RangeLine({ lang, range, client }: { lang: Lang; range: AcreRange | null; client: number | null }) {
+  const s = UI[lang].sources;
+  if (!range) return null;
+  const ac = (n: number) => `${formatAcres(n, lang)} ac`;
+  const likely =
+    range.low !== null && range.high !== null
+      ? `${s.likely(formatAcres(range.low, lang), ac(range.high))} (${range.rangeFrom === "record" ? s.fromRecord(range.n) : s.fromCalibration})`
+      : null;
+  if (client !== null) {
+    const { inRange, diffPct } = compareClient(client, range);
+    const pct = `${diffPct > 0 ? "+" : ""}${Math.round(diffPct)}${lang === "fr" ? " %" : "%"}`;
+    const verdict = inRange === null ? s.offBy(pct) : inRange ? s.inRange : `${s.offBy(pct)}, ${s.outRange}`;
+    return (
+      <p className={`text-[11px] ${inRange === false ? "text-amber-700 dark:text-amber-300" : "text-muted"}`}>
+        {s.ours(ac(range.value))}
+        {likely && ` · ${likely}`} · {verdict}
+      </p>
+    );
+  }
+  return <p className="text-[11px] text-muted">{likely ?? s.noRange}</p>;
 }
 
 /**
@@ -120,6 +149,7 @@ function AcreQuote({
   const t = UI[lang];
   const q = useQuoteSettings();
   const acres = acresForQuote(mode, result, sod, q);
+  const range = measuredRange(mode, result, sod, q, useRecords().spread);
   // What the mower fit recommends for the whole job (or the rough), so the ROI tab prices the same robots: how they
   // work, how often, the layout's extra time over a plain square (none when it's quicker), and the Voyager size
   // (on a course, the cut-and-go one, in case the ROI tab switches to it).
@@ -195,6 +225,7 @@ function AcreQuote({
         <span className="text-sm font-medium text-accent-ink">{t.quoteTotal}</span>
         <Pop value={acres !== null ? `${ac(acres)} ac` : "–"} className="text-lg font-bold tabular-nums text-accent-ink" />
       </div>
+      <RangeLine lang={lang} range={range} client={q.override} />
 
       <div className="flex flex-wrap gap-2">
         <button
@@ -202,7 +233,16 @@ function AcreQuote({
           disabled={acres === null}
           onClick={() => {
             if (acres === null) return;
-            sendAcresToRoi({ acres, approach: fit?.approach ?? null, every: q.mowEvery, model: roiModel(voyager?.mower), layoutPct });
+            sendAcresToRoi({
+              acres,
+              approach: fit?.approach ?? null,
+              every: q.mowEvery,
+              model: roiModel(voyager?.mower),
+              layoutPct,
+              window: q.window,
+              // The likely range as shares of the acres sent (none for the client's own number).
+              range: q.override === null && range?.low != null && range.high != null ? [range.low / range.value, range.high / range.value] : null,
+            });
             goToTab("#roi");
           }}
           className={`${ui.btnPrimary} group flex-1`}

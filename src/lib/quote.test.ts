@@ -61,8 +61,10 @@ describe("share-link round trip", () => {
       mowEvery: 3,
       lawnOverride: null,
       approach: "stay",
+      window: { from: 20, to: 7, days: 6 },
     };
     expect(decodeQuote(new URLSearchParams(encodeQuote(q)))).toEqual(q);
+    expect(encodeQuote(q).q_win).toBe("20-7-6");
     expect(encodeQuote(q).q_how).toBe("stay");
     expect(encodeQuote({ ...q, approach: null }).q_how).toBeUndefined();
   });

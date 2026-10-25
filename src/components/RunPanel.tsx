@@ -5,22 +5,27 @@ import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { formatSqft, SQ_M_TO_SQ_FT } from "@/lib/lawn";
 import type { RoadLeg } from "@/lib/roads";
 import {
+  CREW_MOWERS,
   CREW_SIZES,
   MAX_STOPS,
   RUN_VOYAGERS,
   SHOP,
+  crewMowSqftPerH,
   directionsLinks,
+  lawnsPerDay,
   overWorkday,
   planRun,
   readyStops,
   runOrder,
   stopWork,
   straightDrive,
+  todayDay,
   type DriveFn,
   type RunPlan,
   type RunSettings,
   type RunVoyager,
   type StopWork,
+  type TodayDay,
 } from "@/lib/run";
 import {
   clearRun,
@@ -62,6 +67,8 @@ export interface RunPlanResult {
   driveKm: number | null;
   /** Legs of the day driven by the straight line, once the roads have loaded (or failed to). */
   straightLegs: number;
+  /** The same stops and route today, the crew mowing too. */
+  today: TodayDay;
 }
 
 type PlanInputs = [RunStop[], RunPlace | null, RunSettings, RunRoads];
@@ -75,7 +82,7 @@ function computePlan(...inputs: PlanInputs): RunPlanResult {
   const lawnM2 = sites.map((s) => s?.lawnM2 ?? 0);
   const points = stops.map((s) => s.point);
   const shopPoint = shop?.point ?? null;
-  const worksFor = (v: RunVoyager) => sites.map((s) => (s ? stopWork(s, v) : null));
+  const worksFor = (v: RunVoyager) => sites.map((s) => (s ? stopWork(s, v, settings) : null));
   const all = Object.fromEntries(RUN_VOYAGERS.map((v) => [v, worksFor(v)])) as Record<RunVoyager, (StopWork | null)[]>;
   // Driving on the roads once they've loaded; the straight line until then, and for a leg they don't join.
   const at = (i: number) => (i === SHOP ? shopPoint! : points[i]);
@@ -99,6 +106,7 @@ function computePlan(...inputs: PlanInputs): RunPlanResult {
     route: places.map(at),
     driveKm: legs.length && legs.every(Boolean) ? legs.reduce((t, l) => t + l!.km, 0) : null,
     straightLegs: roads.state === "ready" || roads.state === "failed" ? legs.filter((l) => !l).length : 0,
+    today: todayDay(day, all[settings.voyager], settings),
   };
   lastPlan = { inputs, result };
   return result;
@@ -239,7 +247,7 @@ function ImportResult({ imported: im, lang }: { imported: RunImport; lang: Lang 
 export default function RunPanel({
   lang,
   notice,
-  planned: { plan, works, lawnM2, byVoyager, byCrew, leg, route, driveKm, straightLegs },
+  planned: { plan, works, lawnM2, byVoyager, byCrew, leg, route, driveKm, straightLegs, today },
   getShareUrl,
   getBias,
   onImported,
@@ -277,6 +285,10 @@ export default function RunPanel({
   const lastStop = plan.stops.at(-1)?.index;
   const importing = !!run.imported && !run.imported.done;
   const directions = plan.stops.length ? directionsLinks(route) : [];
+  const n = plan.stops.length;
+  const locale = lang === "fr" ? "fr-CA" : "en-CA";
+  const perDay = (min: number) => lawnsPerDay(n, min).toLocaleString(locale, { maximumFractionDigits: 1 });
+  const perWeek = (min: number) => Math.round(lawnsPerDay(n, min) * 5).toLocaleString(locale);
 
   return (
     <div
@@ -406,6 +418,40 @@ export default function RunPanel({
           <SettingInput label={r.setup} value={s.setupMin} min={0} max={60} onChange={(setupMin) => setRunSettings({ setupMin })} />
         </div>
 
+        {/* The crew's own rates: our defaults are estimates. */}
+        <details className="rounded-lg border border-line px-3 py-2">
+          <summary className="cursor-pointer text-xs font-semibold text-ink-2">{r.rates}</summary>
+          <div className="mt-2 space-y-2">
+            <p className="text-[11px] text-muted">{r.ratesHint}</p>
+            <label className="block space-y-1">
+              <span className="block text-xs font-semibold text-ink-2">{r.crewMower}</span>
+              <select
+                value={s.crewMower}
+                onChange={(e) => setRunSettings({ crewMower: e.target.value as RunSettings["crewMower"], mowSqftPerH: null })}
+                className={`${ui.input} py-1.5 text-sm`}
+              >
+                {CREW_MOWERS.map((m) => (
+                  <option key={m} value={m}>
+                    {r.crewMowers[m]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <SettingInput
+                label={r.mowRate}
+                value={s.mowSqftPerH ?? crewMowSqftPerH(s.crewMower)}
+                min={1000}
+                max={500000}
+                onChange={(mowSqftPerH) => setRunSettings({ mowSqftPerH })}
+              />
+              <SettingInput label={r.trimRate} value={s.trimFtPerH} min={100} max={10000} onChange={(trimFtPerH) => setRunSettings({ trimFtPerH })} />
+              <SettingInput label={r.blowRate} value={s.blowSqftPerH} min={1000} max={200000} onChange={(blowSqftPerH) => setRunSettings({ blowSqftPerH })} />
+            </div>
+            <p className="text-[10px] text-faint">{r.mowRateHint(crewMowSqftPerH(s.crewMower).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA"))}</p>
+          </div>
+        </details>
+
         {/* The day */}
         {plan.stops.length > 0 ? (
           <div className="space-y-1 rounded-lg bg-accent-soft px-3 py-2 text-accent-ink">
@@ -433,6 +479,26 @@ export default function RunPanel({
                 {r.battery(formatAcres(plan.acres, lang), plan.chargeAcres)}
               </li>
             </ul>
+            {/* The same stops today, with the crew mowing: what the Voyager is worth to this crew. */}
+            <div className="mt-1.5 space-y-1 border-t border-accent-ink/15 pt-1.5">
+              <div className="text-[11px] font-semibold">{r.compareTitle}</div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                {(
+                  [
+                    [r.today, today.totalMin],
+                    [r.withVoyager, plan.totalMin],
+                  ] as const
+                ).map(([label, min]) => (
+                  <div key={label} className="rounded-md bg-surface/60 px-2 py-1">
+                    <div className="text-faint">{label}</div>
+                    <div className="text-sm font-bold tabular-nums">{formatDuration(min)}</div>
+                    <div>{r.perDay(perDay(min))}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="text-[11px] font-semibold">{r.perWeek(perWeek(today.totalMin), perWeek(plan.totalMin))}</div>
+              <p className="text-[10px] text-accent-ink/80">{r.compareNote(r.crewMowers[s.crewMower])}</p>
+            </div>
           </div>
         ) : (
           run.stops.length === 0 && <p className="text-xs text-muted">{r.empty}</p>

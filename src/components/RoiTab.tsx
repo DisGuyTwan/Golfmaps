@@ -26,15 +26,17 @@ import {
 } from "@/lib/roi";
 import { buildShareUrl, prefixed, readParams } from "@/lib/share";
 import { Icon, type IconName } from "./icons";
+import WindowPicker, { windowLine } from "./WindowPicker";
+import { decodeWindow, encodeWindow, robotWindowShare, voyagerWindowShare, type MowWindow } from "@/lib/window";
 import { Pop, SectionTitle, Segmented, TabHeader, delay, ui } from "./ui";
 
-type NumericKey = Exclude<keyof RoiInputs, "batteryKwh" | "ztStatus" | "incentives" | "approach" | "mowEvery">;
+type NumericKey = Exclude<keyof RoiInputs, "batteryKwh" | "ztStatus" | "incentives" | "approach" | "mowEvery" | "window">;
 /** Field values stay strings so they can be cleared and retyped live. */
 type Fields = Record<NumericKey, string>;
 /** Which incentives from the Incentives tab reduce the Voyager investment. */
 type IncMode = "none" | "low" | "high";
 
-const NOT_FIELDS = new Set<keyof RoiInputs>(["batteryKwh", "ztStatus", "incentives", "approach", "mowEvery"]);
+const NOT_FIELDS = new Set<keyof RoiInputs>(["batteryKwh", "ztStatus", "incentives", "approach", "mowEvery", "window"]);
 const NUMERIC_KEYS = (Object.keys(ROI_DEFAULTS) as (keyof RoiInputs)[]).filter((k): k is NumericKey => !NOT_FIELDS.has(k));
 
 const toFields = (i: RoiInputs): Fields =>
@@ -48,6 +50,23 @@ const num = (v: string) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/** Inputs a client knows better than our defaults: when changed, they're listed as the client's figures. */
+const CLIENT_KEYS: NumericKey[] = [
+  "wage",
+  "burden",
+  "weeks",
+  "hoursPerWeek",
+  "ztMowHrs",
+  "ztAcresPerHour",
+  "ztPrice",
+  "ztResale",
+  "ztLph",
+  "ztMaint",
+  "voyDaysPerWeek",
+  "supHrs",
+  "kr238Checks",
+];
+
 const isModel = (v: string | undefined): v is VoyagerModel => v === "7" || v === "19" || v === "custom";
 const isIncMode = (v: string | undefined): v is IncMode => v === "none" || v === "low" || v === "high";
 const isEvery = (n: number): n is MowEvery => MOW_EVERY.includes(n as MowEvery);
@@ -58,6 +77,14 @@ function everyFromLink(link: Record<string, string>): MowEvery {
   if (isEvery(every)) return every;
   const perWeek = Number(link.mowsPerWeek);
   return perWeek > 0 ? (Math.min(3, Math.max(1, Math.round(7 / perWeek))) as MowEvery) : (ROI_DEFAULTS.mowEvery as MowEvery);
+}
+
+/** The acreage's likely range as shares of the area ("0.82-1.39"), from a link. */
+function rangeFromLink(v: string | undefined): [number, number] | null {
+  const m = v?.match(/^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/);
+  if (!m) return null;
+  const [lo, hi] = [Number(m[1]), Number(m[2])];
+  return lo > 0 && lo <= 1 && hi >= 1 && hi < 5 ? [lo, hi] : null;
 }
 
 /** Defaults, overridden by a share link's r_ parameters (r_area=60, r_model=19, …). */
@@ -72,6 +99,8 @@ function initialState() {
     fields,
     approach: isApproach(link.how) ? link.how : ROI_DEFAULTS.approach,
     every: everyFromLink(link),
+    window: decodeWindow(link.win),
+    range: rangeFromLink(link.range),
     model: isModel(link.model) ? link.model : ("7" as VoyagerModel),
     batteryKwh: Number.isFinite(battery) && battery > 0 ? battery : ROI_DEFAULTS.batteryKwh,
     ztStatus: (link.ztStatus === "own" ? "own" : "replace") as ZeroTurnStatus,
@@ -177,6 +206,9 @@ export default function RoiTab() {
   const [initial] = useState(initialState);
   const [approach, setApproach] = useState<Approach>(initial.approach);
   const [every, setEvery] = useState<MowEvery>(initial.every);
+  const [mowWindow, setMowWindow] = useState<MowWindow | null>(initial.window);
+  // The acreage's likely range (shares of the area), from the Acreage tab: payback is shown across it.
+  const [acreShares, setAcreShares] = useState<[number, number] | null>(initial.range);
   const [model, setModel] = useState<VoyagerModel>(initial.model);
   const [batteryKwh, setBatteryKwh] = useState(initial.batteryKwh);
   const [fields, setFields] = useState<Fields>(initial.fields);
@@ -196,6 +228,8 @@ export default function RoiTab() {
     }
     if (roiImport.approach) setApproach(roiImport.approach);
     if (roiImport.every) setEvery(roiImport.every);
+    setMowWindow(roiImport.window);
+    setAcreShares(roiImport.range);
     setFields((prev) => ({
       ...prev,
       area: String(Math.round(roiImport.acres * 100) / 100),
@@ -238,8 +272,8 @@ export default function RoiTab() {
 
   const base = useMemo<RoiInputs>(() => {
     const parsed = Object.fromEntries(NUMERIC_KEYS.map((k) => [k, num(fields[k])])) as Record<NumericKey, number>;
-    return { ...parsed, approach, mowEvery: every, batteryKwh, ztStatus, incentives: 0 };
-  }, [fields, approach, every, batteryKwh, ztStatus]);
+    return { ...parsed, approach, mowEvery: every, window: mowWindow, batteryKwh, ztStatus, incentives: 0 };
+  }, [fields, approach, every, mowWindow, batteryKwh, ztStatus]);
 
   // Incentives for this robot purchase, priced with the Incentives tab's profile.
   const sized = useMemo(() => computeRoi(base), [base]);
@@ -251,6 +285,13 @@ export default function RoiTab() {
   }, [profile, sized.robotGross, lang]);
   const credit = incMode === "low" ? incentives.low : incMode === "high" ? incentives.high : 0;
   const r = useMemo(() => computeRoi({ ...base, incentives: credit }), [base, credit]);
+  // Payback at both ends of the likely acreage (a smaller job needs fewer robots but saves less).
+  const paybackSpan = useMemo(() => {
+    if (!acreShares) return null;
+    const at = (f: number) => computeRoi({ ...base, area: base.area * f, incentives: credit }).paybackMonths;
+    const ends = [at(acreShares[0]), at(acreShares[1])].sort((a, b) => a - b);
+    return ends.every(Number.isFinite) ? ends : null;
+  }, [base, credit, acreShares]);
 
   const changeModel = (next: VoyagerModel) => {
     setModel(next);
@@ -286,7 +327,17 @@ export default function RoiTab() {
   const shareUrl = () =>
     buildShareUrl(
       window.location,
-      prefixed("r_", { ...fields, every, how: approach, model, battery: batteryKwh, ztStatus, inc: incMode }),
+      prefixed("r_", {
+        ...fields,
+        every,
+        ...(mowWindow && { win: encodeWindow(mowWindow) }),
+        ...(acreShares && { range: acreShares.map((v) => v.toFixed(2)).join("-") }),
+        how: approach,
+        model,
+        battery: batteryKwh,
+        ztStatus,
+        inc: incMode,
+      }),
       "#roi",
     );
 
@@ -294,6 +345,10 @@ export default function RoiTab() {
     ? new Date(`${gasLivePeriod}-15T12:00:00`).toLocaleDateString(locale, { month: "long", year: "numeric" })
     : null;
   const cpaSaving = r.ztCpa - r.voyCpa;
+  // The client's own figures, so the PDF says which numbers are theirs and which are ours.
+  const clientFigures = CLIENT_KEYS.filter((k) => fields[k] !== "" && num(fields[k]) !== ROI_DEFAULTS[k])
+    .map((k) => `${t[k]} ${decimal(num(fields[k]))} (${t.ours(decimal(ROI_DEFAULTS[k] as number))})`)
+    .join("; ");
   const stay = approach === "stay";
   const robotName = stay ? "KR238" : "Voyager";
 
@@ -348,6 +403,17 @@ export default function RoiTab() {
             onChange={setApproach}
           />
           <Hint>{t.approaches[approach].hint}</Hint>
+          <div className="mt-3 print:hidden">
+            <WindowPicker
+              lang={lang}
+              value={mowWindow}
+              onChange={setMowWindow}
+              size="md"
+              label={<div className={`${ui.label} mb-1 block`}>{UI[lang].fitWindow.question}</div>}
+              share={stay ? robotWindowShare(mowWindow, 120) : voyagerWindowShare(mowWindow, 480, num(fields.voyDaysPerWeek))}
+            />
+          </div>
+          <PrintLine label={UI[lang].fitWindow.label} value={windowLine(mowWindow, lang) ?? UI[lang].fitWindow.options.any} />
 
           {stay ? (
             <>
@@ -542,6 +608,7 @@ export default function RoiTab() {
           {field("years", { min: 1, max: 10 })}
 
           <div className="print:hidden">
+            {clientFigures && <Note>{t.clientFigures(clientFigures)}</Note>}
             <Note>{t.sourcesNote(approach)}</Note>
           </div>
         </section>
@@ -688,12 +755,18 @@ export default function RoiTab() {
               </div>
             ))}
           </div>
+          {paybackSpan && formatPayback(paybackSpan[0], lang) !== formatPayback(paybackSpan[1], lang) && (
+            <p className="mt-2 text-center text-xs font-semibold text-accent print:text-[9px]">
+              {UI[lang].sources.paybackRange(formatPayback(paybackSpan[0], lang), formatPayback(paybackSpan[1], lang))}
+            </p>
+          )}
           </div>
           <Note>{t.paybackNote}</Note>
         </section>
 
         {/* In print the sources run full width under both columns, to fit one page. */}
         <div className="hidden print:col-span-2 print:block print:px-2">
+          {clientFigures && <Note>{t.clientFigures(clientFigures)}</Note>}
           <Note>{t.sourcesNote(approach)}</Note>
         </div>
       </div>
