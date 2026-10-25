@@ -338,6 +338,24 @@ const en = {
   attributionLidar: "LiDAR © NRCan (HRDEM)",
   attributionPhotos: "Aerial photos © Gouvernement du Québec (MRNF), CC BY 4.0",
 
+  // Against the competition (competitors.ts, Battlecard): rep only, never printed
+  battle: {
+    title: "Against the competition (rep only)",
+    lede: (date: string) => `What each maker publishes, as of ${date}; ratings aren't on the same basis, so unit counts are rough.`,
+    rated: "Rated area",
+    units: (n: number) => (n === 1 ? "1 unit here" : `${n} units here`),
+    slope: (pct: number) => `slopes to ${pct}%`,
+    steep: (share: string) => `${share} of this property is steeper`,
+    noFairway: "can't cut fairway height",
+    price: "Price",
+    onRequest: "dealer quote only",
+    source: "Source",
+    edgeSlope: (kress: string, names: string) => `Slope: ${kress} takes this property's slopes; ${names} can't.`,
+    edgeFairway: (names: string) => `Fairways: the KR238 cuts down to 10 mm; ${names} don't publish a cut that low.`,
+    edgeGo: "Cut and go: one Voyager mows several sites with the crew; these are made to stay on one.",
+    edgeUnits: (kress: number, name: string, theirs: number) => `Units: ${kress} Kress against ${theirs} ${name}.`,
+  },
+
   // Where the numbers come from and how sure they are (trust.ts, Sources)
   sources: {
     title: "Where these numbers come from",
@@ -826,6 +844,23 @@ const fr: UiStrings = {
   attributionPhotos: "Photos aériennes © Gouvernement du Québec (MRNF), CC BY 4.0",
 
   // Tournée de tonte (run.ts, RunPanel)
+  battle: {
+    title: "Face à la concurrence (représentant seulement)",
+    lede: (date: string) => `Ce que chaque fabricant publie, en date du ${date}; les cotes ne sont pas sur la même base, alors le nombre d’unités est approximatif.`,
+    rated: "Superficie cotée",
+    units: (n: number) => (n === 1 ? "1 unité ici" : `${n} unités ici`),
+    slope: (pct: number) => `pentes jusqu’à ${pct} %`,
+    steep: (share: string) => `${share} de cette propriété est plus en pente`,
+    noFairway: "ne coupe pas à la hauteur d’une allée",
+    price: "Prix",
+    onRequest: "soumission du concessionnaire seulement",
+    source: "Source",
+    edgeSlope: (kress: string, names: string) => `Pente : ${kress} prend les pentes de cette propriété; ${names} non.`,
+    edgeFairway: (names: string) => `Allées : le KR238 coupe jusqu’à 10 mm; ${names} ne publient pas une coupe aussi basse.`,
+    edgeGo: "Tond et repart : un Voyager tond plusieurs sites avec l’équipe; ceux-ci sont faits pour rester sur un seul.",
+    edgeUnits: (kress: number, name: string, theirs: number) => `Unités : ${kress} Kress contre ${theirs} ${name}.`,
+  },
+
   sources: {
     title: "D’où viennent ces chiffres",
     reportTitle: "Hypothèses et sources",

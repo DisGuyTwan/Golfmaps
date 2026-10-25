@@ -26,6 +26,7 @@ import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { Icon } from "./icons";
 import { Notice, Segmented, toneClass } from "./ui";
 import WindowPicker, { windowLine } from "./WindowPicker";
+import Battlecard from "./Battlecard";
 import { robotWindowShare, voyagerWindowShare } from "@/lib/window";
 import { useRecords, type Records } from "@/lib/records-store";
 import { ROI_DEFAULTS } from "@/lib/roi";
@@ -444,6 +445,7 @@ export default function MowerFit({
               )}
             </div>
           )}
+          {!print && rec && <Battlecard lang={lang} site={fit.site} rec={rec} approach={approach} />}
           <p className="text-[10px] leading-snug text-faint">{t.fitSource(date)}</p>
         </>
       )}

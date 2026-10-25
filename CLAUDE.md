@@ -67,6 +67,8 @@ src/components/
                              weekdays, custom), in the mower fit and ROI tab
   Sources.tsx                "Where these numbers come from": each assumption
                              with its kind, folded in the panel, page 2 of the PDF
+  Battlecard.tsx             "Against the competition (rep only)" in the mower
+                             fit card; never printed
   MeasurePanel.tsx           results panel + legend; "Select a property" until
                              something is measured, then the detected kind with
                              a Change switch (Golf course | Sod farm | Lawn)
@@ -107,6 +109,8 @@ src/lib/
                 share when several split it (pure, tested)
   mowers.ts     the 12 Kress models quoted and the fit / recommendation (pure, tested)
   window.ts     when the robots may mow → share of a robot's capacity (pure, tested)
+  competitors.ts  rival robots' published specs (dated, sourced) and how
+                each does on the property measured (pure, tested)
   trust.ts      likely ranges (acres, from calibration or installs), the
                 client's number against ours, the assumptions list (pure, tested)
   records-store.ts  field-check calibration and installs' spread from
@@ -444,6 +448,16 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   shorter than its run time, and days past the crew's. Nights only (8 pm to
   7 am) leaves a KR238 54 % of its rating: 60 acres every 2 days goes from 4
   to 7 KR238s. Fit functions take `FitOptions` ({ window, calibration }).
+- **The battlecard is for the rep, never the client.** `competitors.ts`
+  holds what Husqvarna (CEORA 546, Automower 535 AWD and 550 EPOS), ECHO
+  (TM-2050), Segway (Terranox, Navimow X390) and Mammotion (LUBA 2 AWD)
+  publish, as of `COMPETITORS_AS_OF` with a source each (makers' pages,
+  else retailers). Toro publishes no commercial robot as of then. A course
+  or site is compared with the commercial ones (a site with both), a lawn
+  with the home ones: units at their published area (rough: ratings differ
+  in basis), the LiDAR's share steeper than each climbs (the band at or
+  under its limit), whether it cuts fairway height. `Battlecard` is
+  `print:hidden`. Re-check the figures and the date together.
 - **Leaflet touches `window` at import time.** `GolfMap` must stay behind
   `dynamic(..., { ssr: false })` or the build breaks.
 - **Incentive data is dated research, not live data.** Rates, caps and links in
