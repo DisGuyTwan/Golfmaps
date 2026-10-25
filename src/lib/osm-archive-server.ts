@@ -83,8 +83,10 @@ export function httpRange(url: string): ReadRange {
   let target: { url: string; until: number } | null = null;
   const resolve = async () => {
     if (target && target.until > Date.now()) return target.url;
-    const head = await fetch(url, { method: "HEAD", redirect: "manual", signal: AbortSignal.timeout(5000) });
-    const location = head.status >= 300 && head.status < 400 ? head.headers.get("location") : null;
+    // A GET (of one byte): GitHub signs the address it redirects to for the method asked, and a HEAD's won't read.
+    const first = await fetch(url, { headers: { Range: "bytes=0-0" }, redirect: "manual", signal: AbortSignal.timeout(5000) });
+    await first.body?.cancel();
+    const location = first.status >= 300 && first.status < 400 ? first.headers.get("location") : null;
     target = { url: location ? new URL(location, url).toString() : url, until: Date.now() + 4 * 60_000 };
     return target.url;
   };

@@ -62,6 +62,19 @@ describe("estimateLot", () => {
     expect(Math.abs(m2(withSheds.lot) - m2(base.lot))).toBeLessThan(m2(base.lot) * 0.02);
   });
 
+  it("takes the LiDAR's houses where OSM has none, but not its copy of the house itself", () => {
+    const base = estimateLot(LAT + dLat(23), LON, subdivision())!;
+    // The house, a metre off as the LiDAR draws it: the lot stays as it was.
+    const copy = estimateLot(LAT + dLat(23), LON, { ...subdivision(), lidar: [rect(-4, 16.5, 6, 30.5)] })!;
+    expect(Math.abs(m2(copy.lot) - m2(base.lot))).toBeLessThan(m2(base.lot) * 0.03);
+    // The neighbour to the east only in the LiDAR still bounds the lot.
+    const inputs = { ...subdivision([15]), lidar: [rect(10, 16, 20, 30)] };
+    expect(extent(estimateLot(LAT + dLat(23), LON, inputs)!.lot).east).toBeCloseTo(7.5, 0);
+    // And with no house in OSM at all, the LiDAR's is the one the lot is drawn around.
+    const onlyLidar = { ...subdivision([0]), lidar: [rect(-5, 16, 5, 30)] };
+    expect(m2(estimateLot(LAT + dLat(23), LON, onlyLidar)!.lot)).toBeGreaterThan(525 * 0.92);
+  });
+
   it("stops at REACH_M from the house where no neighbour bounds it", () => {
     const est = estimateLot(LAT + dLat(23), LON, subdivision([15]))!;
     const e = extent(est.lot);

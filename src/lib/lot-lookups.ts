@@ -33,6 +33,9 @@ export function lookAround(lat: number, lon: number) {
 }
 export type Lookups = ReturnType<typeof lookAround>;
 
+/** How long an estimate with no house in OSM waits on the LiDAR's (ms). */
+const LIDAR_WAIT_MS = 4000;
+
 export interface FoundLot {
   lot: Polygon | MultiPolygon;
   lotSource: "cadastre" | "estimated";
@@ -42,7 +45,7 @@ export interface FoundLot {
 /**
  * The lot at a point: the cadastre's in Quebec; elsewhere (Ontario's parcels
  * aren't open) one estimated around the house from OpenStreetMap's buildings
- * and streets, or, where OSM has no house there, the LiDAR's buildings too
+ * and streets, or the LiDAR's buildings where OSM has no house at the point
  * (estimated-lot.ts). Null when there's none (a street, no house near the
  * point); throws when the cadastre, or OSM for an estimate, can't be reached.
  */
@@ -54,13 +57,11 @@ export async function lotAt(lat: number, lon: number, looks: Lookups): Promise<F
   const inputs = lotInputs(await looks.nearby);
   let estimate = estimateLot(lat, lon, inputs);
   if (!estimate) {
-    const grid = await looks.terrain.catch(() => null);
-    const box: Polygon = {
-      type: "Polygon",
-      coordinates: [[[looks.around.west, looks.around.south], [looks.around.east, looks.around.south], [looks.around.east, looks.around.north], [looks.around.west, looks.around.north], [looks.around.west, looks.around.south]]],
-    };
-    const lidar = grid ? lidarBuildings(grid, box).map((geometry) => ({ geometry, outbuilding: false })) : [];
-    if (lidar.length) estimate = estimateLot(lat, lon, { ...inputs, buildings: [...inputs.buildings, ...lidar] });
+    // No house in OSM at the point: the LiDAR's (it started with OSM, so it's usually in by now).
+    const grid = await Promise.race([looks.terrain.catch(() => null), new Promise<null>((done) => setTimeout(() => done(null), LIDAR_WAIT_MS))]);
+    const { west, south, east, north } = looks.around;
+    const box: Polygon = { type: "Polygon", coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]] };
+    if (grid) estimate = estimateLot(lat, lon, { ...inputs, lidar: lidarBuildings(grid, box) });
   }
   return estimate && { lot: estimate.lot, lotSource: "estimated", lotNumber: null };
 }

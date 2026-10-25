@@ -7,7 +7,12 @@
  * front lot line), and at most `REACH_M` from the house where nothing else
  * bounds it (a corner lot, a park behind). Garages and sheds aren't
  * neighbours: they stand on someone's lot. The buildings are OpenStreetMap's
- * (Ontario's towns mostly have them), else the LiDAR's.
+ * (Ontario's towns mostly have theirs), and the LiDAR's only where OSM has
+ * no house at the point: they also catch trees and sheds, and with them
+ * lots came out at a median 0.79 of the cadastre's instead of 0.97.
+ * Checked on 12 lots in Aylmer (Gatineau), where OSM has every house,
+ * against the Quebec cadastre: median 0.97 of the real area, half within
+ * 25 %, overlap (IoU) 0.66; a row of townhouses on one lot is the worst.
  * An estimate, and the panel says so: the rep traces the lot where it's off.
  * Pure, so it's tested without a browser.
  */
@@ -33,6 +38,12 @@ export interface LotStreet {
 export interface LotInputs {
   buildings: LotBuilding[];
   streets: LotStreet[];
+  /**
+   * Buildings the LiDAR sees (terrain.ts), when OSM has no house at the
+   * point. One mostly (30 %) under an OSM building is left to it: the
+   * LiDAR's copy of a house, a metre off, would otherwise take its yard.
+   */
+  lidar?: (Polygon | MultiPolygon)[];
 }
 
 export interface EstimatedLot {
@@ -136,9 +147,26 @@ export function estimateLot(lat: number, lon: number, inputs: LotInputs): Estima
     const ys = rings.flat().map((p) => p[1]);
     return { geometry, rings, box: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], m2: area({ type: "Feature", geometry, properties: {} }) };
   };
-  const houses = inputs.buildings
-    .filter((b) => !b.outbuilding)
-    .map((b) => shapeOf(b.geometry))
+  const n = Math.round((2 * BOX_M) / CELL_M);
+  const grid: GridShape = {
+    bbox: { south: lat - BOX_M / ky, north: lat + BOX_M / ky, west: lon - BOX_M / kx, east: lon + BOX_M / kx },
+    width: n,
+    height: n,
+  };
+  const inOsm = polygonMask(grid, inputs.buildings.map((b) => b.geometry));
+  const lidar = (inputs.lidar ?? []).filter((g) => {
+    const mask = polygonMask(grid, [g]);
+    let cells = 0;
+    let under = 0;
+    for (let i = 0; i < mask.length; i++) {
+      if (!mask[i]) continue;
+      cells++;
+      under += inOsm[i];
+    }
+    return cells > 0 && under < 0.3 * cells;
+  });
+  const houses = [...inputs.buildings.filter((b) => !b.outbuilding).map((b) => b.geometry), ...lidar]
+    .map(shapeOf)
     .filter((s) => s.m2 >= OUTBUILDING_M2 && boxDistance(s, 0, 0) < BOX_M);
   const home =
     houses.find((s) => pointInGeometry(lon, lat, s.geometry)) ??
@@ -149,12 +177,6 @@ export function estimateLot(lat: number, lon: number, inputs: LotInputs): Estima
   if (!home || home.m2 > HOUSE_MAX_M2) return null;
   const others = houses.filter((s) => s !== home);
 
-  const n = Math.round((2 * BOX_M) / CELL_M);
-  const grid: GridShape = {
-    bbox: { south: lat - BOX_M / ky, north: lat + BOX_M / ky, west: lon - BOX_M / kx, east: lon + BOX_M / kx },
-    width: n,
-    height: n,
-  };
   const x = (c: number) => -BOX_M + (c + 0.5) * CELL_M;
   const y = (r: number) => BOX_M - (r + 0.5) * CELL_M;
   const inHome = polygonMask(grid, [home.geometry]);

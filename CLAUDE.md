@@ -293,8 +293,11 @@ scripts/osm-archive/  build.sh + build.py: Geofabrik's QC and ON extracts →
   local street's centre line) and within `REACH_M` (25 m) of the house;
   garages and sheds (tagged, or under 50 m²) aren't neighbours, and a
   building over 800 m² isn't a house (traced instead). OSM's buildings
-  first (Ontario's towns mostly have them), the LiDAR's when OSM has no
-  house at the point. The lawn lookup holds the streets for this (`v=3`).
+  (Ontario's towns mostly have them), the LiDAR's only when OSM has no
+  house at the point (with them where OSM is complete, lots shrank to a
+  median 0.79 of the cadastre's: trees and sheds). Checked against the
+  Quebec cadastre on 12 lots in Aylmer: median 0.97 of the real area, half
+  within 25 %; a townhouse row on one lot is the worst case. The lawn lookup holds the streets for this (`v=3`).
   It's re-estimated from the point when a link opens. The rep traces the
   lot where the estimate is off. OSM buildings, pools,
   parking (incl. multipolygons and spaces), paved areas and `highway=service`
