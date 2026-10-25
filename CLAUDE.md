@@ -19,7 +19,8 @@ lot) is detected from where the rep taps or what they search, and one engine
 (aerial photos and LiDAR) measures all three. Every measurement gets a mower
 fit: how hard the property is for a robot and which Kress model fits. A
 "grass run" plans a crew's day of cut-and-go stops (several addresses, each
-measured like a lawn) in the order with the least driving. No API keys and no
+measured like a lawn) in the order with the least driving, routed on
+OpenStreetMap's roads. No API keys and no
 database: seven small route handlers (Overpass cache, land cover, LiDAR terrain,
 aerial photo surfaces, Quebec cadastre lot, gas price, client error log) run on
 Vercel; everything
@@ -31,7 +32,8 @@ else goes straight from the browser to public APIs (built-in `fetch`).
 src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
                   not-found.tsx, globals.css (theme color variables), boot.css
   api/overpass/   cached Overpass lookup (CDN 1 day, hedged mirror requests,
-                  Server-Timing per mirror); the browser races it with the mirrors
+                  Server-Timing per mirror); the browser races it with the mirrors.
+                  Kinds (q=): golf, lawn, and a grass run's roads / streets
   api/landcover/  satellite land cover as a small class grid (CDN 30 days):
                   ESA WorldCover (src=worldcover) or AAFC crop inventory (src=aci)
   api/terrain/    slope and cover (ground, low plants, trees, buildings) from
@@ -110,7 +112,10 @@ src/lib/
   quote-store.ts  client store shared by the tabs (useSyncExternalStore)
   run.ts        grass run: a stop's mowing vs trimming and blowing, driving,
                 the order with the least driving, the day, links (pure, tested)
-  run-store.ts  the grass run being planned: stops measured a few at a time
+  run-store.ts  the grass run being planned: stops measured a few at a time,
+                then the roads between them loaded and routed
+  roads.ts      OpenStreetMap roads → a graph; fastest legs (Dijkstra) with
+                their path, km and streets; the Overpass boxes (pure, tested)
   lot-lookups.ts  lookAround (lot, OSM, LiDAR at a point) and measureLot (a
                 lawn filled in source by source), for the lawn mode and runs
   share.ts      share-link helpers + polylines (pure, tested); keys r_ / i_ / q_ /
@@ -306,14 +311,28 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   strip along the edges shared with paving (`lawnEdges`) at 25,000 sq ft an
   hour (SingleOps production rates), shared among the crew: the stop takes
   set-up plus the longer of the two, and the panel says who waits for whom.
-  Driving is the straight line × `ROAD_FACTOR` (1.3) at an average speed:
-  public routing servers (OSRM's demo, FOSSGIS) aren't for commercial use, so
-  don't call them from here. The order is the least driving (exact
-  Held-Karp up to 12 stops, else nearest neighbour + 2-opt), from the shop
-  and back when there is one; time on site doesn't depend on it, and neither
-  does the speed, so `runOrder` is worked out once per change and shared by
-  every Voyager and crew choice (`useRunPlan` keeps the last plan for the
-  panel, map and PDF). The day
+  Driving is on OpenStreetMap's roads, routed in the browser (`roads.ts`):
+  public routing servers (OSRM's demo, FOSSGIS) aren't for commercial use and
+  the app takes no API keys, so don't call them from here. Once no stop is
+  still being measured, `run-store` reads Overpass `roads` (motorway down to
+  unclassified, over the run's box + 0.02°) and `streets` (every drivable
+  street in a 0.03° box around each place), both on a 0.01° grid so the
+  cache route and nearby runs share them, builds the graph (one-way streets,
+  roundabouts, motorways; about 80 % of `maxspeed`, else `TYPICAL_KMH`), snaps
+  each place to the biggest connected piece within 400 m, and runs Dijkstra
+  from each place in turn (pausing between, so the page stays responsive).
+  Each leg keeps its path, km and up to three street names (`via`). The road
+  lookup is a live step ("Road map") swept on the map. Where the roads don't
+  join two places, or don't load, or the run spans over 0.3°, that leg is the
+  straight line × `ROAD_FACTOR` (1.3) at the set speed (`DriveFn`
+  `straightDrive`), and the speed input only shows then. The order is the
+  least driving (exact Held-Karp up to 12 stops, else nearest neighbour +
+  2-opt), from the shop and back when there is one; time on site doesn't
+  depend on it, so `runOrder` is worked out once per change and shared by
+  every Voyager and crew choice (`useRunPlan` keeps the last plan, with each
+  leg and the route, for the panel, map and PDF). "Directions in Google Maps"
+  (`directionsLinks`) is a link out with the stops in order, up to 9 between
+  per part; nothing is fetched from Google. The day
   warns past 8 h or past one charge's acres (`VOYAGER_PRESETS`). The run
   stays in `run-store` when closed; links carry `a=run` and its `r*` keys
   (stops as a polyline, names `|`-separated) and re-measure on open.

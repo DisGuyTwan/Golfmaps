@@ -314,10 +314,14 @@ plus whichever is longer: the Voyager's mowing (the mower fit's full-mow
 time) or the trimming (every lawn edge at 1,500 ft an hour, trees at about 60
 an hour) and blowing (a 3 ft strip along the paving at 25,000 sq ft an hour),
 shared among the crew. Those rates are SingleOps' landscape production
-rates; adjust to your own crew. The stops are put in the order with the least
-driving (straight line × 1.3 at the average speed you set), and the panel
-shows the day: start and finish times, driving (and what the order saves),
-time on site, who waits for whom, and the lawn against one Voyager charge.
+rates; adjust to your own crew. Driving is routed on OpenStreetMap's roads
+(read through Overpass and routed in the browser, one-way streets included,
+at about 80% of the speed limit), the stops are put in the order with the
+least driving, and the map draws each leg along the streets. The panel
+shows the day: start and finish times, driving in minutes and kilometres
+(and what the order saves), time on site, who waits for whom, and the lawn
+against one Voyager charge; each leg says which streets it takes, and
+**Directions in Google Maps** opens the run in order for turn-by-turn.
 The Voyager and crew-size choices each show the day they'd make. The run has
 its own share link and a one-page run sheet PDF (`src/lib/run.ts`).
 
@@ -414,9 +418,10 @@ Standard Next.js app, no extra configuration:
 - The LiDAR was flown between about 2015 and 2023 depending on the area:
   trees have grown since, and newer houses aren't in it (trace them out).
   Where there's no LiDAR, the mower fit says slope and trees weren't checked.
-- A grass run's driving times are estimates (straight line × 1.3 at an
-  average speed), not road routing, and its stops come from the Quebec
-  cadastre, so it plans Quebec properties only for now.
+- A grass run's driving times are routed on OpenStreetMap's roads at typical
+  speeds, without live traffic; where the roads don't load (or don't join two
+  stops), that leg is estimated from the straight line. Its stops come from
+  the Quebec cadastre, so it plans Quebec properties only for now.
 - The public Overpass API is rate-limited and occasionally busy. The app races
   three mirrors (from the server and from the browser) and surfaces a friendly
   message if all of them are down.
