@@ -133,7 +133,18 @@ function LawnQuote({ lang, lawn, getShareUrl }: { lang: Lang; lawn: LawnMeasurem
         </button>
         <CopyLinkButton lang={lang} getUrl={getShareUrl} className={ui.btnSecondary} />
       </div>
+      <MakeProposal lang={lang} />
     </div>
+  );
+}
+
+/** Off to the Proposal tab, built from what's on screen. */
+function MakeProposal({ lang }: { lang: Lang }) {
+  return (
+    <button type="button" onClick={() => goToTab("#proposal")} className={`${ui.btnSecondary} w-full`}>
+      <Icon name="file" />
+      {UI[lang].proposal.make}
+    </button>
   );
 }
 
@@ -288,6 +299,7 @@ function AcreQuote({
         </button>
         <CopyLinkButton lang={lang} getUrl={getShareUrl} className={ui.btnSecondary} />
       </div>
+      <MakeProposal lang={lang} />
     </div>
   );
 }

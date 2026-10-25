@@ -39,6 +39,7 @@ const STEPS: { icon: IconName; en: string; fr: string }[] = [
   { icon: "map", en: "Acreage", fr: "Superficie" },
   { icon: "coins", en: "Incentives", fr: "Incitatifs" },
   { icon: "trend", en: "ROI", fr: "ROI" },
+  { icon: "file", en: "Proposal", fr: "Soumission" },
 ];
 
 const WORD = "Calculator";

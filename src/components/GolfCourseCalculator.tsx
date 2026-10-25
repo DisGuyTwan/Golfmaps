@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import area from "@turf/area";
 import dynamic from "next/dynamic";
 import type * as L from "leaflet";
@@ -55,6 +55,7 @@ import {
   setCourseName,
   setLawn,
   setMeasurement,
+  registerAcreageLink,
   setMode,
   setQuoteSettings,
   setCharger,
@@ -843,6 +844,11 @@ export default function GolfCourseCalculator() {
       ...encodeQuote(quoteSettings),
     });
   }, [mode, scanBox, result, sod, lawn, courseName, quoteSettings, charger, run]);
+  // A proposal links back to the measurement.
+  useEffect(() => {
+    registerAcreageLink(getShareUrl);
+    return () => registerAcreageLink(null);
+  }, [getShareUrl]);
 
   const getSearchBias = useCallback(() => {
     const map = mapRef.current;

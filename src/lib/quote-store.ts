@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import type { IncentiveInputs } from "./incentives";
 import { DEFAULT_QUOTE, decodeQuote, type AcreageMode, type MowEvery, type QuoteSettings } from "./quote";
 import type { LawnMeasurement } from "./lawn";
-import type { Approach, VoyagerModel } from "./roi";
+import type { Approach, RoiInputs, VoyagerModel } from "./roi";
 import type { MowWindow } from "./window";
 import type { TerrainGrid } from "./terrain";
 import type { CourseMeasurement, SodMeasurement } from "./types";
@@ -51,6 +51,8 @@ interface QuoteStoreState {
   charger: [number, number] | null;
   roiImport: RoiImport | null;
   incentiveProfile: IncentiveInputs | null;
+  /** The ROI tab's inputs once it's been opened (the client's crew figures), for a proposal's payback. */
+  roiInputs: RoiInputs | null;
 }
 
 const SERVER_STATE: QuoteStoreState = {
@@ -64,6 +66,7 @@ const SERVER_STATE: QuoteStoreState = {
   charger: null,
   roiImport: null,
   incentiveProfile: null,
+  roiInputs: null,
 };
 
 let state: QuoteStoreState | null = null;
@@ -170,3 +173,15 @@ export function sendAcresToRoi(send: Omit<RoiImport, "version">) {
 export function setIncentiveProfile(incentiveProfile: IncentiveInputs) {
   update({ incentiveProfile });
 }
+
+export const useRoiInputs = () => useStore((s) => s.roiInputs);
+export function setRoiInputs(roiInputs: RoiInputs) {
+  if (current().roiInputs !== roiInputs) update({ roiInputs });
+}
+
+/** The Acreage tab's share link, registered by the calculator, for a proposal's "see the measurement". */
+let acreageLink: (() => string) | null = null;
+export const registerAcreageLink = (fn: (() => string) | null) => {
+  acreageLink = fn;
+};
+export const getAcreageLink = () => acreageLink?.() ?? null;

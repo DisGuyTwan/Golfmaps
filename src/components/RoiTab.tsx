@@ -5,7 +5,7 @@ import { UI } from "@/lib/i18n";
 import { DEFAULT_INCENTIVE_INPUTS, computeIncentives, describeInputs } from "@/lib/incentives";
 import { useLang } from "@/lib/preferences";
 import { MOW_EVERY, acresForQuote, type MowEvery } from "@/lib/quote";
-import { useIncentiveProfile, useLawn, useMeasurement, useMode, useQuoteSettings, useRoiImport, useSod } from "@/lib/quote-store";
+import { setRoiInputs, useIncentiveProfile, useLawn, useMeasurement, useMode, useQuoteSettings, useRoiImport, useSod } from "@/lib/quote-store";
 import { ROI_COPY } from "@/lib/roi-copy";
 import {
   DEFAULT_GAS_PERIOD,
@@ -285,6 +285,8 @@ export default function RoiTab() {
   }, [profile, sized.robotGross, lang]);
   const credit = incMode === "low" ? incentives.low : incMode === "high" ? incentives.high : 0;
   const r = useMemo(() => computeRoi({ ...base, incentives: credit }), [base, credit]);
+  // The client's crew figures, for a proposal's payback.
+  useEffect(() => setRoiInputs(base), [base]);
   // Payback at both ends of the likely acreage (a smaller job needs fewer robots but saves less).
   const paybackSpan = useMemo(() => {
     if (!acreShares) return null;

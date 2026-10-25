@@ -19,9 +19,11 @@ export interface Records {
   spread: RecordSpread;
   checks: number;
   installs: number;
+  /** Share of installs within 10 % of our acreage (null under 5 installs). */
+  within10: number | null;
 }
 
-export const NO_RECORDS: Records = { calibration: {}, spread: {}, checks: 0, installs: 0 };
+export const NO_RECORDS: Records = { calibration: {}, spread: {}, checks: 0, installs: 0, within10: null };
 
 let state: Records = NO_RECORDS;
 let loading: Promise<void> | null = null;

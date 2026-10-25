@@ -24,8 +24,9 @@ const loading = () => <TabLoading />;
 // Loaded on first open; client-only (they read the saved language on mount).
 const IncentivesTab = dynamic(() => import("./IncentivesTab"), { ssr: false, loading });
 const RoiTab = dynamic(() => import("./RoiTab"), { ssr: false, loading });
+const ProposalTab = dynamic(() => import("./ProposalTab"), { ssr: false, loading });
 
-type Tab = "acreage" | "incentives" | "roi";
+type Tab = "acreage" | "incentives" | "roi" | "proposal";
 type OverlayTab = Exclude<Tab, "acreage">;
 
 // Each language's name in itself, as screen readers and tooltips announce it.
@@ -34,10 +35,11 @@ const LANGS: { code: Lang; name: string }[] = [
   { code: "fr", name: "Français" },
 ];
 
-const TABS: { id: Tab; hash: "" | "#incentives" | "#roi"; icon: IconName }[] = [
+const TABS: { id: Tab; hash: "" | "#incentives" | "#roi" | "#proposal"; icon: IconName }[] = [
   { id: "acreage", hash: "", icon: "map" },
   { id: "incentives", hash: "#incentives", icon: "coins" },
   { id: "roi", hash: "#roi", icon: "trend" },
+  { id: "proposal", hash: "#proposal", icon: "file" },
 ];
 
 // The active tab lives in the URL hash so a direct link can be shared
@@ -93,7 +95,7 @@ export default function AppTabs() {
   const tab: Tab = TABS.find((x) => x.hash && x.hash === hash)?.id ?? "acreage";
 
   // Keep each overlay tab mounted once opened so its inputs survive tab switches.
-  const [opened, setOpened] = useState<Record<OverlayTab, boolean>>({ incentives: false, roi: false });
+  const [opened, setOpened] = useState<Record<OverlayTab, boolean>>({ incentives: false, roi: false, proposal: false });
   if (tab !== "acreage" && !opened[tab]) setOpened({ ...opened, [tab]: true });
 
   // Uncaught errors and rejected promises go to the server log (Vercel).
@@ -245,6 +247,7 @@ export default function AppTabs() {
         {tab === "acreage" && <AcreageReport />}
         {panel("incentives", <IncentivesTab />)}
         {panel("roi", <RoiTab />)}
+        {panel("proposal", <ProposalTab />)}
       </div>
     </main>
   );
