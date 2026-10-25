@@ -380,13 +380,11 @@ KR804 38 kWh) and need refreshing over time.
 
 ```bash
 npm install
-npm run dev
+npm run dev      # then open http://localhost:3000
 ```
 
 Checks (the same ones CI runs): `npm run lint`, `npm test`, `npm run build`,
 `npm run typecheck`.
-
-Open [http://localhost:3000](http://localhost:3000).
 
 The map opens in satellite view and centers on your device location if you allow
 it, falling back to Trois-Rivières, Quebec.
