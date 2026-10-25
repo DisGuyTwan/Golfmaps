@@ -129,8 +129,9 @@ describe("cover", () => {
     const [lon1, lat1] = fromLambert(dtm.x0 + size, dtm.y0 - size);
     const lot: Polygon = { type: "Polygon", coordinates: [[[lon0, lat0], [lon1, lat0], [lon1, lat1], [lon0, lat1], [lon0, lat0]]] };
     const [building] = lidarBuildings(grid, lot);
-    expect(area({ type: "Feature", geometry: building, properties: {} })).toBeGreaterThan(80);
-    expect(area({ type: "Feature", geometry: building, properties: {} })).toBeLessThan(130);
+    // The 10 × 10 m roof, not cut half a cell inside by straightening.
+    expect(area({ type: "Feature", geometry: building, properties: {} })).toBeGreaterThan(92);
+    expect(area({ type: "Feature", geometry: building, properties: {} })).toBeLessThan(110);
     const stats = terrainStats(grid, [lot])!;
     expect(stats.slopeP90).toBe(0);
     expect(stats.canopy).toBeGreaterThan(0.04);

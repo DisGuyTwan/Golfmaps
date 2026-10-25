@@ -2,9 +2,9 @@
  * A sheet of addresses for a grass run: an Excel workbook (.xlsx) or a CSV,
  * read in the browser (no upload), its address columns found by their
  * headers in English or French, and each address placed with Photon (the
- * geocoder the search box uses), in Quebec. An .xlsx is a zip of XML files:
- * the zip is read here and inflated with the browser's DecompressionStream,
- * so no spreadsheet library is needed. Older .xls files (a binary format)
+ * geocoder the search box uses), in Quebec or Ontario. An .xlsx is a zip of
+ * XML files: the zip is read here and inflated with the browser's
+ * DecompressionStream, so no spreadsheet library is needed. Older .xls files (a binary format)
  * aren't read: the rep saves the sheet as .xlsx or .csv.
  * Pure except `geocodeAddress`, so the reading is tested without a browser.
  */
@@ -295,8 +295,8 @@ export function sheetAddresses(rows: string[][]): SheetAddress[] {
 // ---- Placing an address ----
 
 const PHOTON_URL = "https://photon.komoot.io/api/";
-/** Quebec, as Photon's bbox (west, south, east, north): a run's stops come from the Quebec cadastre. */
-const QUEBEC_BBOX = "-79.8,44.9,-57.1,62.6";
+/** Quebec and Ontario, as Photon's bbox (west, south, east, north): where a run's stops get a lot (cadastre or estimated). */
+const SERVED_BBOX = "-95.2,41.6,-57.1,62.6";
 
 /** Where an address is: [lat, lon], and whether only its street was found (the house number isn't in OpenStreetMap). */
 export interface PlacedAddress {
@@ -324,7 +324,7 @@ export function photonPlace(data: unknown, q: string): PlacedAddress | null {
 }
 
 /**
- * Places an address with Photon, in Quebec, near the map: a house first
+ * Places an address with Photon, in Quebec or Ontario, near the map: a house first
  * (`layer=house`), else whatever it finds (usually the street), flagged.
  * Null when nothing is found.
  */
@@ -334,7 +334,7 @@ export async function geocodeAddress(q: string, lang: "en" | "fr", near: { lat: 
     url.searchParams.set("q", q);
     url.searchParams.set("limit", "1");
     url.searchParams.set("lang", lang);
-    url.searchParams.set("bbox", QUEBEC_BBOX);
+    url.searchParams.set("bbox", SERVED_BBOX);
     if (near) {
       url.searchParams.set("lat", String(near.lat));
       url.searchParams.set("lon", String(near.lon));

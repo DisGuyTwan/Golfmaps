@@ -222,7 +222,7 @@ function LawnReport() {
               {lawn && (
                 <>
                   <dt className="font-semibold text-ink-2">{t.lawnLot}</dt>
-                  <dd>{lawn.lotNumber ? t.lawnLotNumber(lawn.lotNumber) : t.lawnLotTraced}</dd>
+                  <dd>{lawn.lotNumber ? t.lawnLotNumber(lawn.lotNumber) : lawn.lotSource === "estimated" ? t.lawnLotEstimated : t.lawnLotTraced}</dd>
                 </>
               )}
             </dl>

@@ -105,8 +105,8 @@ export interface AssumptionInputs {
   measurement: CourseMeasurement | null;
   sod: SodMeasurement | null;
   q: QuoteSettings;
-  /** The lawn's lot came from the cadastre (else traced). */
-  cadastre: boolean;
+  /** Where the lawn's lot came from: the Quebec cadastre, traced by hand, or estimated around the house. */
+  lot: "cadastre" | "traced" | "estimated";
   /** LiDAR terrain read for the property: true, false (none there) or null (not read). */
   lidar: boolean | null;
   /** The charger was placed by the rep (else estimated). */
@@ -124,7 +124,7 @@ export function assumptions(a: AssumptionInputs): Assumption[] {
   if (q.override !== null && mode !== "lawn") out.push({ key: "client", kind: "client", values: [q.override] });
   if (mode === "lawn") {
     if (q.lawnOverride !== null) out.push({ key: "client", kind: "client", values: [q.lawnOverride] });
-    out.push({ key: "lawn", kind: "measured", values: [a.cadastre ? 1 : 0] });
+    out.push({ key: "lawn", kind: a.lot === "estimated" ? "estimate" : "measured", values: [a.lot] });
   } else if (mode === "sod") {
     if (sod) out.push({ key: "sod", kind: "measured", values: [sod.year ?? "", q.sodPct, sod.photos ? 1 : 0] });
   } else if (m?.boundaryOnly && m.satellite) {

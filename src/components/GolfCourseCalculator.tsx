@@ -40,7 +40,7 @@ import {
   type LawnMeasurement,
 } from "@/lib/lawn";
 import { inQuebec } from "@/lib/parcel";
-import { lookAround, type Lookups } from "@/lib/lot-lookups";
+import { lookAround, lotAt, lotFinding, type Lookups } from "@/lib/lot-lookups";
 import { HOUSE_LOT_M2, SOD_FARM_M, SOD_LOOK_M, SOD_SHARE, golfCourseAt, propertyKind, settledByLot, sodShareAround, sodShareInside, type GolfCourse } from "@/lib/detect";
 import { fetchSurface, fitsSurface, photoTurf, surfaceAreas, surfaceCover, surfaceOverlay, type SurfaceGrid } from "@/lib/surface";
 import { NO_SLOPE, TERRAIN_MAX_SPAN_DEG, fetchTerrain, lidarBuildings, terrainStats, type TerrainGrid } from "@/lib/terrain";
@@ -550,7 +550,10 @@ export default function GolfCourseCalculator() {
     }
   }, [track, loadLotTerrain, loadLotSurface]);
 
-  /** The lawn on the cadastre lot at a point: a searched address, a tap or a share link. */
+  /**
+   * The lawn on the lot at a point (a searched address, a tap or a share
+   * link): the cadastre's in Quebec, else estimated around the house (lotAt).
+   */
   const runLawn = useCallback(
     async (lat: number, lon: number, traced: LawnArea[] = [], kept: [number, number][] = [], started?: { id: number; looks: Lookups }) => {
       const id = started?.id ?? startRun();
@@ -558,40 +561,36 @@ export default function GolfCourseCalculator() {
       setError(null);
       setLawn(null);
       // Buildings and paving around the point, looked up while the lot loads.
-      const { around, nearby, terrain, parcel: lookup } = started?.looks ?? lookAround(lat, lon);
-      // Picked as a lot: the point pulses while the cadastre answers (a detection already did that).
-      const doneLot = started ? null : track("lot", id);
+      const looks = started?.looks ?? lookAround(lat, lon);
+      const { around, nearby, terrain } = looks;
+      const quebec = inQuebec(lat, lon);
+      // Picked as a lot: the point pulses while the cadastre answers (a detection already did that);
+      // outside Quebec, the lot is estimated here once OpenStreetMap answers.
+      const doneLot = started && quebec ? null : track("lot", id);
       if (!started) {
         setPing([lat, lon]);
         track("osm", id, around); // Under way already; showLawn ends it.
       }
       try {
-        const parcel = await lookup;
+        const found = await lotAt(lat, lon, looks);
         if (id !== runId.current) return;
-        doneLot?.("done", parcel ? { kind: "lot", lot: parcel.lot } : { kind: "none" });
+        doneLot?.("done", lotFinding(found));
         setPing(null);
-        if (!parcel) {
-          setError({ kind: "noLot" });
+        if (!found) {
+          track("osm", id)("done", { kind: "none" }); // Nothing to look for on a lot.
+          setError({ kind: quebec ? "noLot" : "noEstimate" });
           return;
         }
-        const next: LawnMeasurement = {
-          lot: parcel.geometry,
-          lotSource: "cadastre",
-          lotNumber: parcel.lot,
-          pickPoint: [lat, lon],
-          mapped: null,
-          mappedFailed: false,
-          kept,
-          traced,
-        };
-        if (mapRef.current) fitAbovePanel(mapRef.current, parcel.geometry);
-        const inBox = bboxContains(around, lotBBox(parcel.geometry));
+        const next: LawnMeasurement = { ...found, pickPoint: [lat, lon], mapped: null, mappedFailed: false, kept, traced };
+        if (mapRef.current) fitAbovePanel(mapRef.current, found.lot);
+        const inBox = bboxContains(around, lotBBox(found.lot));
         await showLawn(next, id, (inBox && nearby) || undefined, (inBox && terrain) || undefined);
       } catch (err) {
         if (id !== runId.current) return;
         doneLot?.("failed");
+        if (!quebec) track("osm", id)("failed"); // The estimate failed on it.
         setPing(null);
-        setError({ kind: "lotUnreachable" });
+        setError({ kind: quebec ? "lotUnreachable" : "estimateUnreachable" });
         reportError("lawn:lot", err);
       } finally {
         if (id === runId.current) setLoading(false);
@@ -630,7 +629,8 @@ export default function GolfCourseCalculator() {
       setError(null);
       setPing([lat, lon]);
       const looks = lookAround(lat, lon);
-      const doneLot = track("lot", id);
+      // Outside Quebec there's no cadastre to ask: the lawn estimates the lot (runLawn).
+      const doneLot = inQuebec(lat, lon) ? track("lot", id) : null;
       // The OpenStreetMap lookup starts now; the golf check or the lawn (showLawn) ends it.
       const doneOsm = track("osm", id, looks.around);
       const cropBox = aroundPoint(lat, lon, SOD_LOOK_M);
@@ -647,11 +647,11 @@ export default function GolfCourseCalculator() {
         },
       );
       const lot = await looks.parcel.catch(() => {
-        doneLot("failed");
+        doneLot?.("failed");
         return null;
       });
       if (id !== runId.current) return;
-      doneLot("done", lot ? { kind: "lot", lot: lot.lot } : { kind: "none" });
+      doneLot?.("done", lot ? { kind: "lot", lot: lot.lot } : { kind: "none" });
       const lotM2 = lot ? area({ type: "Feature", geometry: lot.geometry, properties: {} }) : null;
       let kind: AcreageMode = "lawn";
       let course: GolfCourse | null = null;

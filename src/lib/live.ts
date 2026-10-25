@@ -16,6 +16,7 @@ export const LIVE_ORDER: readonly LiveSource[] = ["addresses", "lot", "crop", "o
 /** What a source found, worded by the panel in the rep's language. */
 export type LiveFinding =
   | { kind: "lot"; lot: string | null }
+  | { kind: "estimated" }
   | { kind: "sod"; share: number }
   | { kind: "course"; name: string | null }
   | { kind: "golf"; fairways: number; outlineOnly: boolean }

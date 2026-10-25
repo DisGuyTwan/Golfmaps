@@ -435,8 +435,16 @@ export function lidarBuildings(grid: TerrainGrid, lot: Polygon | MultiPolygon, m
   const minCells = minM2 / (grid.cellM * grid.cellM);
   return labelRegions(on, grid.width, grid.height)
     .regions.filter((cells) => cells.length >= minCells)
-    .map((cells) => straighten(regionGeometry(grid, cells), grid.cellM * 0.75));
+    .map((cells) => straighten(regionGeometry(grid, cells), grid.cellM * STRAIGHTEN_CELLS));
 }
+
+/**
+ * How far a straightened outline may stray from the cells' (in cells).
+ * Under half a cell: contours round each corner through the middle of the
+ * edge cells, and at ¾ of a cell straightening ran each wall corner to
+ * corner, half a cell inside (a 10 × 10 m roof came out 90 m²).
+ */
+export const STRAIGHTEN_CELLS = 0.45;
 
 /** An outline traced along grid cells, with its stair steps straightened (Douglas-Peucker, `tolM` metres). */
 export function straighten(g: Polygon | MultiPolygon, tolM: number): Polygon | MultiPolygon {

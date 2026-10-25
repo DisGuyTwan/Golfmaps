@@ -19,7 +19,7 @@ export function useAssumptions(): Assumption[] {
     measurement: useMeasurement(),
     sod: useSod(),
     q,
-    cadastre: lawn?.lotSource === "cadastre",
+    lot: lawn?.lotSource ?? "traced",
     lidar: terrain ? true : null,
     chargerPlaced: useCharger() !== null,
     calibratedChecks: Object.values(records.calibration).reduce((n, c) => n + c.n, 0),
@@ -54,7 +54,8 @@ function text(a: Assumption, lang: Lang, mode: string): string {
     case "sod":
       return s.sod(v0 ?? "", n(v1), n(v2) === 1);
     case "lawn":
-      return s.lawn(n(v0) === 1);
+      // Proposals saved before lots could be estimated carry 1 (cadastre) or 0 (traced).
+      return s.lawn(v0 === "cadastre" || v0 === 1 ? "cadastre" : v0 === "estimated" ? "estimated" : "traced");
     case "lidar":
       return s.lidar;
     case "noLidar":

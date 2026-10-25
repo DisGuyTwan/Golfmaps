@@ -62,6 +62,8 @@ out skel qt;`;
  * golf course whose outline holds the box's middle (the point tapped or
  * searched), so detect.ts can tell a course from a lot: a course's outline
  * can be far from a point inside it, so it's looked up with is_in, not the box.
+ * And the streets, where a lot is estimated from the houses and the road
+ * allowance (estimated-lot.ts: no open cadastre outside Quebec).
  */
 function buildLawnQuery({ south, west, north, east }: BBox): string {
   const bbox = `${south},${west},${north},${east}`;
@@ -80,6 +82,7 @@ is_in(${middle})->.here;
   way["area:highway"](${bbox});
   way["highway"]["area"="yes"](${bbox});
   way["highway"="service"](${bbox});
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|road)(_link)?$"](${bbox});
 );
 out body;
 >;
@@ -279,8 +282,8 @@ export const DIRECT_AFTER_MS = 1500;
  * finish, so its answer is cached for next time.
  */
 export function fetchFairways(bbox: BBox, kind: OverpassQuery = "golf"): Promise<unknown> {
-  // v=2: the lawn lookup also holds the golf course around its middle (answers cached before don't).
-  const query = kind === "golf" ? "" : `&q=${kind}&v=2`;
+  // v=2: the lawn lookup also holds the golf course around its middle; v=3, the streets (answers cached before don't).
+  const query = kind === "golf" ? "" : `&q=${kind}&v=${kind === "lawn" ? 3 : 2}`;
   return new Promise((resolve, reject) => {
     const direct = new AbortController();
     let done = false;

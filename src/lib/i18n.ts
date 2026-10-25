@@ -16,7 +16,9 @@ export type MeasureErrorKind =
   | "sodUnreachable"
   | "sodTooLarge"
   | "noLot"
-  | "lotUnreachable";
+  | "lotUnreachable"
+  | "noEstimate"
+  | "estimateUnreachable";
 
 const en = {
   tabs: { acreage: "Acreage", incentives: "Incentives", roi: "ROI", proposal: "Proposal" },
@@ -52,7 +54,7 @@ const en = {
   live: {
     title: "Reading live",
     ready: "Read",
-    sources: { addresses: "Addresses", lot: "Cadastre lot", crop: "Crop map", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Aerial photos", satellite: "Satellite land cover", roads: "Road map" },
+    sources: { addresses: "Addresses", lot: "Lot", crop: "Crop map", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Aerial photos", satellite: "Satellite land cover", roads: "Road map" },
     reading: {
       addresses: "Placing the sheet’s addresses",
       lot: "Finding the lot under the point",
@@ -66,6 +68,7 @@ const en = {
     failed: "Unavailable",
     seconds: (s: string) => `${s} s`,
     lot: (lot: string | null) => (lot ? `Lot ${lot}` : "Lot found"),
+    estimated: "Estimated from the houses around",
     noLot: "No lot here",
     sod: (pct: number) => (pct > 0 ? `${pct}% sod around` : "No sod around"),
     course: (name: string | null) => name ?? "No golf course here",
@@ -152,6 +155,9 @@ const en = {
   lawnTotal: "Lawn",
   lawnLotNumber: (n: string) => `Lot ${n}, Quebec cadastre (indicative)`,
   lawnLotTraced: "Lot traced by hand",
+  lawnLotEstimated: "Lot estimated from the houses around and the street (no open cadastre here)",
+  lawnEstimated:
+    "Estimated lot: there’s no open cadastre outside Quebec (Ontario’s parcels are licensed), so this lot is drawn midway to the neighbouring houses and back from the street. Check it on the map, and trace the lot if it’s off. Quebec’s aerial photos don’t reach here: remove by hand a driveway or a pool OpenStreetMap doesn’t have.",
   lawnNoBuilding:
     "No building found on this lot in OpenStreetMap or the LiDAR. If there’s a house (a new one, say), use Remove an area to trace it out.",
   lawnNoBuildingNoLidar:
@@ -232,8 +238,10 @@ const en = {
     http: (status: number) => `The data request failed (HTTP ${status}). Please try again.`,
     sodUnreachable: "Couldn’t load Agriculture Canada’s crop map. Try again in a moment, or trace the fields by hand.",
     sodTooLarge: "That area is too large for the crop map. Zoom in on the farm (about 15 km across at most) and try again.",
-    noLot: "No lot boundary found here. The Quebec cadastre only covers Quebec: trace the lot instead.",
+    noLot: "No lot boundary found here (a street, or a lot the cadastre doesn’t have): tap the house itself, or trace the lot.",
     lotUnreachable: "Couldn’t reach the Quebec cadastre. Try again in a moment, or trace the lot.",
+    noEstimate: "No house found at this point to draw a lot around (outside Quebec, lots are estimated from the houses around). Tap the house itself, or trace the lot.",
+    estimateUnreachable: "Couldn’t reach OpenStreetMap to draw the lot from the houses around. Try again in a moment, or trace the lot.",
   },
 
   // Mower fit (site.ts, mowers.ts)
@@ -490,8 +498,10 @@ const en = {
       `Grassland in ESA WorldCover ${year} inside the outline × ${k}, calibrated on 45 fully mapped courses (median error 16%): likely ${lo}× to ${hi}×. ${pct}% of it is counted.`,
     sod: (year: string | number, pct: number, photos: boolean) =>
       `Sod fields from Agriculture Canada's ${year} crop inventory (30 m cells)${photos ? ", measured on Quebec's aerial photos without the roads, hedgerows and buildings" : ""}. ${pct}% of them is counted (fields just harvested aren't mowed).`,
-    lawn: (cadastre: boolean) =>
-      `${cadastre ? "The Quebec cadastre lot (indicative, not a survey)" : "The lot as traced"} minus buildings, pools and paving from OpenStreetMap, the LiDAR and Quebec's aerial photos.`,
+    lawn: (lot: "cadastre" | "traced" | "estimated") =>
+      lot === "estimated"
+        ? "The lot estimated around the house (no open cadastre outside Quebec): midway to the neighbouring houses, back from the street. Then minus buildings, pools and paving from OpenStreetMap and the LiDAR."
+        : `${lot === "cadastre" ? "The Quebec cadastre lot (indicative, not a survey)" : "The lot as traced"} minus buildings, pools and paving from OpenStreetMap, the LiDAR and Quebec's aerial photos.`,
     lidar: "Slope and trees from NRCan's HRDEM LiDAR (flown 2015 to 2023): trees have grown since.",
     noLidar: "No LiDAR here: slope and trees weren't checked.",
     ratings: (date: string) => `Kress rated areas, cutting heights and slope limits as of ${date}; slopes over 20° only for the EyePilot 4x4 (dealers' rule).`,
@@ -594,8 +604,8 @@ const en = {
     driveTo: (d: string) => `${d} drive`,
     backToShop: (line: string) => `Back to the shop: ${line}`,
     waiting: "Waiting for the stops before it",
-    noLot: "No cadastre lot here (Quebec only): tap the property itself.",
-    failed: "Couldn’t reach the cadastre.",
+    noLot: "No lot found here (a street, or no house to draw one around): tap the house itself.",
+    failed: "Couldn’t reach the cadastre (or OpenStreetMap, outside Quebec).",
     noLawn: "No lawn found on this lot.",
     retry: "Try again",
     remove: "Remove",
@@ -670,7 +680,7 @@ const fr: UiStrings = {
   live: {
     title: "Lecture en direct",
     ready: "Lu",
-    sources: { addresses: "Adresses", lot: "Lot du cadastre", crop: "Carte des cultures", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Photos aériennes", satellite: "Couverture du sol par satellite", roads: "Réseau routier" },
+    sources: { addresses: "Adresses", lot: "Lot", crop: "Carte des cultures", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Photos aériennes", satellite: "Couverture du sol par satellite", roads: "Réseau routier" },
     reading: {
       addresses: "Repérage des adresses du fichier",
       lot: "Recherche du lot au point touché",
@@ -684,6 +694,7 @@ const fr: UiStrings = {
     failed: "Indisponible",
     seconds: (s: string) => `${s.replace(".", ",")} s`,
     lot: (lot: string | null) => (lot ? `Lot ${lot}` : "Lot trouvé"),
+    estimated: "Estimé d’après les maisons voisines",
     noLot: "Aucun lot ici",
     sod: (pct: number) => (pct > 0 ? `${pct} % de gazon autour` : "Pas de gazon autour"),
     course: (name: string | null) => name ?? "Aucun terrain de golf ici",
@@ -771,6 +782,9 @@ const fr: UiStrings = {
   lawnTotal: "Pelouse",
   lawnLotNumber: (n: string) => `Lot ${n}, cadastre du Québec (à titre indicatif)`,
   lawnLotTraced: "Terrain tracé à la main",
+  lawnLotEstimated: "Terrain estimé d’après les maisons voisines et la rue (aucun cadastre ouvert ici)",
+  lawnEstimated:
+    "Terrain estimé : il n’y a pas de cadastre ouvert hors Québec (les lots de l’Ontario sont sous licence), alors ce terrain est tracé à mi-chemin des maisons voisines et en retrait de la rue. Vérifiez-le sur la carte, et tracez le terrain s’il est mal placé. Les photos aériennes du Québec ne couvrent pas cette région : retirez à la main l’entrée ou la piscine qu’OpenStreetMap n’a pas.",
   lawnNoBuilding:
     "Aucun bâtiment trouvé sur ce terrain dans OpenStreetMap ni dans le LiDAR. S’il y a une maison (une neuve, par exemple), utilisez Retirer une zone pour la tracer.",
   lawnNoBuildingNoLidar:
@@ -856,8 +870,10 @@ const fr: UiStrings = {
       "Impossible de charger la carte des cultures d’Agriculture Canada. Réessayez dans un moment, ou tracez les champs à la main.",
     sodTooLarge:
       "Cette zone est trop grande pour la carte des cultures. Rapprochez-vous de la ferme (environ 15 km de large au plus) et réessayez.",
-    noLot: "Aucune limite de terrain trouvée ici. Le cadastre du Québec ne couvre que le Québec : tracez plutôt le terrain.",
+    noLot: "Aucune limite de terrain trouvée ici (une rue, ou un lot absent du cadastre) : touchez la maison elle-même, ou tracez le terrain.",
     lotUnreachable: "Impossible de joindre le cadastre du Québec. Réessayez dans un moment, ou tracez le terrain.",
+    noEstimate: "Aucune maison trouvée à ce point pour en tracer le terrain (hors Québec, le terrain est estimé d’après les maisons voisines). Touchez la maison elle-même, ou tracez le terrain.",
+    estimateUnreachable: "Impossible de joindre OpenStreetMap pour tracer le terrain d’après les maisons voisines. Réessayez dans un moment, ou tracez le terrain.",
   },
 
   // Choix du robot (site.ts, mowers.ts)
@@ -1110,8 +1126,10 @@ const fr: UiStrings = {
       `Prairie dans ESA WorldCover ${year} dans le contour × ${k}, calibré sur 45 terrains entièrement cartographiés (erreur médiane 16 %) : probablement ${lo}× à ${hi}×. ${pct} % en est compté.`,
     sod: (year: string | number, pct: number, photos: boolean) =>
       `Champs de gazon de l’inventaire des cultures ${year} d’Agriculture Canada (cellules de 30 m)${photos ? ", mesurés sur les photos aériennes du Québec sans les chemins, haies et bâtiments" : ""}. ${pct} % en est compté (les champs tout juste récoltés ne sont pas tondus).`,
-    lawn: (cadastre: boolean) =>
-      `${cadastre ? "Le lot du cadastre du Québec (indicatif, pas un arpentage)" : "Le lot tracé"} moins les bâtiments, piscines et surfaces pavées d’OpenStreetMap, du LiDAR et des photos aériennes du Québec.`,
+    lawn: (lot: "cadastre" | "traced" | "estimated") =>
+      lot === "estimated"
+        ? "Le terrain estimé autour de la maison (aucun cadastre ouvert hors Québec) : à mi-chemin des maisons voisines, en retrait de la rue. Puis moins les bâtiments, piscines et surfaces pavées d’OpenStreetMap et du LiDAR."
+        : `${lot === "cadastre" ? "Le lot du cadastre du Québec (indicatif, pas un arpentage)" : "Le lot tracé"} moins les bâtiments, piscines et surfaces pavées d’OpenStreetMap, du LiDAR et des photos aériennes du Québec.`,
     lidar: "Pente et arbres tirés du LiDAR HRDEM de RNCan (survolé de 2015 à 2023) : les arbres ont poussé depuis.",
     noLidar: "Pas de LiDAR ici : la pente et les arbres n’ont pas été vérifiés.",
     ratings: (date: string) => `Superficies, hauteurs de coupe et pentes cotées par Kress en date du ${date}; pentes de plus de 20° seulement pour les EyePilot 4x4 (règle des concessionnaires).`,
@@ -1214,8 +1232,8 @@ const fr: UiStrings = {
     driveTo: (d: string) => `${d} de route`,
     backToShop: (line: string) => `Retour à l’atelier : ${line}`,
     waiting: "En attente des arrêts précédents",
-    noLot: "Aucun lot du cadastre ici (Québec seulement) : touchez la propriété elle-même.",
-    failed: "Impossible de joindre le cadastre.",
+    noLot: "Aucun lot trouvé ici (une rue, ou aucune maison autour de laquelle le tracer) : touchez la maison elle-même.",
+    failed: "Impossible de joindre le cadastre (ou OpenStreetMap, hors Québec).",
     noLawn: "Aucune pelouse trouvée sur ce lot.",
     retry: "Réessayer",
     remove: "Retirer",

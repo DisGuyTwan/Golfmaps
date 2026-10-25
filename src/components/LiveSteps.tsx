@@ -22,6 +22,8 @@ function finding(source: LiveSource, found: LiveFinding | null, lang: Lang): str
   switch (found?.kind) {
     case "lot":
       return t.lot(found.lot);
+    case "estimated":
+      return t.estimated;
     case "sod":
       return t.sod(Math.round(found.share * 100));
     case "course":

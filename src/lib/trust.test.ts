@@ -52,7 +52,7 @@ describe("what the numbers rest on", () => {
     measurement: mapped,
     sod: null,
     q: DEFAULT_QUOTE,
-    cadastre: false,
+    lot: "traced" as const,
     lidar: true,
     chargerPlaced: false,
     calibratedChecks: 0,

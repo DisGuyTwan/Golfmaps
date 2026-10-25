@@ -353,7 +353,7 @@ export default function MeasurePanel({
                   <Icon name="close" />
                   {t.removeArea}
                 </button>
-                <button onClick={() => onStartRun(true)} disabled={loading || lawn.lotSource !== "cadastre"} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
+                <button onClick={() => onStartRun(true)} disabled={loading || lawn.lotSource === "traced"} className={`${ui.btnSecondary} grow whitespace-nowrap`}>
                   <Icon name="route" />
                   {t.run.addLawn}
                 </button>
@@ -405,6 +405,7 @@ export default function MeasurePanel({
             {lawn?.lotSource === "cadastre" && lotLooksOdd(lawn.lot, commercial) && lawnTotals && (
               <Notice tone="warn">{t.lawnOddLot(sq(lawnTotals.lotSqft))}</Notice>
             )}
+            {lawn?.lotSource === "estimated" && <Notice tone="warn">{t.lawnEstimated}</Notice>}
             {lawn?.mappedFailed && <Notice tone="warn">{t.lawnBuildingsFailed}</Notice>}
             {lawnNoBuilding && <Notice tone="warn">{lawn?.lidar === null ? t.lawnNoBuildingNoLidar : t.lawnNoBuilding}</Notice>}
 
@@ -419,7 +420,7 @@ export default function MeasurePanel({
 
             {lawn && (
               <div className="space-y-1 text-[11px]">
-                <p className="text-muted">{lawn.lotNumber ? t.lawnLotNumber(lawn.lotNumber) : lawn.lotSource === "traced" ? t.lawnLotTraced : null}</p>
+                <p className="text-muted">{lawn.lotNumber ? t.lawnLotNumber(lawn.lotNumber) : lawn.lotSource === "estimated" ? t.lawnLotEstimated : t.lawnLotTraced}</p>
                 {!!lawnTotals?.lidarCount && <p className="text-muted">{t.lawnLidar(lawnTotals.lidarCount)}</p>}
                 {!!lawnTotals && lawnTotals.photoPools + lawnTotals.photoPaved > 0 && (
                   <p className="text-muted">

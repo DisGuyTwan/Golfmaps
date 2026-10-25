@@ -28,7 +28,7 @@ export interface RunStop {
   point: [number, number];
   /** The address searched (else the stop goes by its lot number, once found). */
   label: string | null;
-  /** waiting: queued behind other stops; noLot: no cadastre lot there; failed: the cadastre didn't answer. */
+  /** waiting: queued behind other stops; noLot: no lot there (lotAt); failed: the cadastre (or OSM, for an estimate) didn't answer. */
   state: "waiting" | "measuring" | "done" | "noLot" | "failed";
   lawn: LawnMeasurement | null;
   terrain: TerrainGrid | null;

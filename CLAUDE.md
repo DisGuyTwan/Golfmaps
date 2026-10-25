@@ -7,8 +7,8 @@ app's brand.
 Next.js 16 App Router + React 19 + TypeScript + Tailwind. Measures golf course
 turf acreage from OpenStreetMap (or satellite land cover when a course isn't
 mapped in detail), a sod farm's fields from Agriculture Canada's crop map and
-a residential lawn (Quebec cadastre lot minus buildings), for robotic mower
-quoting, plus an
+a residential lawn (Quebec cadastre lot, or one estimated in Ontario, minus
+buildings), for robotic mower quoting, plus an
 "Incentives" tab that estimates grant/tax savings on robotic mowers and battery
 tools (Quebec, Ontario, federal) and an "ROI" tab comparing Kress robots
 (KR238s that cut and stay, or Voyagers that cut and go) with a zero-turn crew. Every tab is in English (default) and Quebec
@@ -168,9 +168,13 @@ src/lib/
   roads.ts      OpenStreetMap roads → a graph; fastest legs (Dijkstra) with
                 their path, km and streets; the Overpass boxes (pure, tested)
   addresses.ts  a sheet of addresses (.xlsx read as a zip, or CSV) → address
-                columns by header (EN/FR) → Photon in Quebec (pure parts tested)
-  lot-lookups.ts  lookAround (lot, OSM, LiDAR at a point) and measureLot (a
-                lawn filled in source by source), for the lawn mode and runs
+                columns by header (EN/FR) → Photon in QC/ON (pure parts tested)
+  lot-lookups.ts  lookAround (lot, OSM, LiDAR at a point), lotAt (the cadastre
+                lot, or one estimated outside Quebec) and measureLot (a lawn
+                filled in source by source), for the lawn mode and runs
+  estimated-lot.ts  a house lot where there's no open cadastre (Ontario):
+                nearer this house than the others, back from the street's
+                road allowance (pure, tested)
   share.ts      share-link helpers + polylines (pure, tested); keys r_ / i_ / q_ /
                 v, m, b, n, a, o, sf, sx, lp, lo, lx, ld, lk, ch; a run's a=run,
                 rs, rn, rh, rhn, rv, rc, rk, ru, rt
@@ -270,7 +274,19 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   (`formatSqft`), with no ROI (`acresForQuote` returns null: the ROI tab is
   commercial). The lot comes from the Quebec cadastre allégé at a point
   (`/api/parcel` → the environment ministry's ArcGIS layer; indicative only, not
-  a survey), or is traced (Ontario has no open parcels). OSM buildings, pools,
+  a survey). Outside Quebec there's no open cadastre (Ontario's parcels are
+  Teranet's, licensed; its imagery service is for OGDE members only), so
+  the lot is estimated (`estimated-lot.ts`, `lotSource: "estimated"`, a
+  notice says so): the ground nearer the house than any other house (side
+  lines midway between houses, the back one midway to the house behind),
+  short of the street's road allowance (`ALLOWANCE_HALF_M`, 10 m from a
+  local street's centre line) and within `REACH_M` (25 m) of the house;
+  garages and sheds (tagged, or under 50 m²) aren't neighbours, and a
+  building over 800 m² isn't a house (traced instead). OSM's buildings
+  first (Ontario's towns mostly have them), the LiDAR's when OSM has no
+  house at the point. The lawn lookup holds the streets for this (`v=3`).
+  It's re-estimated from the point when a link opens. The rep traces the
+  lot where the estimate is off. OSM buildings, pools,
   parking (incl. multipolygons and spaces), paved areas and `highway=service`
   lines (driveways, parking aisles, widened by `stripAlong` to their width tag
   or a typical width) on the lot are removed automatically (Overpass
@@ -373,11 +389,12 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   Excel) or tabs, in UTF-8 or Windows-1252. Columns are found by their
   headers in English or French (address, or number and street; city,
   province, postal code; name or client), else each row's first cell that
-  starts with a civic number. Each address is placed with Photon in Quebec,
-  a house first (`layer=house`), else the street, flagged `onStreet` when the
-  house number isn't the one asked; the summary lists the rows not found.
+  starts with a civic number. Each address is placed with Photon in Quebec
+  or Ontario, a house first (`layer=house`), else the street, flagged
+  `onStreet` when the house number isn't the one asked; the summary lists
+  the rows not found.
   An old .xls (binary) isn't read: the rep saves it as .xlsx or .csv. Each stop is measured like a lawn
-  (`measureLot` in `lot-lookups.ts`: cadastre lot, OSM, LiDAR buildings,
+  (`measureLot` in `lot-lookups.ts`: cadastre lot or the estimated one, OSM, LiDAR buildings,
   photo pools and paving), `AT_ONCE` (2) at a time since the Overpass mirrors
   limit each address, each with its own live list and map sweep. At a stop
   the crew parks and unloads (`setupMin`), the Voyager mows (the mower fit's
@@ -445,7 +462,8 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   (`coverClasses`, 1-2 m cells only); a smooth patch over 18 m
   (`MAX_BUILDING_M`) is a forest canopy, not a roof (Mont Saint-Bruno's reads
   smooth at 20-28 m and came out as buildings). LiDAR buildings are
-  straightened (Douglas-Peucker, ¾ cell) and taken off a lawn unless an OSM building
+  straightened (Douglas-Peucker, `STRAIGHTEN_CELLS` 0.45 of a cell: at ¾
+  every wall ran half a cell inside, a 10 m roof read 9 m) and taken off a lawn unless an OSM building
   already covers 30 % of one. `lawn.lidar` is undefined while loading, null
   where there's no LiDAR, [] when it found none: the "no building" notice only
   shows once both OSM and the LiDAR have answered and found nothing. Don't drop

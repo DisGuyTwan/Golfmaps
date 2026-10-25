@@ -5,6 +5,8 @@
  * trees, the buildings OSM misses) and the aerial photos (pools, paving).
  * Lookups only: the arithmetic is in lawn.ts, terrain.ts and surface.ts.
  */
+import type { MultiPolygon, Polygon } from "geojson";
+import { estimateLot, lotInputs } from "./estimated-lot";
 import { aroundPoint, bboxContains, lotBBox, mappedOnLot, type LawnArea, type LawnMeasurement } from "./lawn";
 import type { LiveFinding, LiveSource } from "./live";
 import { fetchFairways } from "./overpass";
@@ -15,33 +17,70 @@ import type { BBox } from "./types";
 
 /**
  * The lookups at a point that every kind of property needs, started at once:
- * what OpenStreetMap has around it (buildings, paving, and the golf course
- * holding it), the LiDAR, and the cadastre lot (Quebec).
+ * what OpenStreetMap has around it (buildings, paving, streets, and the golf
+ * course holding it), the LiDAR (HRDEM covers Ontario too), and the
+ * cadastre lot (Quebec).
  */
 export function lookAround(lat: number, lon: number) {
   const around = aroundPoint(lat, lon);
   const nearby = fetchFairways(around, "lawn");
   nearby.catch(() => {}); // Handled by whoever uses it, or unused.
-  const terrain = inQuebec(lat, lon) ? fetchTerrain(around) : null;
-  terrain?.catch(() => {}); // Likewise, by whoever loads the terrain.
+  const terrain = fetchTerrain(around);
+  terrain.catch(() => {}); // Likewise, by whoever loads the terrain.
   const parcel = inQuebec(lat, lon) ? fetchParcel(lat, lon) : Promise.resolve(null);
   parcel.catch(() => {}); // Likewise, by whoever reads the lot.
   return { around, nearby, terrain, parcel };
 }
 export type Lookups = ReturnType<typeof lookAround>;
 
+export interface FoundLot {
+  lot: Polygon | MultiPolygon;
+  lotSource: "cadastre" | "estimated";
+  lotNumber: string | null;
+}
+
+/**
+ * The lot at a point: the cadastre's in Quebec; elsewhere (Ontario's parcels
+ * aren't open) one estimated around the house from OpenStreetMap's buildings
+ * and streets, or, where OSM has no house there, the LiDAR's buildings too
+ * (estimated-lot.ts). Null when there's none (a street, no house near the
+ * point); throws when the cadastre, or OSM for an estimate, can't be reached.
+ */
+export async function lotAt(lat: number, lon: number, looks: Lookups): Promise<FoundLot | null> {
+  if (inQuebec(lat, lon)) {
+    const parcel = await looks.parcel;
+    return parcel && { lot: parcel.geometry, lotSource: "cadastre", lotNumber: parcel.lot };
+  }
+  const inputs = lotInputs(await looks.nearby);
+  let estimate = estimateLot(lat, lon, inputs);
+  if (!estimate) {
+    const grid = await looks.terrain.catch(() => null);
+    const box: Polygon = {
+      type: "Polygon",
+      coordinates: [[[looks.around.west, looks.around.south], [looks.around.east, looks.around.south], [looks.around.east, looks.around.north], [looks.around.west, looks.around.north], [looks.around.west, looks.around.south]]],
+    };
+    const lidar = grid ? lidarBuildings(grid, box).map((geometry) => ({ geometry, outbuilding: false })) : [];
+    if (lidar.length) estimate = estimateLot(lat, lon, { ...inputs, buildings: [...inputs.buildings, ...lidar] });
+  }
+  return estimate && { lot: estimate.lot, lotSource: "estimated", lotNumber: null };
+}
+
 /** Marks a source as being read (over `area`, swept on the map) and returns how to mark it answered (live.ts). */
 export type Track = (source: LiveSource, area?: BBox | null) => (state: "done" | "failed", found?: LiveFinding | null) => void;
+
+/** What the live list says the lot step found. */
+export const lotFinding = (found: FoundLot | null): LiveFinding =>
+  !found ? { kind: "none" } : found.lotNumber ? { kind: "lot", lot: found.lotNumber } : { kind: "estimated" };
 
 const tooBigForTerrain = (box: BBox) => box.north - box.south > TERRAIN_MAX_SPAN_DEG || box.east - box.west > TERRAIN_MAX_SPAN_DEG;
 
 /**
- * The lawn on the cadastre lot at a point, filled in source by source as the
+ * The lawn on the lot at a point (lotAt), filled in source by source as the
  * lawn mode does (the lot first, then OpenStreetMap's buildings and paving,
  * the LiDAR's buildings and the photos' pools and paving), for a grass run's
  * stop. `onLawn` gets the lawn each time a source answers. Null when there's
- * no lot there (outside Quebec, or on a street); throws when the cadastre
- * can't be reached.
+ * no lot there (a street, no house); throws when the cadastre (or OSM, for
+ * an estimated lot) can't be reached.
  */
 export async function measureLot(
   lat: number,
@@ -52,24 +91,24 @@ export async function measureLot(
   const looks = lookAround(lat, lon);
   const doneLot = track("lot");
   const doneOsm = track("osm", looks.around);
-  let parcel: Awaited<Lookups["parcel"]>;
+  let found: FoundLot | null;
   try {
-    parcel = await looks.parcel;
+    found = await lotAt(lat, lon, looks);
   } catch (err) {
     doneLot("failed");
     doneOsm("failed");
     throw err;
   }
-  doneLot("done", parcel ? { kind: "lot", lot: parcel.lot } : { kind: "none" });
-  if (!parcel) {
+  doneLot("done", lotFinding(found));
+  if (!found) {
     doneOsm("done", { kind: "none" });
     return null;
   }
-  const lot = parcel.geometry;
+  const lot = found.lot;
   let lawn: LawnMeasurement = {
     lot,
-    lotSource: "cadastre",
-    lotNumber: parcel.lot,
+    lotSource: found.lotSource,
+    lotNumber: found.lotNumber,
     pickPoint: [lat, lon],
     mapped: null,
     mappedFailed: false,
@@ -98,7 +137,7 @@ export async function measureLot(
   })();
 
   const lidar = (async () => {
-    if (tooBigForTerrain(box) || !inQuebec(lat, lon)) return update({ lidar: null });
+    if (tooBigForTerrain(box)) return update({ lidar: null });
     const done = track("lidar", box);
     try {
       const grid = await ((inBox && looks.terrain) || fetchTerrain(box));

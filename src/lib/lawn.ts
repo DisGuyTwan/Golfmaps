@@ -1,12 +1,13 @@
 /**
- * Residential lawn: the lot (Quebec cadastre, or traced) minus what isn't
- * lawn. OpenStreetMap supplies buildings, pools, parking and paving where it
- * has them, including driveways and parking aisles mapped as lines (widened
- * into strips); the LiDAR adds the houses OSM misses (terrain.ts) and the
- * aerial photos the pools, driveways and patios (surface.ts); the rep traces
- * out the rest: a driveway with two taps and a width, or any other area, and
- * taps a misread photo area to keep it as lawn. Trees aren't removed: lawn
- * under them is mowed.
+ * Residential lawn: the lot (Quebec cadastre, traced, or estimated where
+ * there's no open cadastre) minus what isn't lawn. OpenStreetMap supplies
+ * buildings, pools, parking and paving where it has them, including
+ * driveways and parking aisles mapped as lines (widened into strips); the
+ * LiDAR adds the houses OSM misses (terrain.ts) and the aerial photos the
+ * pools, driveways and patios (surface.ts); the rep traces out the rest: a
+ * driveway with two taps and a width, or any other area, and taps a misread
+ * photo area to keep it as lawn. Trees aren't removed: lawn under them is
+ * mowed.
  * Pure, so the arithmetic is tested without a browser. Areas in square feet.
  */
 import area from "@turf/area";
@@ -41,7 +42,8 @@ export const FT_TO_M = 0.3048;
 
 export interface LawnMeasurement {
   lot: Polygon | MultiPolygon;
-  lotSource: "cadastre" | "traced";
+  /** The Quebec cadastre, traced by hand, or estimated from the houses around (estimated-lot.ts: no open cadastre outside Quebec). */
+  lotSource: "cadastre" | "traced" | "estimated";
   /** Cadastre lot number, when the lot came from the cadastre. */
   lotNumber: string | null;
   /** Where the lot was picked ([lat, lon]), so a share link can look it up again. */

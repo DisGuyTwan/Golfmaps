@@ -22,7 +22,7 @@
 import type { MultiPolygon, Polygon } from "geojson";
 import { labelRegions, polygonMask, regionGeometry, type GridShape } from "./landcover";
 import type { LawnArea } from "./lawn";
-import { COVER, straighten } from "./terrain";
+import { COVER, STRAIGHTEN_CELLS, straighten } from "./terrain";
 import { SQ_METERS_TO_ACRES } from "./area";
 import type { BBox, SatelliteTurf } from "./types";
 
@@ -287,7 +287,7 @@ export function surfaceAreas(grid: SurfaceGrid, lot: Polygon | MultiPolygon): La
     for (let i = 0; i < on.length; i++) on[i] = inLot[i] && grid.classes[i] === cls ? 1 : 0;
     for (const cells of labelRegions(on, grid.width, grid.height).regions) {
       if (cells.length < minCells) continue;
-      out.push({ id: `i${out.length + 1}`, kind, geometry: straighten(regionGeometry(grid, cells), grid.cellM * 0.75) });
+      out.push({ id: `i${out.length + 1}`, kind, geometry: straighten(regionGeometry(grid, cells), grid.cellM * STRAIGHTEN_CELLS) });
     }
   }
   return out;
