@@ -274,9 +274,12 @@ export function fitMower(site: Site, mower: Mower, everyDays: MowEvery = 2, opts
  * home robots (several on a big one); past three of the biggest (at Kress's
  * every-2-days rating), the commercial ones are compared too. A sod farm gets
  * Voyagers; a golf course the commercial robots, or only those that work the
- * chosen way (cut and stay: the KR238; cut and go: the Voyagers).
+ * chosen way (cut and stay: the KR238; cut and go: the Voyagers). A
+ * commercial or municipal site gets every robot: the ones that stay (home
+ * robots in a fleet, or KR238s) or the Voyagers that come and go.
  */
 function candidates(site: Site, approach: Approach | null = null): Mower[] {
+  if (site.kind === "site") return MOWERS.filter((m) => !approach || (approach === "go") === (m.line === "voyager"));
   if (site.kind === "lawn") {
     const residential = MOWERS.filter((m) => !m.commercial);
     const biggest = Math.max(...residential.map((m) => m.areaM2));

@@ -76,6 +76,8 @@ function computeFit(...inputs: FitInputs): MowerFitResult | null {
         .filter((a) => a.kind !== "paving")
         .map((a) => a.geometry);
       if (sqft > 0) site = lawnSite(totals.lawn, lawn.lot, blocked, charger, sqft / SQ_M_TO_SQ_FT, terrain);
+      // A commercial or municipal site is measured like a lawn, and every robot competes for it.
+      if (site && q.commercial) site = { ...site, kind: "site" };
     }
   } else {
     const acres = acresForQuote(mode, measurement, sod, q);
@@ -84,7 +86,7 @@ function computeFit(...inputs: FitInputs): MowerFitResult | null {
   }
   let result: MowerFitResult | null = null;
   if (site) {
-    const approaches = site.kind === "golf" ? recommendBoth(site, q.mowEvery, opts) : null;
+    const approaches = site.kind === "golf" || site.kind === "site" ? recommendBoth(site, q.mowEvery, opts) : null;
     const approach = approaches ? (q.approach ?? approaches.suggested) : site.kind === "sod" ? "go" : null;
     const recommendation = approaches && approach ? approaches[approach] : recommend(site, q.mowEvery, null, opts);
     // Each unit drives within its own zone: the fleet covering the whole site sets the zones (on a course with fairways, the rough's).
@@ -381,8 +383,8 @@ export default function MowerFit({
                       onChange={(a) => setQuoteSettings({ approach: a })}
                     />
                     <p className="text-[11px] text-muted">
-                      {t.fitHow.hints[approach]}
-                      {!picked && ` ${t.fitHow.suggested[approach]}`}
+                      {(fit.site.kind === "site" ? t.fitHow.siteHints : t.fitHow.hints)[approach]}
+                      {!picked && ` ${(fit.site.kind === "site" ? t.fitHow.siteSuggested : t.fitHow.suggested)[approach]}`}
                     </p>
                   </div>
                 )}
@@ -427,7 +429,13 @@ export default function MowerFit({
             <div className="flex items-center justify-between gap-2 text-[11px] text-muted">
               <span className="flex items-center gap-1">
                 <Icon name="zap" className="h-3 w-3 text-accent" />
-                {fit.site.chargerEstimated ? (fit.site.kind === "lawn" ? t.fitCharger.lawn : t.fitCharger.field) : t.fitCharger.placed}
+                {fit.site.chargerEstimated
+                  ? fit.site.kind === "lawn"
+                    ? t.fitCharger.lawn
+                    : fit.site.kind === "site"
+                      ? t.fitCharger.site
+                      : t.fitCharger.field
+                  : t.fitCharger.placed}
               </span>
               {onMoveCharger && !print && (
                 <button type="button" onClick={onMoveCharger} className="shrink-0 font-semibold text-accent hover:underline print:hidden">

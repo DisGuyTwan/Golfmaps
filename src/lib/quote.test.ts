@@ -62,11 +62,19 @@ describe("share-link round trip", () => {
       lawnOverride: null,
       approach: "stay",
       window: { from: 20, to: 7, days: 6 },
+      commercial: false,
     };
     expect(decodeQuote(new URLSearchParams(encodeQuote(q)))).toEqual(q);
     expect(encodeQuote(q).q_win).toBe("20-7-6");
     expect(encodeQuote(q).q_how).toBe("stay");
     expect(encodeQuote({ ...q, approach: null }).q_how).toBeUndefined();
+  });
+  it("quotes a commercial site measured like a lawn in acres, and links it", () => {
+    const q: QuoteSettings = { ...DEFAULT_QUOTE, commercial: true, lawnOverride: 87_120 };
+    expect(acresForQuote("lawn", null, null, q)).toBe(2);
+    expect(acresForQuote("lawn", null, null, { ...q, commercial: false })).toBeNull();
+    expect(encodeQuote(q, "lawn")).toEqual({ q_lovr: "87120", q_com: "1" });
+    expect(decodeQuote(new URLSearchParams(encodeQuote(q, "lawn")))).toEqual(q);
   });
   it("a sod link carries the sod share only", () => {
     const q: QuoteSettings = { ...DEFAULT_QUOTE, sodPct: 75, override: null };

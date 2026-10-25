@@ -226,3 +226,15 @@ describe("golf and sod", () => {
     expect(recommend(site).best).toBeNull();
   });
 });
+
+describe("a commercial or municipal site", () => {
+  const grounds = (acres: number): Site => ({ ...lawn(acres * ACRE), kind: "site" });
+
+  it("compares every robot, or those that work the chosen way", () => {
+    const both = recommendBoth(grounds(8), 2);
+    // Cut and stay: robots that live on the site (a home fleet or KR238s); cut and go: the Voyagers.
+    expect(mainFleet(both.stay)?.mower.line).not.toBe("voyager");
+    expect(mainFleet(both.go)?.mower.line).toBe("voyager");
+    expect(recommend(grounds(8), 2).fits.map((f) => f.mower.id)).toHaveLength(MOWERS.length);
+  });
+});

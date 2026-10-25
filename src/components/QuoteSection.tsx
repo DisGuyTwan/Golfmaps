@@ -68,32 +68,64 @@ function LawnQuote({ lang, lawn, getShareUrl }: { lang: Lang; lawn: LawnMeasurem
   const t = UI[lang];
   const q = useQuoteSettings();
   const sqft = lawnQuoteSqft(lawn, q);
+  // A commercial or municipal site: in acres (the client's number too), and on to the ROI tab.
+  const { commercial } = q;
+  const fit = useMowerFit();
+  const SQFT_PER_ACRE = 43_560;
+  const acres = sqft !== null ? sqft / SQFT_PER_ACRE : null;
+  const shown = commercial ? (q.lawnOverride !== null ? Math.round((q.lawnOverride / SQFT_PER_ACRE) * 100) / 100 : "") : (q.lawnOverride ?? "");
   return (
     <div className="animate-fade-up space-y-2.5 border-t border-line pt-3">
       <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
         <Icon name="calculator" className="h-4 w-4 text-accent" />
-        {t.lawnQuoteTitle}
+        {commercial ? t.siteQuoteTitle : t.lawnQuoteTitle}
       </h3>
       <label className="block space-y-1">
-        <span className="block text-xs font-semibold text-ink-2">{t.lawnOverride}</span>
+        <span className="block text-xs font-semibold text-ink-2">{commercial ? t.siteOverride : t.lawnOverride}</span>
         <input
           type="number"
-          inputMode="numeric"
+          inputMode="decimal"
           min={0}
-          step={50}
+          step={commercial ? 0.1 : 50}
           placeholder={t.overridePlaceholder}
-          value={q.lawnOverride ?? ""}
+          value={shown}
           onChange={(e) => {
-            const n = Number(e.target.value);
+            const n = Number(e.target.value) * (commercial ? SQFT_PER_ACRE : 1);
             setQuoteSettings({ lawnOverride: e.target.value === "" || !(n > 0) ? null : n });
           }}
           className={`${ui.input} py-1.5 text-sm`}
         />
       </label>
       <div className="flex items-center justify-between rounded-lg bg-accent-soft px-3 py-2">
-        <span className="text-sm font-medium text-accent-ink">{t.lawnQuoteTotal}</span>
-        <Pop value={sqft !== null ? formatSqft(sqft, lang) : "–"} className="text-lg font-bold tabular-nums text-accent-ink" />
+        <span className="text-sm font-medium text-accent-ink">{commercial ? t.siteQuoteTitle : t.lawnQuoteTotal}</span>
+        <Pop
+          value={sqft === null ? "–" : commercial ? `${formatAcres(acres!, lang)} ac` : formatSqft(sqft, lang)}
+          className="text-lg font-bold tabular-nums text-accent-ink"
+        />
       </div>
+      {commercial && acres !== null && (
+        <button
+          type="button"
+          onClick={() => {
+            const fleet = fit ? mainFleet(fit.recommendation) : null;
+            const voyager = fit?.approaches ? mainFleet(fit.approaches.go) : fleet;
+            sendAcresToRoi({
+              acres,
+              approach: fit?.approach ?? null,
+              every: q.mowEvery,
+              model: roiModel(voyager?.mower),
+              layoutPct: fleet?.work ? Math.max(0, Math.round((fleet.work.factor - 1) * 100)) : null,
+              window: q.window,
+              range: null,
+            });
+            goToTab("#roi");
+          }}
+          className={`${ui.btnPrimary} group w-full`}
+        >
+          {t.sendToRoi}
+          <Icon name="arrowRight" className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+        </button>
+      )}
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => printAs(`Calculator - ${t.tabs.acreage}`)} className={`${ui.btnPrimary} flex-1`}>
           <Icon name="file" />

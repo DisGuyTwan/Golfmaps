@@ -296,6 +296,8 @@ export function setPickingShop(pickingShop: boolean) {
 
 export function setRunSettings(patch: Partial<RunSettings>) {
   update({ settings: { ...state.settings, ...patch } });
+  // Back to a run from a portfolio: the roads between the stops are needed again.
+  if (patch.portfolio === false) scheduleRoads();
 }
 
 // A stop's totals and layout are worth computing once per lawn (turf unions, stripes), not on every render.
@@ -379,6 +381,8 @@ const ROADS_RETRY_MS = 3000;
  */
 function scheduleRoads() {
   clearTimeout(roadsTimer);
+  // A portfolio's sites each have their own robots: no driving between them.
+  if (state.settings.portfolio) return;
   if (state.stops.some((s) => s.state === "waiting" || s.state === "measuring")) return;
   // A sheet still being placed adds more stops: route once it's done.
   if (state.imported && !state.imported.done) return;

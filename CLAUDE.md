@@ -78,7 +78,10 @@ src/components/
                              PDF report, Copy link
   RunPanel.tsx               grass run panel (stops, shop, Voyager, crew, the
                              day, a sheet of addresses to import); useRunPlan()
-                             for the panel, map and PDF
+                             for the panel, map and PDF; or, switched to a
+                             portfolio, PortfolioSection
+  PortfolioSection.tsx       a portfolio of sites: each one's grass and robots,
+                             the fleet, Send to ROI; usePortfolioPlan()
   AcreageReport.tsx          print-only Acreage PDF (replaces the map in print),
                              or the grass run's run sheet
   SearchBox.tsx              Photon geocoder autocomplete
@@ -122,6 +125,8 @@ src/lib/
   roi-copy.ts   ROI tab copy, FR and EN, incl. "as of" source for each default
   quote.ts      measurement → acres for the quote, share params (pure, tested)
   quote-store.ts  client store shared by the tabs (useSyncExternalStore)
+  portfolio.ts  a portfolio of sites: each one's robots (cut and stay) or
+                Voyagers sized on all the grass (cut and go) (pure, tested)
   run.ts        grass run: a stop's mowing vs trimming and blowing, driving,
                 the order with the least driving, the day, links (pure, tested)
   run-store.ts  the grass run being planned: stops measured a few at a time,
@@ -214,6 +219,19 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   photos (`measureSodOnPhotos`: the field's grass and bare ground, without the
   roads, hedgerows, buildings and water the 30 m map takes in; `sod.photos`).
   Switching modes clears the results, name and override.
+- **Commercial and municipal sites are lawns quoted in acres.** A lot of
+  `HOUSE_LOT_M2` or more that isn't a course or a farm is detected as one
+  (`QuoteSettings.commercial`, link `q_com=1`), and Change offers "Commercial
+  site" by hand (switching with Lawn keeps the measurement). It's measured
+  exactly like a lawn, shown in acres, and its site is kind `"site"`: every
+  robot competes (`candidates`), with "Cut and stay or cut and go?" (stay:
+  home robots in a fleet or KR238s; go: Voyagers), and it goes to the ROI
+  tab (`acresForQuote` takes the lawn). `lotLooksOdd` only flags a strip
+  there. A portfolio of sites (the run panel switched to Portfolio,
+  `RunSettings.portfolio`, link `rp=1`) measures each address like a lawn
+  and adds up each site's own robots (cut and stay), or sizes Voyagers on
+  all the grass at once (cut and go, the size with the least outlay that
+  fits every site); no roads are read, and Send to ROI takes the total.
 - **Residential lawns are the third mode** (`a=lawn`), in **square feet only**
   (`formatSqft`), with no ROI (`acresForQuote` returns null: the ROI tab is
   commercial). The lot comes from the Quebec cadastre allégé at a point

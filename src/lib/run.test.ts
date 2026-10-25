@@ -219,6 +219,7 @@ describe("share link", () => {
         mowSqftPerH: 9000,
         trimFtPerH: 1200,
         blowSqftPerH: 20000,
+        portfolio: true,
       },
     };
     const params = new URLSearchParams(Object.entries(encodeRun(run)).filter((e): e is [string, string] => e[1] !== undefined));

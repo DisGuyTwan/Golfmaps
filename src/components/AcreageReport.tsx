@@ -11,6 +11,9 @@ import { useRun } from "@/lib/run-store";
 import type { SodField } from "@/lib/types";
 import MowerFit, { useMowerFit } from "./MowerFit";
 import Sources from "./Sources";
+import { usePortfolioPlan } from "./PortfolioSection";
+import { windowLine } from "./WindowPicker";
+import { fleetLine } from "@/lib/portfolio";
 import { formatClock, formatDuration, formatKm, formatLawn, legLine, stopName, useRunPlan } from "./RunPanel";
 import { TabHeader, ui } from "./ui";
 
@@ -57,7 +60,7 @@ export default function AcreageReport() {
   const terrain = useTerrain();
   const run = useRun();
   const range = useMowerFit()?.range ?? null;
-  if (run.open) return <RunReport />;
+  if (run.open) return run.settings.portfolio ? <PortfolioReport /> : <RunReport />;
   if (mode === "lawn") return <LawnReport />;
   const ac = (n: number) => `${formatAcres(n, lang)} ac`;
   const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
@@ -189,7 +192,8 @@ function LawnReport() {
   const q = useQuoteSettings();
   const address = useCourseName();
   const terrain = useTerrain();
-  const sq = (n: number) => formatSqft(n, lang);
+  // A commercial or municipal site is measured like a lawn and given in acres.
+  const sq = (n: number) => (q.commercial ? `${formatAcres(n / 43_560, lang)} ac` : formatSqft(n, lang));
   const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
   const totals = lawn ? lawnTotals(lawn) : null;
   const quoted = lawnQuoteSqft(lawn, q);
@@ -201,7 +205,7 @@ function LawnReport() {
         lang={lang}
         icon="map"
         eyebrow={`Calculator · ${date}`}
-        title={t.reportLawnTitle}
+        title={q.commercial ? t.sitePanelTitle : t.reportLawnTitle}
         lede={t.reportLawnLede}
         printTitle={`Calculator - ${t.tabs.acreage}`}
       />
@@ -237,7 +241,7 @@ function LawnReport() {
             )}
 
             <div className="flex items-center justify-between rounded-xl bg-brand px-5 py-3 text-white">
-              <span className="text-sm font-semibold">{t.lawnQuoteTotal}</span>
+              <span className="text-sm font-semibold">{q.commercial ? t.siteQuoteTitle : t.lawnQuoteTotal}</span>
               <span className={ui.kpi}>{quoted !== null ? sq(quoted) : "–"}</span>
             </div>
 
@@ -265,6 +269,76 @@ function LawnReport() {
             <Sources lang={lang} print />
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** A portfolio's PDF: each site with its grass and robots, and the fleet for all of them. */
+function PortfolioReport() {
+  const lang = useLang();
+  const t = UI[lang];
+  const r = t.run;
+  const run = useRun();
+  const q = useQuoteSettings();
+  const plan = usePortfolioPlan();
+  const approach = q.approach ?? "stay";
+  const ac = (n: number) => `${formatAcres(n, lang)} ac`;
+  const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
+  const line = new Map(plan.lines.map((l) => [l.index, l]));
+  return (
+    <div className="hidden bg-white text-ink print:block">
+      <TabHeader
+        lang={lang}
+        icon="map"
+        eyebrow={`Calculator · ${date}`}
+        title={r.portfolioTitle}
+        lede={r.portfolioReportLede}
+        printTitle={`Calculator - ${r.portfolioTitle}`}
+      />
+      <div className="space-y-3 px-4 py-4">
+        <p className="text-sm">
+          {t.fitEvery.label}: {t.fitEvery.options[q.mowEvery].toLowerCase()} · {t.fitHow.label}: {t.fitHow.options[approach].toLowerCase()}
+          {windowLine(q.window, lang) && ` · ${t.fitWindow.label}: ${windowLine(q.window, lang)}`}
+        </p>
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="bg-accent-soft text-accent-ink">
+              <th className="px-2 py-1 text-left">#</th>
+              <th className="px-2 py-1 text-left">{r.reportHead[1]}</th>
+              <th className="px-2 py-1 text-right">{t.siteLawn}</th>
+              <th className="px-2 py-1 text-left">{t.fitHow.label}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {run.stops.map((stop, i) => {
+              const l = line.get(i);
+              return (
+                <tr key={stop.id} className="border-b border-line">
+                  <td className="px-2 py-1 font-bold">{i + 1}</td>
+                  <td className="px-2 py-1">{stopName(stop, lang)}</td>
+                  <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{l ? ac(l.acres) : "–"}</td>
+                  <td className="px-2 py-1">
+                    {!l ? "–" : !l.fit ? r.portfolioNoFit : approach === "go" ? r.portfolioVoyagerOk : `${l.fit.units} × ${l.fit.mower.id}`}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="flex items-center justify-between rounded-xl bg-brand px-5 py-3 text-white">
+          <span className="text-sm font-semibold">
+            {r.portfolioTotal} · {r.portfolioFleet}: {plan.fleet.length ? fleetLine(plan.fleet) : t.fitHow.none}
+          </span>
+          <span className={ui.kpi}>{ac(plan.acres)}</span>
+        </div>
+        <div className={`${ui.note} space-y-1`}>
+          <p>{approach === "stay" ? r.portfolioStay : r.portfolioGo}</p>
+          {plan.unfit.length > 0 && <p>{r.portfolioUnfit(plan.unfit.length)}</p>}
+          <p>
+            {t.attribution} · {t.attributionCadastre}
+          </p>
+        </div>
       </div>
     </div>
   );

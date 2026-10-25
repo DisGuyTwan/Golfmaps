@@ -84,6 +84,8 @@ export interface RunSettings {
   setupMin: number;
   /** Start of the day, in minutes after midnight. */
   startMin: number;
+  /** A portfolio of sites, each with its own robots (portfolio.ts), rather than a day's run. */
+  portfolio: boolean;
 }
 
 export const DEFAULT_RUN: RunSettings = {
@@ -96,6 +98,7 @@ export const DEFAULT_RUN: RunSettings = {
   speedKmh: 35,
   setupMin: 10,
   startMin: 7 * 60 + 30,
+  portfolio: false,
 };
 export const CREW_SIZES = [1, 2, 3];
 
@@ -424,7 +427,8 @@ const hhmm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, "0")}:
  * Share-link parameters: a=run, rs the stops (polyline), rn their names
  * ("|"-separated), rh the shop ("lat,lon") and rhn its name, rv the Voyager,
  * rc the crew, rk the speed, ru the set-up minutes, rt the start ("07:30");
- * the crew's mower rm and rates rmr (mowing), rtr (trimming), rbr (blowing).
+ * the crew's mower rm and rates rmr (mowing), rtr (trimming), rbr (blowing);
+ * rp=1 for a portfolio of sites.
  */
 export function encodeRun(run: RunLink): Record<string, string | undefined> {
   const s = run.settings;
@@ -444,6 +448,7 @@ export function encodeRun(run: RunLink): Record<string, string | undefined> {
     rmr: s.mowSqftPerH !== null ? String(s.mowSqftPerH) : undefined,
     rtr: s.trimFtPerH !== d.trimFtPerH ? String(s.trimFtPerH) : undefined,
     rbr: s.blowSqftPerH !== d.blowSqftPerH ? String(s.blowSqftPerH) : undefined,
+    rp: s.portfolio ? "1" : undefined,
   };
 }
 
@@ -471,6 +476,7 @@ export function decodeRun(params: URLSearchParams): RunLink | null {
       mowSqftPerH: params.has("rmr") ? num("rmr", 1000, 500_000, 0) || null : null,
       trimFtPerH: num("rtr", 100, 10_000, d.trimFtPerH),
       blowSqftPerH: num("rbr", 1000, 200_000, d.blowSqftPerH),
+      portfolio: params.get("rp") === "1",
     },
   };
 }

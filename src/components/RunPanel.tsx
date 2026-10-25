@@ -47,6 +47,7 @@ import {
   type RunStop,
 } from "@/lib/run-store";
 import { Icon } from "./icons";
+import PortfolioSection from "./PortfolioSection";
 import Sheet from "./Sheet";
 import LiveSteps from "./LiveSteps";
 import { CopyLinkButton, Notice, Pop, Segmented, printAs, ui } from "./ui";
@@ -298,8 +299,8 @@ export default function RunPanel({
       <Sheet handleLabel={t.sheetHandle}>
         <div className="flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-base font-bold text-ink">
-            <Icon name="route" className="h-[18px] w-[18px] text-accent" />
-            {r.title}
+            <Icon name={s.portfolio ? "building" : "route"} className="h-[18px] w-[18px] text-accent" />
+            {s.portfolio ? r.portfolioTitle : r.title}
           </h2>
           <button
             onClick={closeRun}
@@ -319,7 +320,19 @@ export default function RunPanel({
             </button>
           </div>
         ) : (
-          <p className="text-[11px] text-muted">{r.hint}</p>
+          <>
+            {/* A day's run for a crew, or a portfolio of sites that each keep their own robots. */}
+            <Segmented
+              label={r.title}
+              value={s.portfolio ? "portfolio" : "run"}
+              options={[
+                { value: "run", label: r.modeRun },
+                { value: "portfolio", label: r.modePortfolio },
+              ]}
+              onChange={(v) => setRunSettings({ portfolio: v === "portfolio" })}
+            />
+            <p className="text-[11px] text-muted">{s.portfolio ? r.portfolioHint : r.hint}</p>
+          </>
         )}
         {notice && <Notice tone="info">{notice}</Notice>}
 
@@ -350,6 +363,10 @@ export default function RunPanel({
         {run.imported && <LiveSteps lang={lang} steps={run.imported.live} />}
         {run.imported?.done && <ImportResult imported={run.imported} lang={lang} />}
 
+        {s.portfolio ? (
+          <PortfolioSection lang={lang} />
+        ) : (
+          <>
         {/* The shop */}
         <div className="flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2">
           <div className="min-w-0">
@@ -632,8 +649,15 @@ export default function RunPanel({
             ))}
           </div>
         )}
+          </>
+        )}
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={!plan.stops.length} onClick={() => printAs(`Calculator - ${r.title}`)} className={`${ui.btnPrimary} flex-1`}>
+          <button
+            type="button"
+            disabled={!plan.stops.length}
+            onClick={() => printAs(`Calculator - ${s.portfolio ? r.portfolioTitle : r.title}`)}
+            className={`${ui.btnPrimary} flex-1`}
+          >
             <Icon name="file" />
             {t.reportPdf}
           </button>
@@ -645,7 +669,7 @@ export default function RunPanel({
             </button>
           )}
         </div>
-        <p className="text-[10px] leading-snug text-faint">{r.sources}</p>
+        {!s.portfolio && <p className="text-[10px] leading-snug text-faint">{r.sources}</p>}
       </Sheet>
     </div>
   );

@@ -46,6 +46,11 @@ export interface QuoteSettings {
   approach: Approach | null;
   /** When the robots may mow (hours, days a week); null = any time. Sizes the fleet with the frequency. */
   window: MowWindow | null;
+  /**
+   * A lot measured like a lawn is a commercial or municipal site (a big lot,
+   * or chosen): quoted in acres, with commercial robots and the ROI tab.
+   */
+  commercial: boolean;
 }
 
 /** Mowing every day, every 2 days (Kress's rating) or every 3. */
@@ -62,6 +67,7 @@ export const DEFAULT_QUOTE: QuoteSettings = {
   mowEvery: 2,
   approach: null,
   window: null,
+  commercial: false,
 };
 
 const share = (pct: number) => Math.min(100, Math.max(0, pct)) / 100;
@@ -119,17 +125,24 @@ export function sodQuoteAcres(sod: SodMeasurement | null, q: QuoteSettings): num
 /**
  * The quoted acres for whichever kind of property the Acreage tab is on. A
  * residential lawn has none: it is quoted in square feet and doesn't go to
- * the ROI tab (which compares a Voyager with a commercial crew).
+ * the ROI tab (which compares robots with a commercial crew); a commercial
+ * or municipal site measured like a lawn has its lawn in acres.
  */
 export function acresForQuote(
   mode: AcreageMode,
   m: CourseMeasurement | null,
   sod: SodMeasurement | null,
   q: QuoteSettings,
+  lawn: LawnMeasurement | null = null,
 ): number | null {
-  if (mode === "lawn") return null;
+  if (mode === "lawn") {
+    const sqft = q.commercial ? lawnQuoteSqft(lawn, q) : null;
+    return sqft !== null ? sqft / SQFT_PER_ACRE : null;
+  }
   return mode === "sod" ? sodQuoteAcres(sod, q) : quoteAcres(m, q);
 }
+
+const SQFT_PER_ACRE = 43_560;
 
 /** Square feet of lawn for a residential quote: the override, else the lot's lawn. */
 export function lawnQuoteSqft(lawn: LawnMeasurement | null, q: QuoteSettings): number | null {
@@ -144,7 +157,8 @@ export function encodeQuote(q: QuoteSettings, mode: AcreageMode = "golf"): Recor
     ...(q.mowEvery !== DEFAULT_QUOTE.mowEvery && { q_every: String(q.mowEvery) }),
     ...(q.window && { q_win: encodeWindow(q.window) }),
   };
-  if (mode === "lawn") return q.lawnOverride !== null ? { q_lovr: String(q.lawnOverride), ...every } : every;
+  if (mode === "lawn")
+    return { ...(q.lawnOverride !== null && { q_lovr: String(q.lawnOverride) }), ...(q.commercial && { q_com: "1" }), ...every };
   const params: Record<string, string> =
     mode === "sod"
       ? { q_spct: String(q.sodPct) }
@@ -181,5 +195,6 @@ export function decodeQuote(params: URLSearchParams): QuoteSettings {
   const how = params.get("q_how");
   if (isApproach(how)) q.approach = how;
   q.window = decodeWindow(params.get("q_win"));
+  q.commercial = params.get("q_com") === "1";
   return q;
 }

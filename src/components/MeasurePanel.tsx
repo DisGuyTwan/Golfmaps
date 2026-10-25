@@ -8,7 +8,7 @@ import type { AcreageMode } from "@/lib/quote";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { useState } from "react";
 import type { MeasureError, PickKind, SatelliteError, TraceKind } from "./GolfCourseCalculator";
-import { useTerrain } from "@/lib/quote-store";
+import { useQuoteSettings, useTerrain } from "@/lib/quote-store";
 import type { LiveStep } from "@/lib/live";
 import LiveSteps from "./LiveSteps";
 import MowerFit from "./MowerFit";
@@ -47,7 +47,8 @@ interface MeasurePanelProps {
   /** Width (ft) for the driveway being traced. */
   driveWidthFt: number;
   onDriveWidth: (ft: number) => void;
-  onModeChange: (mode: AcreageMode) => void;
+  /** A kind picked by hand ("site": a commercial or municipal site, measured like a lawn). */
+  onModeChange: (mode: PanelKind) => void;
   onMeasure: () => void;
   onStartSelect: () => void;
   onCancelSelect: () => void;
@@ -65,10 +66,13 @@ interface MeasurePanelProps {
 }
 
 const CATEGORIES = ["fairway", "rough", "green", "tee"] as const;
-const MODES: { id: AcreageMode; icon: "flag" | "sprout" | "home" }[] = [
+/** What the panel says the property is: the Acreage mode, or a commercial site (a lawn quoted in acres). */
+export type PanelKind = AcreageMode | "site";
+const MODES: { id: PanelKind; icon: "flag" | "sprout" | "home" | "building" }[] = [
   { id: "golf", icon: "flag" },
   { id: "sod", icon: "sprout" },
   { id: "lawn", icon: "home" },
+  { id: "site", icon: "building" },
 ];
 
 /** One figure in a four-up row: value on top, label (with an optional swatch) below. */
@@ -136,6 +140,8 @@ export default function MeasurePanel({
 }: MeasurePanelProps) {
   const t = UI[lang];
   const [changing, setChanging] = useState(false);
+  const commercial = useQuoteSettings().commercial;
+  const kind: PanelKind = mode === "lawn" && commercial ? "site" : mode;
   // Nothing measured and no kind picked by hand: the calculator detects what the property is.
   const neutral = !result && !sod && !lawn && !chosen;
   const terrain = useTerrain();
@@ -155,10 +161,19 @@ export default function MeasurePanel({
   // Tracing an outline is offered when OSM has no course here, only its outline,
   // or couldn't be reached (the satellite count doesn't need it).
   const offerOutline = mode === "golf" && ((!!result && (!result.found || outlineOnly)) || error !== null);
-  const sq = (n: number) => formatSqft(n, lang);
-  const num = (n: number) => formatSqft(n, lang, false);
-  const modeIcon = neutral ? "map" : MODES.find((m) => m.id === mode)!.icon;
-  const title = neutral ? t.anyPanelTitle : mode === "sod" ? t.sodPanelTitle : mode === "lawn" ? t.lawnPanelTitle : t.panelTitle;
+  // A commercial site is measured like a lawn but given in acres.
+  const sq = (n: number) => (commercial ? `${formatAcres(n / 43_560, lang)} ac` : formatSqft(n, lang));
+  const num = (n: number) => (commercial ? formatAcres(n / 43_560, lang) : formatSqft(n, lang, false));
+  const modeIcon = neutral ? "map" : MODES.find((m) => m.id === kind)!.icon;
+  const title = neutral
+    ? t.anyPanelTitle
+    : kind === "sod"
+      ? t.sodPanelTitle
+      : kind === "lawn"
+        ? t.lawnPanelTitle
+        : kind === "site"
+          ? t.sitePanelTitle
+          : t.panelTitle;
   // Lawn: say so when OSM has no building on the lot, so the rep traces the house out.
   const lawnNoBuilding =
     !!lawn &&
@@ -197,7 +212,7 @@ export default function MeasurePanel({
 
         {!neutral && !tracing && (
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
-            <span>{chosen ? t.kindChosen(t.modes[mode]) : t.kindDetected(t.modes[mode])}</span>
+            <span>{chosen ? t.kindChosen(t.modes[kind]) : t.kindDetected(t.modes[kind])}</span>
             <button
               type="button"
               aria-expanded={changing}
@@ -210,18 +225,18 @@ export default function MeasurePanel({
         )}
 
         {changing && !neutral && !tracing && (
-        <div role="group" aria-label={t.modeGroup} className="grid grid-cols-3 gap-1 rounded-lg border border-line bg-surface-2 p-1">
+        <div role="group" aria-label={t.modeGroup} className="grid grid-cols-2 gap-1 rounded-lg border border-line bg-surface-2 p-1 min-[420px]:grid-cols-4">
           {MODES.map(({ id, icon }) => (
             <button
               key={id}
               type="button"
-              aria-pressed={mode === id}
+              aria-pressed={kind === id}
               onClick={() => {
                 setChanging(false);
                 onModeChange(id);
               }}
               className={`inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md text-xs font-semibold transition-all duration-200 active:scale-[0.98] ${
-                mode === id ? "bg-brand text-white shadow-sm" : "text-muted hover:text-ink"
+                kind === id ? "bg-brand text-white shadow-sm" : "text-muted hover:text-ink"
               }`}
             >
               <Icon name={icon} className="h-3.5 w-3.5" />
@@ -387,7 +402,7 @@ export default function MeasurePanel({
         {/* While a tool takes taps, the results fold away so the map stays visible. */}
         {tracing || selecting || picking || placingCharger || neutral ? null : mode === "lawn" ? (
           <>
-            {lawn?.lotSource === "cadastre" && lotLooksOdd(lawn.lot) && lawnTotals && (
+            {lawn?.lotSource === "cadastre" && lotLooksOdd(lawn.lot, commercial) && lawnTotals && (
               <Notice tone="warn">{t.lawnOddLot(sq(lawnTotals.lotSqft))}</Notice>
             )}
             {lawn?.mappedFailed && <Notice tone="warn">{t.lawnBuildingsFailed}</Notice>}
@@ -395,12 +410,12 @@ export default function MeasurePanel({
 
             {/* Four across: the unit goes in the labels so the numbers fit on a phone. */}
             <div className="grid grid-cols-4 gap-1.5 border-t border-line pt-3">
-              <Stat value={num(lawnTotals?.lotSqft ?? 0)} label={`${t.lawnLot} (${t.sqftUnit})`} swatch={TURF_COLORS.course} />
+              <Stat value={num(lawnTotals?.lotSqft ?? 0)} label={`${t.lawnLot} (${commercial ? "ac" : t.sqftUnit})`} swatch={TURF_COLORS.course} />
               <Stat value={num(lawnTotals?.builtSqft ?? 0)} label={t.lawnBuilt} swatch="#334155" />
               <Stat value={num(lawnTotals?.pavedSqft ?? 0)} label={t.lawnPaved} swatch="#64748b" />
               <Stat value={num(lawnTotals?.tracedSqft ?? 0)} label={t.lawnTracedOut} swatch="#f87171" />
             </div>
-            <Total label={t.lawnTotal} value={sq(lawnTotals?.lawnSqft ?? 0)} />
+            <Total label={commercial ? t.siteLawn : t.lawnTotal} value={sq(lawnTotals?.lawnSqft ?? 0)} />
 
             {lawn && (
               <div className="space-y-1 text-[11px]">

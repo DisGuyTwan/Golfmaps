@@ -56,6 +56,7 @@ import {
   setLawn,
   setMeasurement,
   setMode,
+  setQuoteSettings,
   setCharger,
   setSod,
   setTerrain,
@@ -71,7 +72,7 @@ import { buildShareUrl, decodePolyline, encodePolyline, encodeView } from "@/lib
 import { useLang } from "@/lib/preferences";
 import type { BBox, CourseMeasurement } from "@/lib/types";
 import type { LiveScan, MapOverlay, MapRun } from "./GolfMap";
-import MeasurePanel from "./MeasurePanel";
+import MeasurePanel, { type PanelKind } from "./MeasurePanel";
 import RunPanel, { useRunPlan } from "./RunPanel";
 import { useMowerFit } from "./MowerFit";
 import SearchBox, { type PlaceResult } from "./SearchBox";
@@ -669,6 +670,8 @@ export default function GolfCourseCalculator() {
       if (kind === "sod") doneOsm("done", { kind: "read" });
       setPing(null);
       setMode(kind);
+      // A lot bigger than a house's that isn't a course or a farm is a commercial or municipal site.
+      setQuoteSettings({ commercial: kind === "lawn" && lotM2 !== null && lotM2 >= HOUSE_LOT_M2 });
       setCourseName(name ?? course?.name ?? null);
       const map = mapRef.current;
       if (kind === "golf" && course) {
@@ -697,6 +700,7 @@ export default function GolfCourseCalculator() {
       setChosen(false);
       if (area({ type: "Feature", geometry: outline, properties: {} }) < HOUSE_LOT_M2) {
         setMode("lawn");
+        setQuoteSettings({ commercial: false });
         void showTracedLot(outline);
         return;
       }
@@ -1076,8 +1080,11 @@ export default function GolfCourseCalculator() {
   }, [resetView]);
 
   const handleModeChange = useCallback(
-    (next: AcreageMode) => {
+    (kind: PanelKind) => {
       setChosen(true);
+      // A commercial site is a lawn quoted in acres: switching between the two keeps the measurement.
+      const next: AcreageMode = kind === "site" ? "lawn" : kind;
+      setQuoteSettings({ commercial: kind === "site" });
       if (next === mode) return;
       resetView();
       setMode(next);
@@ -1104,6 +1111,13 @@ export default function GolfCourseCalculator() {
   // (a straight line until they've loaded, or where they don't join two places).
   const mapRun = useMemo<MapRun | null>(() => {
     if (!run.open) return null;
+    // A portfolio's sites are numbered as listed, with no driving between them.
+    if (run.settings.portfolio)
+      return {
+        stops: run.stops.map((s, i) => ({ key: s.id, point: s.point, n: i + 1, loading: s.state === "waiting" || s.state === "measuring" })),
+        shop: null,
+        legs: [],
+      };
     const { plan, route, leg } = runPlan;
     const order = new Map(plan.stops.map((p, k) => [p.index, k + 1]));
     const shop = run.shop?.point ?? null;
@@ -1194,7 +1208,15 @@ export default function GolfCourseCalculator() {
         onSelect={handleSearchSelect}
         getBias={getSearchBias}
         lang={lang}
-        placeholder={run.open ? (run.pickingShop ? UI[lang].run.searchShop : UI[lang].run.searchStop) : UI[lang].searchAnyPlaceholder}
+        placeholder={
+          run.open
+            ? run.pickingShop
+              ? UI[lang].run.searchShop
+              : run.settings.portfolio
+                ? UI[lang].run.searchSite
+                : UI[lang].run.searchStop
+            : UI[lang].searchAnyPlaceholder
+        }
         clearOnSelect={run.open}
       />
 

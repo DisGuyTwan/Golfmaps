@@ -322,9 +322,10 @@ export function lawnEdges(totals: LawnTotals): { edgeM: number; hardEdgeM: numbe
  * strip. The cadastre gives streets lot numbers too, and a geocoded address
  * can land on the road; the rep is then told to tap the house itself.
  */
-export function lotLooksOdd(lot: Polygon | MultiPolygon): boolean {
+export function lotLooksOdd(lot: Polygon | MultiPolygon, big = false): boolean {
   const m2 = area({ type: "Feature", geometry: lot, properties: {} });
-  if (m2 > ODD_LOT_M2) return true;
+  // A commercial or municipal site is expected to be big: only a strip (a street) is odd there.
+  if (m2 > ODD_LOT_M2 && !big) return true;
   // Perimeter on a local flat projection: plenty for a lot-sized shape.
   const rings = lot.type === "Polygon" ? [lot.coordinates[0]] : lot.coordinates.map((p) => p[0]);
   const k = 111_320;

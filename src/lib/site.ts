@@ -215,7 +215,8 @@ export function lawnShape(geom: Polygon | MultiPolygon): ShapeStats {
   };
 }
 
-export type SiteKind = "lawn" | "golf" | "sod";
+/** A house lawn, a commercial or municipal site (grounds measured like a lawn, quoted in acres), a golf course or a sod farm. */
+export type SiteKind = "lawn" | "site" | "golf" | "sod";
 
 /** What a recommendation is based on. Terrain is null while loading or where there's no LiDAR. */
 export interface Site {
@@ -255,6 +256,7 @@ export interface Reason {
 /** A typical robot for each kind of site, to score the layout before choosing one: a 22 cm residential robot, a 40 in. Voyager. */
 const REFERENCE_PACE: Record<SiteKind, Pace> = {
   lawn: { stripeM: 0.19, speedMS: 0.35, turnS: 8, runtimeMin: 90 },
+  site: { stripeM: 0.92, speedMS: 2.5, turnS: 12, runtimeMin: 480 },
   golf: { stripeM: 0.92, speedMS: 2.5, turnS: 12, runtimeMin: 480 },
   sod: { stripeM: 0.92, speedMS: 2.5, turnS: 12, runtimeMin: 480 },
 };
@@ -281,7 +283,7 @@ export function complexity(site: Site, units = 1): Complexity {
   const zone = site.coverage && share(site.coverage, units);
   const o = zone && overhead(zone, REFERENCE_PACE[site.kind]);
 
-  if (site.kind === "lawn") add("parts", parts >= 5 ? 3 : parts >= 3 ? 2 : parts === 2 ? 1 : 0, parts);
+  if (site.kind === "lawn" || site.kind === "site") add("parts", parts >= 5 ? 3 : parts >= 3 ? 2 : parts === 2 ? 1 : 0, parts);
   else add("parts", parts >= 9 ? 3 : parts >= 4 ? 2 : parts >= 2 ? 1 : 0, parts);
   if (zone && o) {
     add("shapes", o.shape > 0.25 ? 2 : o.shape > 0.1 ? 1 : 0, o.shape);
