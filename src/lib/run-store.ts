@@ -185,7 +185,7 @@ export function stopSiteOf(stop: RunStop): StopSite | null {
   if (stop.state !== "done" || !stop.lawn) return null;
   const cached = siteCache.get(stop.lawn);
   if (cached && cached.terrain === stop.terrain) return cached.site;
-  const site = stopSite(stop.lawn, stop.terrain);
+  const site = stopSite(stop.lawn, stop.terrain, stopTotals(stop.lawn));
   siteCache.set(stop.lawn, { terrain: stop.terrain, site });
   return site;
 }

@@ -1,7 +1,8 @@
 /**
- * App-wide UI copy in English and Quebec French: tab bar, Acreage tab, search
- * and error page. The Incentives tab keeps its copy in incentives.ts and the
- * ROI tab in roi-copy.ts, next to their logic.
+ * App-wide UI copy in English and Quebec French: tab bar, Acreage tab and
+ * search. The Incentives tab keeps its copy in incentives.ts, the ROI tab in
+ * roi-copy.ts, next to their logic, and the error and 404 pages in
+ * i18n-pages.ts (so they don't each bundle all of this).
  */
 import type { Lang } from "./preferences";
 
@@ -364,14 +365,6 @@ const en = {
     reportSettings: (voyager: string, crew: string, speed: number, setup: number) =>
       `${voyager}, ${crew} trimming and blowing, ${speed} km/h on the road, ${setup} min to set up a stop.`,
   },
-
-  errorTitle: "Something went wrong.",
-  errorBody:
-    "This is usually a public data service, like the Overpass API, being unavailable. Retrying often works; if it doesn’t, wait a minute and try again.",
-  tryAgain: "Try again",
-  notFoundTitle: "Page not found.",
-  notFoundBody: "This address doesn’t exist. The tools are all on the home page.",
-  backHome: "Back to Calculator",
 };
 
 export type UiStrings = typeof en;
@@ -729,14 +722,6 @@ const fr: UiStrings = {
     reportSettings: (voyager: string, crew: string, speed: number, setup: number) =>
       `${voyager}, ${crew} aux bordures et au souffleur, ${speed} km/h sur la route, ${setup} min d’installation par arrêt.`,
   },
-
-  errorTitle: "Une erreur est survenue.",
-  errorBody:
-    "C’est habituellement un service public de données, comme l’API Overpass, qui est indisponible. Réessayer fonctionne souvent; sinon, attendez une minute et réessayez.",
-  tryAgain: "Réessayer",
-  notFoundTitle: "Page introuvable.",
-  notFoundBody: "Cette adresse n’existe pas. Tous les outils sont sur la page d’accueil.",
-  backHome: "Retour à Calculator",
 };
 
 export const UI: Record<Lang, UiStrings> = { en, fr };

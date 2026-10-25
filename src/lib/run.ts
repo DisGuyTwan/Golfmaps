@@ -68,8 +68,7 @@ export interface StopSite {
 }
 
 /** The lawn at a stop, measured like a residential lot (lawn.ts), with the terrain under it when there's LiDAR. */
-export function stopSite(lawn: LawnMeasurement, terrain: TerrainGrid | null): StopSite | null {
-  const totals = lawnTotals(lawn);
+export function stopSite(lawn: LawnMeasurement, terrain: TerrainGrid | null, totals = lawnTotals(lawn)): StopSite | null {
   const lawnM2 = totals.lawnSqft / SQ_M_TO_SQ_FT;
   if (!(lawnM2 > 0)) return null;
   const blocked = [...(lawn.mapped ?? []), ...(lawn.lidar ?? []), ...photoAreas(lawn).removed]
@@ -244,9 +243,25 @@ export interface RunPlan {
 }
 
 /**
+ * The best order through the stops at `ready` (indexes into `points`), from
+ * `shop` and back when there is one. Driving time is distance over one
+ * speed, so the order doesn't depend on the speed, the Voyager or the crew:
+ * worked out once, it serves every choice the panel compares.
+ */
+export function runOrder(points: [number, number][], ready: number[], shop: [number, number] | null): number[] {
+  const cost = (a: number, b: number) => distanceKm(points[ready[a]], points[ready[b]]);
+  const from = (j: number) => (shop ? distanceKm(shop, points[ready[j]]) : 0);
+  const to = (i: number) => (shop ? distanceKm(points[ready[i]], shop) : 0);
+  return bestOrder(ready.length, cost, from, to).map((k) => ready[k]);
+}
+
+/** Stops whose work is measured (null while measuring, or with no lawn: left out). */
+export const readyStops = (works: (StopWork | null)[]) => works.map((_, i) => i).filter((i) => works[i] !== null);
+
+/**
  * The day for stops at `points` ([lat, lon]) that have their work measured
- * (`works`, null while measuring or when there's no lawn: left out), in the
- * best order, from `shop` and back when there is one.
+ * (`works`), in the best order (`order`, from runOrder, or worked out here),
+ * from `shop` and back when there is one.
  */
 export function planRun(
   points: [number, number][],
@@ -254,12 +269,13 @@ export function planRun(
   lawnM2: number[],
   shop: [number, number] | null,
   s: RunSettings,
+  order?: number[],
 ): RunPlan {
-  const ready = points.map((_, i) => i).filter((i) => works[i] !== null);
+  const ready = readyStops(works);
   const cost = (a: number, b: number) => driveMin(points[ready[a]], points[ready[b]], s.speedKmh);
   const from = (j: number) => (shop ? driveMin(shop, points[ready[j]], s.speedKmh) : 0);
   const to = (i: number) => (shop ? driveMin(points[ready[i]], shop, s.speedKmh) : 0);
-  const best = bestOrder(ready.length, cost, from, to).map((k) => ready[k]);
+  const best = order ?? runOrder(points, ready, shop);
   const crew = Math.max(1, s.crew);
   let clock = s.startMin;
   let prev: [number, number] | null = shop;

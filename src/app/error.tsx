@@ -1,9 +1,9 @@
 "use client";
 import { useEffect } from "react";
-import { UI } from "@/lib/i18n";
+import { PAGE_COPY } from "@/lib/i18n-pages";
 import { useLang } from "@/lib/preferences";
 import { Icon } from "@/components/icons";
-import { ui } from "@/components/ui";
+import { ui } from "@/components/styles";
 import { reportError } from "@/lib/report-error";
 
 /**
@@ -19,7 +19,7 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const t = UI[useLang()];
+  const t = PAGE_COPY[useLang()];
 
   useEffect(() => {
     console.error(error);

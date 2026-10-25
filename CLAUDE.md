@@ -43,8 +43,10 @@ src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
   api/gas-price/  Montréal gas price from Statistics Canada (CDN 1 day)
   api/log/        client error reports → Vercel runtime logs
 src/components/
-  ui.tsx                     shared TabHeader, SectionTitle, Notice, Loader, Pop + style
-                             classes for every tab
+  ui.tsx                     shared TabHeader, SectionTitle, Notice, Loader, Pop,
+                             Segmented; re-exports the style classes
+  styles.ts                  the `ui.*` class strings and `delay()` alone (the
+                             error and 404 pages import these, not ui.tsx)
   icons.tsx                  the app's line-icon set (<Icon name>, ICON_PATHS)
   BootSplash.tsx             full-screen boot sequence (server-rendered, fades out
                              after hydration; styles and timeline in app/boot.css)
@@ -117,7 +119,9 @@ src/lib/
   gas.ts        StatCan gas price parsing (pure, tested)
   report-error.ts  sendBeacon to /api/log
   tabs.ts       goToTab() for in-app navigation
-  i18n.ts       EN/FR copy for the tab bar, Acreage tab, search, error page
+  i18n.ts       EN/FR copy for the tab bar, Acreage tab (grass run included), search
+  i18n-pages.ts EN/FR copy for the error and 404 pages, kept apart: Next loads
+                both boundaries with every page, and each would bundle i18n.ts
   preferences.ts       useLang / useTheme / setLang / setTheme (client)
   preferences-boot.ts  storage keys + inline script that applies them pre-paint
 src/types/      ambient module declarations for untyped deps
@@ -306,7 +310,10 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   public routing servers (OSRM's demo, FOSSGIS) aren't for commercial use, so
   don't call them from here. The order is the least driving (exact
   Held-Karp up to 12 stops, else nearest neighbour + 2-opt), from the shop
-  and back when there is one; time on site doesn't depend on it. The day
+  and back when there is one; time on site doesn't depend on it, and neither
+  does the speed, so `runOrder` is worked out once per change and shared by
+  every Voyager and crew choice (`useRunPlan` keeps the last plan for the
+  panel, map and PDF). The day
   warns past 8 h or past one charge's acres (`VOYAGER_PRESETS`). The run
   stays in `run-store` when closed; links carry `a=run` and its `r*` keys
   (stops as a polyline, names `|`-separated) and re-measure on open.
@@ -376,7 +383,9 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   `useTheme()` from `src/lib/preferences.ts`; never keep per-tab copies. English
   is the default; the server always renders English/light and the boot script in
   `preferences-boot.ts` applies a saved dark theme before paint. Any new
-  user-facing text needs both languages (incentives.ts, roi-copy.ts or i18n.ts).
+  user-facing text needs both languages (incentives.ts, roi-copy.ts, i18n.ts,
+  or i18n-pages.ts for the error and 404 pages, which must not import i18n.ts
+  or ui.tsx: that put three copies of the app's text in every first load).
 - **One look for every tab.** Reuse `src/components/ui.tsx`: `TabHeader` (the
   dark-green header with eyebrow, title, pitch line and Print / PDF button) and
   the `ui.*` class strings (buttons, h2, label, input, card, note, kpi,
@@ -431,5 +440,5 @@ npm install
 npm run dev      # http://localhost:3000
 npm run build    # type check + production build
 npm run lint
-npm test         # vitest: acreage pipeline, land cover, terrain, mower fit, quote, incentives, ROI model, share links
+npm test         # vitest: acreage pipeline, land cover, terrain, photos, detection, mower fit, coverage, quote, grass run, incentives, ROI model, share links
 ```

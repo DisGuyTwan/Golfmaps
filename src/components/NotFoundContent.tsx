@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { UI } from "@/lib/i18n";
+import { PAGE_COPY } from "@/lib/i18n-pages";
 import { useLang } from "@/lib/preferences";
 import { Icon } from "./icons";
-import { ui } from "./ui";
+import { ui } from "./styles";
 
 /** Body of the 404 page, in the visitor's chosen language. */
 export default function NotFoundContent() {
-  const t = UI[useLang()];
+  const t = PAGE_COPY[useLang()];
   return (
     <main className="flex h-[100dvh] w-full animate-fade-up flex-col items-center justify-center gap-4 bg-canvas p-8 text-center">
       <span className="grid h-14 w-14 place-items-center rounded-2xl bg-accent-soft text-accent">

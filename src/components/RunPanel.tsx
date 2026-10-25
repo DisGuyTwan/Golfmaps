@@ -8,6 +8,8 @@ import {
   RUN_VOYAGERS,
   overWorkday,
   planRun,
+  readyStops,
+  runOrder,
   stopWork,
   type RunPlan,
   type RunSettings,
@@ -24,6 +26,7 @@ import {
   setShop,
   stopSiteOf,
   useRun,
+  type RunPlace,
   type RunStop,
 } from "@/lib/run-store";
 import { Icon } from "./icons";
@@ -39,24 +42,36 @@ export interface RunPlanResult {
   byCrew: number[];
 }
 
+type PlanInputs = [RunStop[], RunPlace | null, RunSettings];
+/** The last plan, so the calculator (panel and map) and the PDF share one computation per change. */
+let lastPlan: { inputs: PlanInputs; result: RunPlanResult } | null = null;
+
+function computePlan(...inputs: PlanInputs): RunPlanResult {
+  if (lastPlan && inputs.every((v, i) => v === lastPlan!.inputs[i])) return lastPlan.result;
+  const [stops, shop, settings] = inputs;
+  const sites = stops.map(stopSiteOf);
+  const lawnM2 = sites.map((s) => s?.lawnM2 ?? 0);
+  const points = stops.map((s) => s.point);
+  const worksFor = (v: RunVoyager) => sites.map((s) => (s ? stopWork(s, v) : null));
+  const all = Object.fromEntries(RUN_VOYAGERS.map((v) => [v, worksFor(v)])) as Record<RunVoyager, (StopWork | null)[]>;
+  // Both Voyagers measure the same stops, so one order serves every choice.
+  const order = runOrder(points, readyStops(all[settings.voyager]), shop?.point ?? null);
+  const plan = (s: RunSettings) => planRun(points, all[s.voyager], lawnM2, shop?.point ?? null, s, order);
+  const result: RunPlanResult = {
+    plan: plan(settings),
+    works: all[settings.voyager],
+    lawnM2,
+    byVoyager: Object.fromEntries(RUN_VOYAGERS.map((v) => [v, plan({ ...settings, voyager: v }).totalMin])) as Record<RunVoyager, number>,
+    byCrew: CREW_SIZES.map((crew) => plan({ ...settings, crew }).totalMin),
+  };
+  lastPlan = { inputs, result };
+  return result;
+}
+
 /** The day for the run on screen, planned once per change for the panel, the map and the PDF. */
 export function useRunPlan(): RunPlanResult {
   const { stops, shop, settings } = useRun();
-  return useMemo(() => {
-    const sites = stops.map(stopSiteOf);
-    const lawnM2 = sites.map((s) => s?.lawnM2 ?? 0);
-    const points = stops.map((s) => s.point);
-    const worksFor = (v: RunVoyager) => sites.map((s) => (s ? stopWork(s, v) : null));
-    const all = Object.fromEntries(RUN_VOYAGERS.map((v) => [v, worksFor(v)])) as Record<RunVoyager, (StopWork | null)[]>;
-    const plan = (s: RunSettings) => planRun(points, all[s.voyager], lawnM2, shop?.point ?? null, s);
-    return {
-      plan: plan(settings),
-      works: all[settings.voyager],
-      lawnM2,
-      byVoyager: Object.fromEntries(RUN_VOYAGERS.map((v) => [v, plan({ ...settings, voyager: v }).totalMin])) as Record<RunVoyager, number>,
-      byCrew: CREW_SIZES.map((crew) => plan({ ...settings, crew }).totalMin),
-    };
-  }, [stops, shop, settings]);
+  return useMemo(() => computePlan(stops, shop, settings), [stops, shop, settings]);
 }
 
 /** "35 min", "1 h 05". */

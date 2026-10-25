@@ -13,6 +13,8 @@ import {
   encodeRun,
   overWorkday,
   planRun,
+  readyStops,
+  runOrder,
   stopSite,
   stopWork,
   type StopWork,
@@ -138,6 +140,14 @@ describe("the day", () => {
     const alone = planRun(points, works, [1000, 800, 900], null, { ...settings, crew: 1 });
     expect(alone.mowerWaitMin).toBeCloseTo(44 - 30, 6);
     expect(alone.totalMin).toBeGreaterThan(plan.totalMin);
+  });
+
+  it("works the order out once for every speed, Voyager and crew", () => {
+    const order = runOrder(points, readyStops(works), p(-1));
+    expect(order).toEqual([1, 0]);
+    for (const s of [settings, { ...settings, speedKmh: 60, crew: 1 }]) {
+      expect(planRun(points, works, [1000, 800, 900], p(-1), s, order)).toEqual(planRun(points, works, [1000, 800, 900], p(-1), s));
+    }
   });
 
   it("says what the order saves against the order entered", () => {

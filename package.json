@@ -2,7 +2,7 @@
   "name": "calculator",
   "version": "0.1.0",
   "private": true,
-  "description": "Calculator (calculator.prodig-e.com): robotic mower sales tools in English and French: golf course turf acreage from OpenStreetMap and satellite land cover, sod farm fields from Agriculture Canada's crop map, grant and tax savings on robotic mowers, and a Voyager vs zero-turn ROI calculator.",
+  "description": "Calculator (calculator.prodig-e.com): robotic mower sales tools in English and French: golf course, sod farm and lawn acreage from OpenStreetMap, aerial photos, LiDAR and land cover, a Kress mower fit, grass run planning, grant and tax savings on robotic mowers, and a Kress robot vs zero-turn ROI calculator.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

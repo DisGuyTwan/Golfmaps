@@ -23,7 +23,9 @@ photos), how long it's taking and what it found, while the map sweeps the area
 each one is reading and the results fill in as they answer. If the calculator guesses the wrong kind, **Change** picks
 it by hand. Whatever it measures, **Mower fit** rates how hard the property is
 for a robot (slope, trees, separate areas, narrow passages, obstacles) and
-recommends the Kress model that fits it best.
+recommends the Kress model that fits it best. For a crew with a cut-and-go
+Voyager, a **grass run** plans a day of several properties in the order with
+the least driving.
 
 No API keys. No Google Maps or Mapbox. Just free OpenStreetMap and Esri satellite
 tiles, the public Overpass API, Photon for search, ESA WorldCover and
@@ -368,7 +370,8 @@ KR804 38 kWh) and need refreshing over time.
   OpenStreetMap street tiles selectable from the layer control
 - The browser's built-in `fetch` for Overpass and Photon (no HTTP library)
 - **osmtogeojson** + **@turf/area** / **@turf/intersect** / **@turf/helpers**
-- **geotiff** (server only) to read WorldCover and the crop inventory, and
+- **geotiff** (server only) to read WorldCover, the crop inventory and the
+  LiDAR, **jpeg-js** (server only) to decode the aerial photos, and
   **d3-contour** to outline sod fields
 - **@turf/union** / **@turf/difference** to count mapped rough net and to take
   buildings and traced areas out of a lawn
@@ -413,6 +416,9 @@ Standard Next.js app, no extra configuration:
 - The LiDAR was flown between about 2015 and 2023 depending on the area:
   trees have grown since, and newer houses aren't in it (trace them out).
   Where there's no LiDAR, the mower fit says slope and trees weren't checked.
+- A grass run's driving times are estimates (straight line × 1.3 at an
+  average speed), not road routing, and its stops come from the Quebec
+  cadastre, so it plans Quebec properties only for now.
 - The public Overpass API is rate-limited and occasionally busy. The app races
   three mirrors (from the server and from the browser) and surfaces a friendly
   message if all of them are down.

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
-import { LIVE_LINGER_MS, liveSeconds, type LiveFinding, type LiveSource, type LiveStep } from "@/lib/live";
+import { liveSeconds, liveVisible, type LiveFinding, type LiveSource, type LiveStep } from "@/lib/live";
 import { Icon, type IconName } from "./icons";
 
 const SOURCE_ICON: Record<LiveSource, IconName> = {
@@ -52,9 +52,8 @@ export default function LiveSteps({ lang, steps }: { lang: Lang; steps: LiveStep
   const t = UI[lang].live;
   const [now, setNow] = useState(0);
   const active = steps.some((s) => s.state === "active");
-  const lastEnded = Math.max(0, ...steps.map((s) => s.ended ?? 0));
   // Ticks while something loads (the seconds count up), then once more past the linger to hide.
-  const running = steps.length > 0 && (active || now < lastEnded + LIVE_LINGER_MS);
+  const running = liveVisible(steps, now);
   useEffect(() => {
     if (!running) return;
     const tick = () => setNow(Date.now());
