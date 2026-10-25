@@ -1,6 +1,7 @@
 import {
   OverpassHttpError,
   fetchFromMirrorsHedged,
+  isOverpassQuery,
   parseBBoxParam,
   serverTiming,
   type MirrorAttempt,
@@ -19,10 +20,14 @@ export const maxDuration = 60;
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
-  const bbox = parseBBoxParam(params.get("bbox"));
-  const kind: OverpassQuery = params.get("q") === "lawn" ? "lawn" : "golf";
+  const q = params.get("q");
+  const kind: OverpassQuery = isOverpassQuery(q) ? q : "golf";
+  const bbox = parseBBoxParam(params.get("bbox"), kind);
   if (!bbox) {
-    return Response.json({ error: "bbox must be south,west,north,east and at most 0.3° per side" }, { status: 400 });
+    return Response.json(
+      { error: `bbox must be south,west,north,east and at most ${kind === "streets" ? 0.05 : 0.3}° per side` },
+      { status: 400 },
+    );
   }
 
   const attempts: MirrorAttempt[] = [];

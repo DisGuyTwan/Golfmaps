@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -90,8 +90,8 @@ export interface MapRun {
   /** `n` is null for a stop left out of the day (no lot or no lawn there), shown grey. */
   stops: { key: number; point: [number, number]; n: number | null; loading: boolean }[];
   shop: [number, number] | null;
-  /** The route in order, [lat, lon], from the shop and back when there is one. */
-  route: [number, number][];
+  /** Each leg in the day's order, [lat, lon]: along the streets when the roads have it, else a straight line. */
+  legs: { path: [number, number][]; road: boolean }[];
 }
 
 // One icon per look, reused (a new icon each render would reset the marker).
@@ -319,8 +319,16 @@ export default function GolfMap({
 
       {ping && <Marker position={ping} icon={PING_ICON} interactive={false} keyboard={false} />}
 
-      {run && run.route.length > 1 && (
-        <Polyline positions={run.route} pathOptions={{ color: "#ffffff", weight: 3, opacity: 0.9, dashArray: "8 7", interactive: false }} />
+      {/* The route: each leg along the streets, a dark casing under a bright line; dashed where it's a straight line. */}
+      {run?.legs.map((leg, k) =>
+        leg.road ? (
+          <Fragment key={k}>
+            <Polyline positions={leg.path} pathOptions={{ color: "#0f3b20", weight: 7, opacity: 0.55, lineJoin: "round", interactive: false }} />
+            <Polyline positions={leg.path} pathOptions={{ color: "#4ade80", weight: 4, opacity: 0.95, lineJoin: "round", interactive: false }} />
+          </Fragment>
+        ) : (
+          <Polyline key={k} positions={leg.path} pathOptions={{ color: "#ffffff", weight: 3, opacity: 0.9, dashArray: "8 7", interactive: false }} />
+        ),
       )}
       {run?.stops.map((s) => (
         <Marker key={s.key} position={s.point} icon={runIcon(s.loading ? "loading" : s.n === null ? "off" : "stop", s.n)} interactive={false} keyboard={false} />

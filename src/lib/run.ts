@@ -10,9 +10,10 @@
  * 1,500 ft of edge an hour and about 60 obstacles (trees) an hour, a backpack
  * blower 25,000 sq ft an hour over a 3 ft strip along the hard edges. Mowing
  * is the mower fit's full-mow time for the Voyager (coverage.ts: stripes,
- * turns, edges, trees, driving on the lot). Driving is the straight line
- * between stops × ROAD_FACTOR at an average speed: public routing servers
- * aren't for commercial use, and a run's legs are short.
+ * turns, edges, trees, driving on the lot). Driving is the fastest route on
+ * OpenStreetMap's roads (roads.ts) once they've loaded, given as a DriveFn;
+ * until then, or where a stop has no road, the straight line × ROAD_FACTOR
+ * at an average speed.
  * Pure, so the timing and the routing are tested without a browser.
  */
 import { lawnEdges, lawnTotals, photoAreas, SQ_M_TO_SQ_FT, type LawnMeasurement } from "./lawn";
@@ -118,6 +119,17 @@ export function distanceKm([lat0, lon0]: [number, number], [lat1, lon1]: [number
 /** Minutes of driving between two points, by road, at an average speed. */
 export function driveMin(a: [number, number], b: [number, number], speedKmh: number): number {
   return speedKmh > 0 ? ((distanceKm(a, b) * ROAD_FACTOR) / speedKmh) * 60 : 0;
+}
+
+/** The shop, among the run's places (stops are their indexes). */
+export const SHOP = -1;
+/** Minutes of driving from one of the run's places to another (a stop's index, or SHOP). */
+export type DriveFn = (from: number, to: number) => number;
+
+/** Driving estimated from the straight line (driveMin): before the roads load, or where a stop has none. */
+export function straightDrive(points: [number, number][], shop: [number, number] | null, speedKmh: number): DriveFn {
+  const at = (i: number) => (i === SHOP ? shop! : points[i]);
+  return (a, b) => driveMin(at(a), at(b), speedKmh);
 }
 
 /** Length of a route through `order` (cost between stops, from and to the shop: 0 without one). */
@@ -243,15 +255,15 @@ export interface RunPlan {
 }
 
 /**
- * The best order through the stops at `ready` (indexes into `points`), from
- * `shop` and back when there is one. Driving time is distance over one
- * speed, so the order doesn't depend on the speed, the Voyager or the crew:
- * worked out once, it serves every choice the panel compares.
+ * The best order through the stops at `ready` (stop indexes), from the shop
+ * and back when there is one, for the driving `drive` gives. It doesn't
+ * depend on the Voyager or the crew: worked out once, it serves every choice
+ * the panel compares.
  */
-export function runOrder(points: [number, number][], ready: number[], shop: [number, number] | null): number[] {
-  const cost = (a: number, b: number) => distanceKm(points[ready[a]], points[ready[b]]);
-  const from = (j: number) => (shop ? distanceKm(shop, points[ready[j]]) : 0);
-  const to = (i: number) => (shop ? distanceKm(points[ready[i]], shop) : 0);
+export function runOrder(ready: number[], hasShop: boolean, drive: DriveFn): number[] {
+  const cost = (a: number, b: number) => drive(ready[a], ready[b]);
+  const from = (j: number) => (hasShop ? drive(SHOP, ready[j]) : 0);
+  const to = (i: number) => (hasShop ? drive(ready[i], SHOP) : 0);
   return bestOrder(ready.length, cost, from, to).map((k) => ready[k]);
 }
 
@@ -260,8 +272,9 @@ export const readyStops = (works: (StopWork | null)[]) => works.map((_, i) => i)
 
 /**
  * The day for stops at `points` ([lat, lon]) that have their work measured
- * (`works`), in the best order (`order`, from runOrder, or worked out here),
- * from `shop` and back when there is one.
+ * (`works`), from `shop` and back when there is one, driving as `drive` says
+ * (the roads, else the straight line at the set speed), in the best order
+ * (`order`, from runOrder, or worked out here).
  */
 export function planRun(
   points: [number, number][],
@@ -269,27 +282,27 @@ export function planRun(
   lawnM2: number[],
   shop: [number, number] | null,
   s: RunSettings,
-  order?: number[],
+  { order, drive = straightDrive(points, shop, s.speedKmh) }: { order?: number[]; drive?: DriveFn } = {},
 ): RunPlan {
   const ready = readyStops(works);
-  const cost = (a: number, b: number) => driveMin(points[ready[a]], points[ready[b]], s.speedKmh);
-  const from = (j: number) => (shop ? driveMin(shop, points[ready[j]], s.speedKmh) : 0);
-  const to = (i: number) => (shop ? driveMin(points[ready[i]], shop, s.speedKmh) : 0);
-  const best = order ?? runOrder(points, ready, shop);
+  const cost = (a: number, b: number) => drive(ready[a], ready[b]);
+  const from = (j: number) => (shop ? drive(SHOP, ready[j]) : 0);
+  const to = (i: number) => (shop ? drive(ready[i], SHOP) : 0);
+  const best = order ?? runOrder(ready, shop !== null, drive);
   const crew = Math.max(1, s.crew);
   let clock = s.startMin;
-  let prev: [number, number] | null = shop;
+  let prev: number | null = shop ? SHOP : null;
   const stops: PlannedStop[] = best.map((index) => {
     const w = works[index]!;
-    const drive = prev ? driveMin(prev, points[index], s.speedKmh) : 0;
+    const driven = prev === null ? 0 : drive(prev, index);
     const crewMin = (w.trimMin + w.blowMin) / crew;
-    const arriveMin = clock + drive;
+    const arriveMin = clock + driven;
     const leaveMin = arriveMin + s.setupMin + Math.max(w.mowMin, crewMin);
     clock = leaveMin;
-    prev = points[index];
+    prev = index;
     return {
       index,
-      driveMin: drive,
+      driveMin: driven,
       arriveMin,
       leaveMin,
       mowMin: w.mowMin,
@@ -298,7 +311,7 @@ export function planRun(
       mowerWaitMin: Math.max(0, crewMin - w.mowMin),
     };
   });
-  const returnMin = shop && prev ? driveMin(prev, shop, s.speedKmh) : 0;
+  const returnMin = shop && prev !== null && prev !== SHOP ? drive(prev, SHOP) : 0;
   const sum = (f: (p: PlannedStop) => number) => stops.reduce((t, p) => t + f(p), 0);
   const driveTotal = sum((p) => p.driveMin) + returnMin;
   const entered = routeCost(
@@ -378,4 +391,25 @@ export function decodeRun(params: URLSearchParams): RunLink | null {
       startMin: Number.isFinite(h) && Number.isFinite(m) && params.has("rt") ? Math.min(23 * 60 + 59, Math.max(0, h * 60 + m)) : d.startMin,
     },
   };
+}
+
+/** Google Maps takes an origin, a destination and up to this many stops between in one link. */
+const DIRECTIONS_WAYPOINTS = 9;
+
+/**
+ * Turn-by-turn directions for the crew: Google Maps links through the places
+ * in the run's order ([lat, lon], the shop first and last when there is
+ * one), several when there are more stops than one link takes (each part
+ * starts where the last ended). A link out, not an API: nothing is fetched.
+ */
+export function directionsLinks(route: [number, number][]): string[] {
+  const at = ([lat, lon]: [number, number]) => `${lat.toFixed(6)},${lon.toFixed(6)}`;
+  const links: string[] = [];
+  for (let first = 0; first < route.length - 1; first += DIRECTIONS_WAYPOINTS + 1) {
+    const part = route.slice(first, first + DIRECTIONS_WAYPOINTS + 2);
+    const params = new URLSearchParams({ api: "1", origin: at(part[0]), destination: at(part[part.length - 1]), travelmode: "driving" });
+    if (part.length > 2) params.set("waypoints", part.slice(1, -1).map(at).join("|"));
+    links.push(`https://www.google.com/maps/dir/?${params}`);
+  }
+  return links;
 }

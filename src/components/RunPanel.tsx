@@ -3,14 +3,19 @@
 import { useMemo, useState } from "react";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { formatSqft, SQ_M_TO_SQ_FT } from "@/lib/lawn";
+import type { RoadLeg } from "@/lib/roads";
 import {
   CREW_SIZES,
   RUN_VOYAGERS,
+  SHOP,
+  directionsLinks,
   overWorkday,
   planRun,
   readyStops,
   runOrder,
   stopWork,
+  straightDrive,
+  type DriveFn,
   type RunPlan,
   type RunSettings,
   type RunVoyager,
@@ -19,7 +24,9 @@ import {
 import {
   clearRun,
   closeRun,
+  legKey,
   removeStop,
+  retryRoads,
   retryStop,
   setPickingShop,
   setRunSettings,
@@ -27,9 +34,11 @@ import {
   stopSiteOf,
   useRun,
   type RunPlace,
+  type RunRoads,
   type RunStop,
 } from "@/lib/run-store";
 import { Icon } from "./icons";
+import LiveSteps from "./LiveSteps";
 import { CopyLinkButton, Notice, Pop, Segmented, printAs, ui } from "./ui";
 
 export interface RunPlanResult {
@@ -40,29 +49,47 @@ export interface RunPlanResult {
   /** The day's length with each Voyager and each crew size, for the choices. */
   byVoyager: Record<RunVoyager, number>;
   byCrew: number[];
+  /** A leg on the roads between two places (stop indexes, or SHOP); null before the roads load, or where they don't join. */
+  leg: (from: number, to: number) => RoadLeg | null;
+  /** The places in the day's order, [lat, lon], from the shop and back when there is one. */
+  route: [number, number][];
+  /** Kilometres driven in the day, when every leg is on the roads. */
+  driveKm: number | null;
 }
 
-type PlanInputs = [RunStop[], RunPlace | null, RunSettings];
+type PlanInputs = [RunStop[], RunPlace | null, RunSettings, RunRoads];
 /** The last plan, so the calculator (panel and map) and the PDF share one computation per change. */
 let lastPlan: { inputs: PlanInputs; result: RunPlanResult } | null = null;
 
 function computePlan(...inputs: PlanInputs): RunPlanResult {
   if (lastPlan && inputs.every((v, i) => v === lastPlan!.inputs[i])) return lastPlan.result;
-  const [stops, shop, settings] = inputs;
+  const [stops, shop, settings, roads] = inputs;
   const sites = stops.map(stopSiteOf);
   const lawnM2 = sites.map((s) => s?.lawnM2 ?? 0);
   const points = stops.map((s) => s.point);
+  const shopPoint = shop?.point ?? null;
   const worksFor = (v: RunVoyager) => sites.map((s) => (s ? stopWork(s, v) : null));
   const all = Object.fromEntries(RUN_VOYAGERS.map((v) => [v, worksFor(v)])) as Record<RunVoyager, (StopWork | null)[]>;
+  // Driving on the roads once they've loaded; the straight line until then, and for a leg they don't join.
+  const at = (i: number) => (i === SHOP ? shopPoint! : points[i]);
+  const leg = (a: number, b: number) => (roads.state === "ready" ? (roads.legs.get(legKey(at(a), at(b))) ?? null) : null);
+  const straight = straightDrive(points, shopPoint, settings.speedKmh);
+  const drive: DriveFn = (a, b) => leg(a, b)?.minutes ?? straight(a, b);
   // Both Voyagers measure the same stops, so one order serves every choice.
-  const order = runOrder(points, readyStops(all[settings.voyager]), shop?.point ?? null);
-  const plan = (s: RunSettings) => planRun(points, all[s.voyager], lawnM2, shop?.point ?? null, s, order);
+  const order = runOrder(readyStops(all[settings.voyager]), shopPoint !== null, drive);
+  const plan = (s: RunSettings) => planRun(points, all[s.voyager], lawnM2, shopPoint, s, { order, drive });
+  const day = plan(settings);
+  const places = [...(shopPoint ? [SHOP] : []), ...day.stops.map((p) => p.index), ...(shopPoint && day.stops.length ? [SHOP] : [])];
+  const legs = places.slice(1).map((b, k) => leg(places[k], b));
   const result: RunPlanResult = {
-    plan: plan(settings),
+    plan: day,
     works: all[settings.voyager],
     lawnM2,
     byVoyager: Object.fromEntries(RUN_VOYAGERS.map((v) => [v, plan({ ...settings, voyager: v }).totalMin])) as Record<RunVoyager, number>,
     byCrew: CREW_SIZES.map((crew) => plan({ ...settings, crew }).totalMin),
+    leg,
+    route: places.map(at),
+    driveKm: legs.length && legs.every(Boolean) ? legs.reduce((t, l) => t + l!.km, 0) : null,
   };
   lastPlan = { inputs, result };
   return result;
@@ -70,8 +97,19 @@ function computePlan(...inputs: PlanInputs): RunPlanResult {
 
 /** The day for the run on screen, planned once per change for the panel, the map and the PDF. */
 export function useRunPlan(): RunPlanResult {
-  const { stops, shop, settings } = useRun();
-  return useMemo(() => computePlan(stops, shop, settings), [stops, shop, settings]);
+  const { stops, shop, settings, roads } = useRun();
+  return useMemo(() => computePlan(stops, shop, settings, roads), [stops, shop, settings, roads]);
+}
+
+/** Kilometres, one decimal: "2.1" / "2,1". */
+export const formatKm = (km: number, lang: Lang) => km.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+
+/** "4 min drive · 2.1 km via Rue X, Boul. Y": a leg as the crew drives it. */
+export function legLine(minutes: number, leg: RoadLeg | null, lang: Lang): string {
+  const r = UI[lang].run;
+  return [r.driveTo(formatDuration(minutes)), leg && `${formatKm(leg.km, lang)} km`, leg?.via.length ? r.via(leg.via.join(", ")) : null]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 /** "35 min", "1 h 05". */
@@ -155,7 +193,7 @@ function Loading({ stop, lang }: { stop: RunStop; lang: Lang }) {
 export default function RunPanel({
   lang,
   notice,
-  planned: { plan, works, lawnM2, byVoyager, byCrew },
+  planned: { plan, works, lawnM2, byVoyager, byCrew, leg, route, driveKm },
   getShareUrl,
 }: {
   lang: Lang;
@@ -174,6 +212,10 @@ export default function RunPanel({
   const others = run.stops.filter((_, i) => !position.has(i));
   const saved = plan.enteredDriveMin - plan.driveMin;
   const fitNote = (n: string) => t.fitNote[n as keyof typeof t.fitNote] ?? n;
+  // The set speed only counts where the roads didn't load: then it's asked, and why.
+  const straightLine = run.roads.state === "failed" || run.roads.state === "tooFar";
+  const lastStop = plan.stops.at(-1)?.index;
+  const directions = plan.stops.length ? directionsLinks(route) : [];
 
   return (
     <div
@@ -257,7 +299,7 @@ export default function RunPanel({
             onChange={(crew) => setRunSettings({ crew })}
           />
         </div>
-        <div className="grid grid-cols-[1.3fr_1fr_1fr] items-end gap-2">
+        <div className={`grid ${straightLine ? "grid-cols-[1.3fr_1fr_1fr]" : "grid-cols-2"} items-end gap-2`}>
           <label className="space-y-1">
             <span className="block text-xs font-semibold text-ink-2">{r.startTime}</span>
             <input
@@ -272,7 +314,9 @@ export default function RunPanel({
               className={`${ui.input} py-1.5 text-sm`}
             />
           </label>
-          <SettingInput label={r.speed} value={s.speedKmh} min={5} max={100} onChange={(speedKmh) => setRunSettings({ speedKmh })} />
+          {straightLine && (
+            <SettingInput label={r.speed} value={s.speedKmh} min={5} max={100} onChange={(speedKmh) => setRunSettings({ speedKmh })} />
+          )}
           <SettingInput label={r.setup} value={s.setupMin} min={0} max={60} onChange={(setupMin) => setRunSettings({ setupMin })} />
         </div>
 
@@ -287,7 +331,7 @@ export default function RunPanel({
             <ul className="space-y-0.5 text-[11px]">
               <li className="flex items-center gap-1">
                 <Icon name="truck" className="h-3 w-3" />
-                {r.drive(formatDuration(plan.driveMin))}
+                {driveKm !== null ? r.driveKm(formatDuration(plan.driveMin), formatKm(driveKm, lang)) : r.drive(formatDuration(plan.driveMin))}
                 {saved >= 1 && ` (${r.saves(formatDuration(saved))})`}
               </li>
               <li className="flex items-center gap-1">
@@ -309,6 +353,18 @@ export default function RunPanel({
         )}
         {plan.acres > plan.chargeAcres && <Notice tone="warn">{r.overBattery(plan.chargeAcres)}</Notice>}
         {overWorkday(plan) && <Notice tone="warn">{r.overDay}</Notice>}
+        {/* The roads between the stops, loading live like a measurement. */}
+        <LiveSteps lang={lang} steps={run.roads.live} />
+        {straightLine && (
+          <Notice tone="warn">
+            {run.roads.state === "tooFar" ? r.roadsTooFar : r.roadsFailed}
+            {run.roads.state === "failed" && (
+              <button onClick={retryRoads} className="ml-1.5 font-semibold underline underline-offset-2">
+                {r.retryRoads}
+              </button>
+            )}
+          </Notice>
+        )}
 
         {/* The stops: in the run's order, then those still loading or that failed. */}
         {run.stops.length > 0 && (
@@ -321,9 +377,9 @@ export default function RunPanel({
                 return (
                   <li key={stop.id} className="animate-fade-in rounded-lg border border-line px-2.5 py-2">
                     {p.driveMin >= 0.5 && (
-                      <div className="mb-1 flex items-center gap-1 text-[11px] text-faint">
-                        <Icon name="truck" className="h-3 w-3" />
-                        {r.driveTo(formatDuration(p.driveMin))}
+                      <div className="mb-1 flex items-start gap-1 text-[11px] text-faint">
+                        <Icon name="truck" className="mt-px h-3 w-3 shrink-0" />
+                        {legLine(p.driveMin, leg(k ? plan.stops[k - 1].index : SHOP, p.index), lang)}
                       </div>
                     )}
                     <div className="flex items-start gap-2">
@@ -395,15 +451,33 @@ export default function RunPanel({
                 </li>
               ))}
             </ol>
-            {run.shop && plan.stops.length > 0 && (
-              <div className="flex items-center gap-1 px-1 text-[11px] text-faint">
-                <Icon name="home" className="h-3 w-3" />
-                {r.backToShop(formatDuration(plan.returnMin))}
+            {run.shop && lastStop !== undefined && (
+              <div className="flex items-start gap-1 px-1 text-[11px] text-faint">
+                <Icon name="home" className="mt-px h-3 w-3 shrink-0" />
+                {r.backToShop(legLine(plan.returnMin, leg(lastStop, SHOP), lang))}
               </div>
             )}
           </div>
         )}
 
+        {/* Turn-by-turn for the crew: the run's order, opened in Google Maps (a link out, nothing fetched). */}
+        {directions.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {directions.map((href, k) => (
+              <a
+                key={href}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`${ui.btnSecondary} grow print:hidden`}
+              >
+                <Icon name="route" />
+                {directions.length > 1 ? r.directionsPart(k + 1, directions.length) : r.directions}
+                <Icon name="external" className="h-3.5 w-3.5" />
+              </a>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={!plan.stops.length} onClick={() => printAs(`Calculator - ${r.title}`)} className={`${ui.btnPrimary} flex-1`}>
             <Icon name="file" />

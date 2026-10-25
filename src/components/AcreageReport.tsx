@@ -6,11 +6,11 @@ import { useLang } from "@/lib/preferences";
 import { QUOTE_CATEGORIES, acresForQuote, categoryAcres, lawnQuoteSqft, quoteBreakdown, satelliteAcres } from "@/lib/quote";
 import { formatSqft, lawnTotals } from "@/lib/lawn";
 import { useCourseName, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
-import { overWorkday } from "@/lib/run";
+import { SHOP, overWorkday } from "@/lib/run";
 import { useRun } from "@/lib/run-store";
 import type { SodField } from "@/lib/types";
 import MowerFit from "./MowerFit";
-import { formatClock, formatDuration, formatLawn, stopName, useRunPlan } from "./RunPanel";
+import { formatClock, formatDuration, formatKm, formatLawn, legLine, stopName, useRunPlan } from "./RunPanel";
 import { TabHeader, ui } from "./ui";
 
 /** Measured vs counted table: one row per line, "–" when it isn't counted. */
@@ -269,7 +269,7 @@ function RunReport() {
   const t = UI[lang];
   const r = t.run;
   const run = useRun();
-  const { plan, works, lawnM2 } = useRunPlan();
+  const { plan, works, lawnM2, leg, driveKm } = useRunPlan();
   const s = run.settings;
   const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
   const saved = plan.enteredDriveMin - plan.driveMin;
@@ -307,7 +307,9 @@ function RunReport() {
             </div>
             <p className="text-xs text-ink-2">
               {[
-                `${r.drive(formatDuration(plan.driveMin))}${saved >= 1 ? ` (${r.saves(formatDuration(saved))})` : ""}`,
+                `${driveKm !== null ? r.driveKm(formatDuration(plan.driveMin), formatKm(driveKm, lang)) : r.drive(formatDuration(plan.driveMin))}${
+                  saved >= 1 ? ` (${r.saves(formatDuration(saved))})` : ""
+                }`,
                 r.onSite(formatDuration(plan.onSiteMin)),
                 r.waits(formatDuration(plan.crewWaitMin), formatDuration(plan.mowerWaitMin)),
                 r.battery(formatAcres(plan.acres, lang), plan.chargeAcres),
@@ -335,6 +337,9 @@ function RunReport() {
                       <td className="px-2 py-1">
                         {stopName(stop, lang)}
                         {(!w.fits || w.notes.length > 0) && <span className="text-muted"> ({r.voyagerCheck})</span>}
+                        {p.driveMin >= 0.5 && (
+                          <span className="block text-[10px] text-muted">{legLine(p.driveMin, leg(k ? plan.stops[k - 1].index : SHOP, p.index), lang)}</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{formatLawn(lawnM2[p.index], lang)}</td>
                       <td className={`whitespace-nowrap px-2 py-1 text-right tabular-nums ${crewLonger ? "" : "font-bold"}`}>{formatDuration(p.mowMin)}</td>
@@ -346,7 +351,9 @@ function RunReport() {
                 })}
               </tbody>
             </table>
-            {run.shop && <p className="text-xs text-ink-2">{r.backToShop(formatDuration(plan.returnMin))}</p>}
+            {run.shop && (
+              <p className="text-xs text-ink-2">{r.backToShop(legLine(plan.returnMin, leg(plan.stops[plan.stops.length - 1].index, SHOP), lang))}</p>
+            )}
 
             <div className={`${ui.note} space-y-1`}>
               {plan.acres > plan.chargeAcres && <p>{r.overBattery(plan.chargeAcres)}</p>}

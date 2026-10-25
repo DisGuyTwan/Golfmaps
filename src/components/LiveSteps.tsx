@@ -12,6 +12,7 @@ const SOURCE_ICON: Record<LiveSource, IconName> = {
   lidar: "layers",
   photos: "camera",
   satellite: "compass",
+  roads: "road",
 };
 
 /** What a source found, in words. */
@@ -34,6 +35,8 @@ function finding(source: LiveSource, found: LiveFinding | null, lang: Lang): str
       return t.surfaces(found.pools, found.paved);
     case "grass":
       return t.grass(formatAcres(found.acres, lang));
+    case "roads":
+      return t.roads(found.places);
     case "none":
       return source === "lot" ? t.noLot : t.none;
     default:

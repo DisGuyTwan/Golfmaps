@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DIRECT_AFTER_MS, OverpassHttpError, fetchFairways, fetchFromMirrorsHedged, type MirrorAttempt } from "./overpass";
+import { DIRECT_AFTER_MS, OverpassHttpError, fetchFairways, fetchFromMirrorsHedged, parseBBoxParam, type MirrorAttempt } from "./overpass";
 
 const bbox = { south: 46.3, west: -72.6, north: 46.31, east: -72.59 };
 const endpoints = ["https://a.test", "https://b.test", "https://c.test"];
@@ -150,5 +150,30 @@ describe("lawn query", () => {
     expect(bodies[0]).toContain('way["building"]');
     expect(bodies[0]).toContain('way["leisure"="swimming_pool"]');
     expect(bodies[0]).not.toContain('"golf"');
+  });
+});
+
+describe("grass run road queries", () => {
+  const bodyFor = async (kind: "roads" | "streets") => {
+    const bodies: string[] = [];
+    vi.stubGlobal("fetch", (_url: string, init: RequestInit) => {
+      bodies.push(decodeURIComponent(String(init.body)));
+      return Promise.resolve(new Response("{}"));
+    });
+    await fetchFromMirrorsHedged(bbox, { endpoints: [endpoints[0]], kind });
+    return bodies[0];
+  };
+
+  it("asks for the main roads across a run, and every street around a stop", async () => {
+    const roads = await bodyFor("roads");
+    expect(roads).toContain("tertiary|unclassified)(_link)?$");
+    expect(roads).not.toContain("residential");
+    expect(await bodyFor("streets")).toContain("|residential|living_street|road)(_link)?$");
+  });
+
+  it("keeps every-street boxes to a neighbourhood", () => {
+    expect(parseBBoxParam("45.4,-73.4,45.44,-73.36", "streets")).not.toBeNull();
+    expect(parseBBoxParam("45.4,-73.4,45.5,-73.3", "streets")).toBeNull();
+    expect(parseBBoxParam("45.4,-73.4,45.5,-73.3", "roads")).not.toBeNull();
   });
 });

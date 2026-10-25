@@ -46,7 +46,7 @@ import { fetchSurface, fitsSurface, photoTurf, surfaceAreas, surfaceCover, surfa
 import { NO_SLOPE, TERRAIN_MAX_SPAN_DEG, fetchTerrain, lidarBuildings, terrainStats, type TerrainGrid } from "@/lib/terrain";
 import { beginStep, endStep, type LiveFinding, type LiveSource, type LiveStep } from "@/lib/live";
 import { encodeQuote, type AcreageMode } from "@/lib/quote";
-import { MAX_STOPS, decodeRun, encodeRun } from "@/lib/run";
+import { MAX_STOPS, SHOP, decodeRun, encodeRun } from "@/lib/run";
 import { addStop, getRun, openRun, setShop, stopTotals, useRun } from "@/lib/run-store";
 import {
   getLawn,
@@ -1087,24 +1087,34 @@ export default function GolfCourseCalculator() {
 
   const totals = useMemo(() => (lawn ? lawnTotals(lawn) : null), [lawn]);
 
-  // The areas being read right now, swept on the map (on a grass run, each stop's).
+  // The areas being read right now, swept on the map (on a grass run, each stop's and the roads').
   const scans = useMemo<LiveScan[]>(() => {
-    const steps = run.open ? run.stops.flatMap((stop) => stop.live.map((step) => ({ step, key: `${stop.id}-${step.source}` }))) : live.map((step) => ({ step, key: step.source }));
+    const steps = run.open
+      ? [
+          ...run.stops.flatMap((stop) => stop.live.map((step) => ({ step, key: `${stop.id}-${step.source}` }))),
+          ...run.roads.live.map((step) => ({ step, key: "run-roads" })),
+        ]
+      : live.map((step) => ({ step, key: step.source }));
     return steps
       .filter(({ step }) => step.state === "active" && step.area)
       .map(({ step, key }) => ({ key, bounds: [[step.area!.south, step.area!.west], [step.area!.north, step.area!.east]] }));
   }, [live, run]);
 
-  // A grass run on the map: each stop numbered in the run's order, the shop and the route.
+  // A grass run on the map: each stop numbered in the run's order, the shop, and each leg along the roads
+  // (a straight line until they've loaded, or where they don't join two places).
   const mapRun = useMemo<MapRun | null>(() => {
     if (!run.open) return null;
-    const order = new Map(runPlan.plan.stops.map((p, k) => [p.index, k + 1]));
-    const route = runPlan.plan.stops.map((p) => run.stops[p.index].point);
+    const { plan, route, leg } = runPlan;
+    const order = new Map(plan.stops.map((p, k) => [p.index, k + 1]));
     const shop = run.shop?.point ?? null;
+    const places = [...(shop ? [SHOP] : []), ...plan.stops.map((p) => p.index), ...(shop && plan.stops.length ? [SHOP] : [])];
     return {
       stops: run.stops.map((s, i) => ({ key: s.id, point: s.point, n: order.get(i) ?? null, loading: s.state === "waiting" || s.state === "measuring" })),
       shop,
-      route: shop && route.length ? [shop, ...route, shop] : route,
+      legs: places.slice(1).map((to, k) => {
+        const road = leg(places[k], to);
+        return road ? { path: road.path, road: true } : { path: [route[k], route[k + 1]], road: false };
+      }),
     };
   }, [run, runPlan]);
 

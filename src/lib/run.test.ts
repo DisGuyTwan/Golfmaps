@@ -15,6 +15,9 @@ import {
   planRun,
   readyStops,
   runOrder,
+  straightDrive,
+  directionsLinks,
+  type DriveFn,
   stopSite,
   stopWork,
   type StopWork,
@@ -143,11 +146,25 @@ describe("the day", () => {
   });
 
   it("works the order out once for every speed, Voyager and crew", () => {
-    const order = runOrder(points, readyStops(works), p(-1));
+    const order = runOrder(readyStops(works), true, straightDrive(points, p(-1), 1));
     expect(order).toEqual([1, 0]);
     for (const s of [settings, { ...settings, speedKmh: 60, crew: 1 }]) {
-      expect(planRun(points, works, [1000, 800, 900], p(-1), s, order)).toEqual(planRun(points, works, [1000, 800, 900], p(-1), s));
+      expect(planRun(points, works, [1000, 800, 900], p(-1), s, { order })).toEqual(planRun(points, works, [1000, 800, 900], p(-1), s));
     }
+  });
+
+  it("drives as the roads say once they've loaded, in the order they make best", () => {
+    // One-way streets: stop 0 to stop 1 is a long way round, stop 1 to stop 0 isn't, so the run goes to 1 first.
+    const roadMin: Record<string, number> = { "-1>0": 5, "0>-1": 5, "-1>1": 6, "1>-1": 6, "0>1": 30, "1>0": 12 };
+    const drive: DriveFn = (a, b) => roadMin[`${a}>${b}`];
+    const plan = planRun(points, works, [1000, 800, 900], p(-1), settings, { drive });
+    expect(plan.stops.map((s) => [s.index, s.driveMin])).toEqual([
+      [1, 6],
+      [0, 12],
+    ]);
+    expect(plan.returnMin).toBe(5);
+    expect(plan.driveMin).toBe(23);
+    expect(plan.enteredDriveMin).toBe(41);
   });
 
   it("says what the order saves against the order entered", () => {
@@ -179,5 +196,28 @@ describe("share link", () => {
     expect(Object.values(params).filter(Boolean)).toEqual(["run"]);
     expect(decodeRun(new URLSearchParams("a=lawn"))).toBeNull();
     expect(decodeRun(new URLSearchParams("a=run&rc=9&rk=abc"))?.settings).toEqual({ ...DEFAULT_RUN, crew: 3 });
+  });
+});
+
+describe("directions for the crew", () => {
+  const route = Array.from({ length: 14 }, (_, i): [number, number] => [45.4 + i / 1000, -73.3]);
+
+  it("opens the run in Google Maps, the stops in order between the start and the end", () => {
+    const [link] = directionsLinks(route.slice(0, 4));
+    const url = new URL(link);
+    expect(url.origin + url.pathname).toBe("https://www.google.com/maps/dir/");
+    expect(url.searchParams.get("origin")).toBe("45.400000,-73.300000");
+    expect(url.searchParams.get("waypoints")).toBe("45.401000,-73.300000|45.402000,-73.300000");
+    expect(url.searchParams.get("destination")).toBe("45.403000,-73.300000");
+    expect(url.searchParams.get("travelmode")).toBe("driving");
+  });
+
+  it("splits a long run in parts of up to 9 stops between, each starting where the last ended", () => {
+    const links = directionsLinks(route).map((l) => new URL(l).searchParams);
+    expect(links).toHaveLength(2);
+    expect(links[0].get("waypoints")!.split("|")).toHaveLength(9);
+    expect(links[1].get("origin")).toBe(links[0].get("destination"));
+    expect(links[1].get("destination")).toBe("45.413000,-73.300000");
+    expect(directionsLinks(route.slice(0, 1))).toEqual([]);
   });
 });

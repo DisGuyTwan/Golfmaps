@@ -1,17 +1,17 @@
 /**
  * What the Acreage tab is reading right now, source by source: the cadastre
  * lot, the crop map, OpenStreetMap, the LiDAR, the aerial photos and the
- * satellite land cover. The panel lists them as they load (what's being read,
+ * satellite land cover (and, for a grass run, the roads between the stops). The panel lists them as they load (what's being read,
  * for how long, what it found) and the map sweeps the area each one covers,
  * so a measurement loads live instead of behind a spinner. Pure, so the
  * bookkeeping is tested without a browser.
  */
 import type { BBox } from "./types";
 
-export type LiveSource = "lot" | "crop" | "osm" | "lidar" | "photos" | "satellite";
+export type LiveSource = "lot" | "crop" | "osm" | "lidar" | "photos" | "satellite" | "roads";
 
 /** The order sources are listed in: roughly the order they answer. */
-export const LIVE_ORDER: readonly LiveSource[] = ["lot", "crop", "osm", "lidar", "photos", "satellite"];
+export const LIVE_ORDER: readonly LiveSource[] = ["lot", "crop", "osm", "lidar", "photos", "satellite", "roads"];
 
 /** What a source found, worded by the panel in the rep's language. */
 export type LiveFinding =
@@ -23,6 +23,7 @@ export type LiveFinding =
   | { kind: "fields"; n: number }
   | { kind: "surfaces"; pools: number; paved: number }
   | { kind: "grass"; acres: number }
+  | { kind: "roads"; places: number }
   | { kind: "read" }
   | { kind: "none" };
 

@@ -21,8 +21,13 @@ const OVERPASS_ENDPOINTS = [
  * only have the `leisure=golf_course` outline mapped, so querying for fairways
  * alone returns nothing even when a course is clearly present.
  */
-/** What a lookup is for: a golf course, or the hard surfaces on a residential lot. */
-export type OverpassQuery = "golf" | "lawn";
+/**
+ * What a lookup is for: a golf course, the hard surfaces on a residential
+ * lot, or a grass run's roads: the main roads across the run ("roads") and
+ * every street around a stop ("streets", a small box), routed in roads.ts.
+ */
+export type OverpassQuery = "golf" | "lawn" | "roads" | "streets";
+export const isOverpassQuery = (v: unknown): v is OverpassQuery => v === "golf" || v === "lawn" || v === "roads" || v === "streets";
 
 function buildFairwayQuery({ south, west, north, east }: BBox): string {
   const bbox = `${south},${west},${north},${east}`;
@@ -81,7 +86,25 @@ out body;
 out skel qt;`;
 }
 
+/**
+ * Roads for a grass run, as ways with their nodes. The main roads (down to
+ * unclassified, the rural connectors) span the whole run; every street is
+ * fetched only in a small box around each stop, which keeps a run across
+ * town to a few MB. Service roads, tracks and paths are left out.
+ */
+function buildRoadsQuery({ south, west, north, east }: BBox, streets: boolean): string {
+  const classes = streets
+    ? "motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|road"
+    : "motorway|trunk|primary|secondary|tertiary|unclassified";
+  return `[out:json][timeout:${streets ? 25 : 50}];
+way["highway"~"^(${classes})(_link)?$"](${south},${west},${north},${east});
+out body;
+>;
+out skel qt;`;
+}
+
 function buildQuery(kind: OverpassQuery, bbox: BBox): string {
+  if (kind === "roads" || kind === "streets") return buildRoadsQuery(bbox, kind === "streets");
   return kind === "lawn" ? buildLawnQuery(bbox) : buildFairwayQuery(bbox);
 }
 
@@ -93,8 +116,10 @@ export class OverpassHttpError extends Error {
   }
 }
 
-/** Largest scan box the cache route accepts (degrees per side), a whole course with margin. */
+/** Largest scan box the cache route accepts (degrees per side), a whole course with margin, or a run's main roads. */
 const MAX_BBOX_SPAN_DEG = 0.3;
+/** Largest box for every street (degrees per side): the neighbourhood around one stop. */
+export const MAX_STREETS_SPAN_DEG = 0.05;
 
 /**
  * "s,w,n,e" rounded to 5 decimals (≈ 1 m). Rounding makes the same course
@@ -104,15 +129,16 @@ export function bboxParam({ south, west, north, east }: BBox): string {
   return [south, west, north, east].map((v) => v.toFixed(5)).join(",");
 }
 
-/** Parses and validates a bbox parameter; null when malformed or too large. */
-export function parseBBoxParam(value: string | null): BBox | null {
+/** Parses and validates a bbox parameter; null when malformed or too large (for every street, MAX_STREETS_SPAN_DEG). */
+export function parseBBoxParam(value: string | null, kind: OverpassQuery = "golf"): BBox | null {
   if (!value) return null;
   const parts = value.split(",").map(Number);
   if (parts.length !== 4 || !parts.every(Number.isFinite)) return null;
   const [south, west, north, east] = parts;
   if (south >= north || west >= east) return null;
   if (south < -90 || north > 90 || west < -180 || east > 180) return null;
-  if (north - south > MAX_BBOX_SPAN_DEG || east - west > MAX_BBOX_SPAN_DEG) return null;
+  const max = kind === "streets" ? MAX_STREETS_SPAN_DEG : MAX_BBOX_SPAN_DEG;
+  if (north - south > max || east - west > max) return null;
   return { south, west, north, east };
 }
 
@@ -246,7 +272,7 @@ export const DIRECT_AFTER_MS = 1500;
 
 /**
  * Fetches the golf features for a scan box (or, with kind "lawn", what isn't
- * lawn on a residential lot). Asks this app's cache route first (/api/overpass:
+ * lawn on a residential lot; "roads" and "streets", a grass run's roads). Asks this app's cache route first (/api/overpass:
  * shared CDN cache, so a course measured once is instant). If it hasn't
  * started answering within DIRECT_AFTER_MS, or fails, the browser also asks
  * the mirrors directly, and the first answer wins. The route is left to

@@ -5,7 +5,9 @@ import { pointInGeometry } from "./landcover";
 import { lawnTotals, type LawnMeasurement, type LawnTotals } from "./lawn";
 import { beginStep, endStep, type LiveStep } from "./live";
 import { measureLot } from "./lot-lookups";
+import { bboxParam, fetchFairways } from "./overpass";
 import { reportError } from "./report-error";
+import { buildRoadGraph, roadBoxes, routeFrom, snapPlaces, type RoadGraph, type RoadLeg } from "./roads";
 import { DEFAULT_RUN, MAX_STOPS, stopSite, type RunLink, type RunSettings, type StopSite } from "./run";
 import type { TerrainGrid } from "./terrain";
 
@@ -13,7 +15,8 @@ import type { TerrainGrid } from "./terrain";
  * A grass run being planned on the Acreage tab, outside React so the panel,
  * the map and the PDF share it: the stops (each measured like a lawn, a few
  * at a time, with its own live list of what's loading), the shop the day
- * starts and ends at, and the run's settings.
+ * starts and ends at, the run's settings, and the roads between them
+ * (OpenStreetMap's, routed in roads.ts once the stops are measured).
  */
 
 export interface RunStop {
@@ -34,6 +37,19 @@ export interface RunPlace {
   label: string | null;
 }
 
+/** The roads between a run's places. */
+export interface RunRoads {
+  /**
+   * idle: fewer than two places; loading: reading or routing; ready: `legs`
+   * hold the routes; failed: the roads didn't load; tooFar: the run is spread
+   * wider than one road lookup. Without routes, driving is the straight line.
+   */
+  state: "idle" | "loading" | "ready" | "failed" | "tooFar";
+  /** Each leg on the roads by its two places (legKey), null where the roads don't join them. */
+  legs: Map<string, RoadLeg | null>;
+  live: LiveStep[];
+}
+
 interface RunState {
   open: boolean;
   stops: RunStop[];
@@ -41,9 +57,11 @@ interface RunState {
   settings: RunSettings;
   /** The next tap or search sets the shop rather than adding a stop. */
   pickingShop: boolean;
+  roads: RunRoads;
 }
 
-const EMPTY: RunState = { open: false, stops: [], shop: null, settings: DEFAULT_RUN, pickingShop: false };
+const NO_ROADS: RunRoads = { state: "idle", legs: new Map(), live: [] };
+const EMPTY: RunState = { open: false, stops: [], shop: null, settings: DEFAULT_RUN, pickingShop: false, roads: NO_ROADS };
 /** Stops measured at once: each asks OpenStreetMap, the LiDAR and the photos, and the Overpass mirrors limit each address. */
 const AT_ONCE = 2;
 
@@ -96,6 +114,7 @@ async function measure(stop: RunStop) {
     updateStop(id, { state: "failed" });
   }
   pump();
+  scheduleRoads();
 }
 
 /** Opens the run planner; with a share link's run, or the lawn on screen as the first stop. */
@@ -107,7 +126,9 @@ export function openRun(link?: RunLink | null, first?: { lawn: LawnMeasurement; 
       settings: link.settings,
       shop: link.shop,
       stops: link.stops.map(({ point, label }) => ({ id: nextId++, point, label, state: "waiting", lawn: null, terrain: null, live: [] })),
+      roads: NO_ROADS,
     });
+    routedKey = "";
     pump();
     return;
   }
@@ -119,6 +140,7 @@ export function openRun(link?: RunLink | null, first?: { lawn: LawnMeasurement; 
         { id: nextId++, point: first.lawn.pickPoint, label: first.label, state: "done", lawn: first.lawn, terrain: first.terrain, live: [] },
       ],
     });
+    scheduleRoads();
   }
 }
 
@@ -128,7 +150,9 @@ export function closeRun() {
 }
 
 export function clearRun() {
-  update({ stops: [], shop: null, pickingShop: false });
+  roadsRun++;
+  routedKey = "";
+  update({ stops: [], shop: null, pickingShop: false, roads: NO_ROADS });
 }
 
 /** The stop whose lot (or point, while it loads) is at a point. */
@@ -150,6 +174,7 @@ export function addStop(point: [number, number], label: string | null = null): "
 export function removeStop(id: number) {
   update({ stops: state.stops.filter((s) => s.id !== id) });
   pump();
+  scheduleRoads();
 }
 
 /** Tries a stop that failed again. */
@@ -160,6 +185,7 @@ export function retryStop(id: number) {
 
 export function setShop(shop: RunPlace | null) {
   update({ shop, pickingShop: false });
+  scheduleRoads();
 }
 
 export function setPickingShop(pickingShop: boolean) {
@@ -188,4 +214,108 @@ export function stopSiteOf(stop: RunStop): StopSite | null {
   const site = stopSite(stop.lawn, stop.terrain, stopTotals(stop.lawn));
   siteCache.set(stop.lawn, { terrain: stop.terrain, site });
   return site;
+}
+
+// ---- The roads between the places ----
+
+/** A leg's key: its two places, rounded like a share link (5 decimals). */
+export const legKey = (a: [number, number], b: [number, number]) =>
+  `${a[0].toFixed(5)},${a[1].toFixed(5)}>${b[0].toFixed(5)},${b[1].toFixed(5)}`;
+
+/** The places routed between: the shop and every stop measured. */
+const routedPlaces = (): [number, number][] => [
+  ...(state.shop ? [state.shop.point] : []),
+  ...state.stops.filter((s) => s.state === "done").map((s) => s.point),
+];
+
+/** Overpass answers by box, kept for the session (a box that failed is dropped, to try again). */
+const roadAnswers = new Map<string, Promise<unknown>>();
+/** Main-road boxes loaded so far: a run that grows within one is routed on it, not read again. */
+const roadBoxesRead: Parameters<typeof bboxParam>[0][] = [];
+const holds = (outer: Parameters<typeof bboxParam>[0], inner: Parameters<typeof bboxParam>[0]) =>
+  outer.south <= inner.south && outer.west <= inner.west && outer.north >= inner.north && outer.east >= inner.east;
+function roadAnswer(kind: "roads" | "streets", box: Parameters<typeof bboxParam>[0]): Promise<unknown> {
+  const key = `${kind}:${bboxParam(box)}`;
+  let answer = roadAnswers.get(key);
+  if (!answer) {
+    answer = fetchFairways(box, kind);
+    roadAnswers.set(key, answer);
+    answer.catch(() => roadAnswers.delete(key));
+  }
+  return answer;
+}
+
+/** The last graph built, by the boxes it came from. */
+let graph: { key: string; graph: RoadGraph } | null = null;
+/** Bumped by every new routing, so a late one never lands on a newer one. */
+let roadsRun = 0;
+let roadsTimer: ReturnType<typeof setTimeout> | undefined;
+/** Places routed last, so a change elsewhere (a name, a setting) doesn't route again. */
+let routedKey = "";
+
+/**
+ * Routes the run again a moment after its places change (stops measured,
+ * removed, the shop moved), once no stop is still being measured: the roads
+ * are read for the whole run at once, not again after each stop.
+ */
+function scheduleRoads() {
+  clearTimeout(roadsTimer);
+  if (state.stops.some((s) => s.state === "waiting" || s.state === "measuring")) return;
+  roadsTimer = setTimeout(() => void loadRoads(), 600);
+}
+
+const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+async function loadRoads() {
+  const places = routedPlaces();
+  const key = places.map((p) => legKey(p, p)).join("|");
+  if (key === routedKey && state.roads.state !== "failed") return;
+  routedKey = key;
+  const run = ++roadsRun;
+  if (places.length < 2) return update({ roads: NO_ROADS });
+  const boxes = roadBoxes(places);
+  if (!boxes.roads) return update({ roads: { state: "tooFar", legs: new Map(), live: [] } });
+  const needed = boxes.roads;
+  boxes.roads = roadBoxesRead.find((box) => holds(box, needed)) ?? needed;
+
+  const area = boxes.roads;
+  const live = beginStep([], "roads", area, Date.now());
+  update({ roads: { ...state.roads, state: "loading", live } });
+  const finish = (patch: Partial<RunRoads>, result: "done" | "failed", found: LiveStep["found"] = null) => {
+    if (run !== roadsRun) return;
+    update({ roads: { ...state.roads, ...patch, live: endStep(state.roads.live, "roads", result, found, Date.now()) } });
+  };
+  try {
+    // The main roads must load; a neighbourhood's streets that don't only leave its stops to the straight line.
+    const parts = [{ kind: "roads" as const, box: boxes.roads }, ...boxes.streets.map((box) => ({ kind: "streets" as const, box }))];
+    const graphKey = parts.map((p) => `${p.kind}:${bboxParam(p.box)}`).join("|");
+    if (graph?.key !== graphKey) {
+      const [main, ...streets] = await Promise.all(parts.map((p, i) => (i === 0 ? roadAnswer(p.kind, p.box) : roadAnswer(p.kind, p.box).catch(() => null))));
+      if (!roadBoxesRead.includes(boxes.roads)) roadBoxesRead.push(boxes.roads);
+      if (run !== roadsRun) return;
+      await pause();
+      graph = { key: graphKey, graph: buildRoadGraph(main, ...streets) };
+    }
+    const g = graph.graph;
+    const snapped = snapPlaces(g, places);
+    const legs = new Map<string, RoadLeg | null>();
+    for (let i = 0; i < places.length; i++) {
+      await pause(); // One place at a time, so the page stays responsive.
+      if (run !== roadsRun) return;
+      routeFrom(g, places, snapped, i).forEach((leg, j) => {
+        if (j !== i) legs.set(legKey(places[i], places[j]), leg);
+      });
+    }
+    finish({ state: "ready", legs }, "done", { kind: "roads", places: places.length });
+  } catch (err) {
+    reportError("run:roads", err);
+    routedKey = "";
+    finish({ state: "failed", legs: new Map() }, "failed");
+  }
+}
+
+/** Tries the roads again after they failed to load. */
+export function retryRoads() {
+  routedKey = "";
+  void loadRoads();
 }

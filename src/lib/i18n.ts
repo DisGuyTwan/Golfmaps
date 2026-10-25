@@ -48,7 +48,7 @@ const en = {
   live: {
     title: "Reading live",
     ready: "Read",
-    sources: { lot: "Cadastre lot", crop: "Crop map", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Aerial photos", satellite: "Satellite land cover" },
+    sources: { lot: "Cadastre lot", crop: "Crop map", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Aerial photos", satellite: "Satellite land cover", roads: "Road map" },
     reading: {
       lot: "Finding the lot under the point",
       crop: "Looking for sod fields",
@@ -56,6 +56,7 @@ const en = {
       lidar: "Slope, trees and roofs",
       photos: "Grass, trees, paving and water",
       satellite: "Grass, trees, built and water",
+      roads: "The roads between the stops",
     },
     failed: "Unavailable",
     seconds: (s: string) => `${s} s`,
@@ -72,6 +73,7 @@ const en = {
         ? "No pool or paving seen"
         : [pools ? (pools === 1 ? "1 pool" : `${pools} pools`) : "", paved ? (paved === 1 ? "1 paved area" : `${paved} paved areas`) : ""].filter(Boolean).join(", "),
     grass: (acres: string) => `${acres} ac of grass`,
+    roads: (n: number) => `Routes between ${n} places`,
     read: "Read",
     none: "No data here",
   },
@@ -334,6 +336,13 @@ const en = {
     day: "The day",
     dayLine: (from: string, to: string) => `${from} to ${to}`,
     drive: (d: string) => `Driving: ${d}`,
+    driveKm: (d: string, km: string) => `Driving: ${d}, ${km} km`,
+    via: (streets: string) => `via ${streets}`,
+    roadsFailed: "Couldn’t load the road map: driving is estimated from the straight line at the speed below.",
+    roadsTooFar: "The stops are spread too wide for one road map: driving is estimated from the straight line at the speed below.",
+    retryRoads: "Try the roads again",
+    directions: "Directions in Google Maps",
+    directionsPart: (k: number, n: number) => `Directions in Google Maps, part ${k} of ${n}`,
     saves: (d: string) => `${d} less than in the order added`,
     onSite: (d: string) => `On site: ${d}`,
     waits: (crew: string, mower: string) => `The crew waits ${crew} for the Voyager, the Voyager ${mower} for the crew`,
@@ -344,7 +353,7 @@ const en = {
     mow: (d: string) => `Mow ${d}`,
     trimBlow: (d: string) => `Trim and blow ${d}`,
     driveTo: (d: string) => `${d} drive`,
-    backToShop: (d: string) => `Back to the shop: ${d} drive`,
+    backToShop: (line: string) => `Back to the shop: ${line}`,
     waiting: "Waiting for the stops before it",
     noLot: "No cadastre lot here (Quebec only): tap the property itself.",
     failed: "Couldn’t reach the cadastre.",
@@ -359,7 +368,7 @@ const en = {
     close: "Close",
     empty: "Add a stop to plan the day.",
     sources:
-      "Trimming 1,500 ft of edge and about 60 trees an hour a person, a backpack blower 25,000 sq ft an hour over 3 ft along the paving (SingleOps production rates). Mowing time from the mower fit (turns, edges, trees, driving on the lot). Driving: the straight line × 1.3 at the average speed. Adjust to your crew’s own times.",
+      "Trimming 1,500 ft of edge and about 60 trees an hour a person, a backpack blower 25,000 sq ft an hour over 3 ft along the paving (SingleOps production rates). Mowing time from the mower fit (turns, edges, trees, driving on the lot). Driving: the fastest route on OpenStreetMap’s roads, at about 80% of the speed limit (typical speeds where none is mapped), one-way streets included. Adjust to your crew’s own times.",
     reportLede: "The day’s stops in the order with the least driving. The Voyager mows while the crew trims and blows.",
     reportHead: ["#", "Stop", "Lawn", "Mow", "Trim and blow", "Arrive", "Leave"] as string[],
     reportSettings: (voyager: string, crew: string, speed: number, setup: number) =>
@@ -399,7 +408,7 @@ const fr: UiStrings = {
   live: {
     title: "Lecture en direct",
     ready: "Lu",
-    sources: { lot: "Lot du cadastre", crop: "Carte des cultures", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Photos aériennes", satellite: "Couverture du sol par satellite" },
+    sources: { lot: "Lot du cadastre", crop: "Carte des cultures", osm: "OpenStreetMap", lidar: "LiDAR", photos: "Photos aériennes", satellite: "Couverture du sol par satellite", roads: "Réseau routier" },
     reading: {
       lot: "Recherche du lot au point touché",
       crop: "Recherche de champs de gazon",
@@ -407,6 +416,7 @@ const fr: UiStrings = {
       lidar: "Pente, arbres et toits",
       photos: "Gazon, arbres, pavé et eau",
       satellite: "Gazon, arbres, bâti et eau",
+      roads: "Les routes entre les arrêts",
     },
     failed: "Indisponible",
     seconds: (s: string) => `${s.replace(".", ",")} s`,
@@ -423,6 +433,7 @@ const fr: UiStrings = {
         ? "Aucune piscine ni surface pavée"
         : [pools ? (pools === 1 ? "1 piscine" : `${pools} piscines`) : "", paved ? (paved === 1 ? "1 surface pavée" : `${paved} surfaces pavées`) : ""].filter(Boolean).join(", "),
     grass: (acres: string) => `${acres} ac de gazon`,
+    roads: (n: number) => `Itinéraires entre ${n} lieux`,
     read: "Lu",
     none: "Aucune donnée ici",
   },
@@ -691,6 +702,13 @@ const fr: UiStrings = {
     day: "La journée",
     dayLine: (from: string, to: string) => `De ${from} à ${to}`,
     drive: (d: string) => `Route : ${d}`,
+    driveKm: (d: string, km: string) => `Route : ${d}, ${km} km`,
+    via: (streets: string) => `par ${streets}`,
+    roadsFailed: "Impossible de charger le réseau routier : la route est estimée en ligne droite à la vitesse ci-dessous.",
+    roadsTooFar: "Les arrêts sont trop éloignés pour un seul réseau routier : la route est estimée en ligne droite à la vitesse ci-dessous.",
+    retryRoads: "Réessayer les routes",
+    directions: "Itinéraire dans Google Maps",
+    directionsPart: (k: number, n: number) => `Itinéraire dans Google Maps, partie ${k} de ${n}`,
     saves: (d: string) => `${d} de moins que dans l’ordre ajouté`,
     onSite: (d: string) => `Sur place : ${d}`,
     waits: (crew: string, mower: string) => `L’équipe attend le Voyager ${crew}, le Voyager attend l’équipe ${mower}`,
@@ -701,7 +719,7 @@ const fr: UiStrings = {
     mow: (d: string) => `Tonte ${d}`,
     trimBlow: (d: string) => `Bordures et soufflage ${d}`,
     driveTo: (d: string) => `${d} de route`,
-    backToShop: (d: string) => `Retour à l’atelier : ${d} de route`,
+    backToShop: (line: string) => `Retour à l’atelier : ${line}`,
     waiting: "En attente des arrêts précédents",
     noLot: "Aucun lot du cadastre ici (Québec seulement) : touchez la propriété elle-même.",
     failed: "Impossible de joindre le cadastre.",
@@ -716,7 +734,7 @@ const fr: UiStrings = {
     close: "Fermer",
     empty: "Ajoutez un arrêt pour planifier la journée.",
     sources:
-      "Coupe-bordure : 1 500 pi de bordure et environ 60 arbres à l’heure par personne; souffleur à dos : 25 000 pi² à l’heure sur 3 pi le long des surfaces pavées (taux de production SingleOps). Temps de tonte selon le choix du robot (virages, bordures, arbres, déplacements sur le terrain). Route : la ligne droite × 1,3 à la vitesse moyenne. Ajustez selon les temps de votre équipe.",
+      "Coupe-bordure : 1 500 pi de bordure et environ 60 arbres à l’heure par personne; souffleur à dos : 25 000 pi² à l’heure sur 3 pi le long des surfaces pavées (taux de production SingleOps). Temps de tonte selon le choix du robot (virages, bordures, arbres, déplacements sur le terrain). Route : le trajet le plus rapide sur les routes d’OpenStreetMap, à environ 80 % de la limite de vitesse (vitesses habituelles là où aucune n’est indiquée), sens uniques compris. Ajustez selon les temps de votre équipe.",
     reportLede: "Les arrêts de la journée dans l’ordre qui demande le moins de route. Le Voyager tond pendant que l’équipe fait les bordures et le soufflage.",
     reportHead: ["#", "Arrêt", "Pelouse", "Tonte", "Bordures et soufflage", "Arrivée", "Départ"] as string[],
     reportSettings: (voyager: string, crew: string, speed: number, setup: number) =>
