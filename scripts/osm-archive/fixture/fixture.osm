@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="fixture">
+  <node id="1" version="1" lat="45.4995000" lon="-73.3050000"/>
+  <node id="2" version="1" lat="45.4995000" lon="-73.2990000"/>
+  <node id="3" version="1" lat="45.5035000" lon="-73.2990000"/>
+  <node id="4" version="1" lat="45.5035000" lon="-73.3050000"/>
+  <node id="5" version="1" lat="45.5000000" lon="-73.3040000"/>
+  <node id="6" version="1" lat="45.5000000" lon="-73.3000000"/>
+  <node id="7" version="1" lat="45.5010000" lon="-73.3000000"/>
+  <node id="8" version="1" lat="45.5010000" lon="-73.3040000"/>
+  <node id="9" version="1" lat="45.5020000" lon="-73.3020000"/>
+  <node id="10" version="1" lat="45.5020000" lon="-73.3010000"/>
+  <node id="11" version="1" lat="45.5025000" lon="-73.3010000"/>
+  <node id="12" version="1" lat="45.5025000" lon="-73.3020000"/>
+  <node id="13" version="1" lat="45.4980000" lon="-73.3100000"/>
+  <node id="14" version="1" lat="45.4980000" lon="-73.2960000"/>
+  <node id="15" version="1" lat="45.5060000" lon="-73.2960000"/>
+  <node id="16" version="1" lat="45.5060000" lon="-73.3100000"/>
+  <node id="17" version="1" lat="45.6000000" lon="-73.5000000"/>
+  <node id="18" version="1" lat="45.6000000" lon="-73.4950000"/>
+  <node id="19" version="1" lat="45.6050000" lon="-73.4950000"/>
+  <node id="20" version="1" lat="45.6050000" lon="-73.5000000"/>
+  <node id="21" version="1" lat="45.5100000" lon="-73.3101000"/>
+  <node id="22" version="1" lat="45.5100000" lon="-73.3100000"/>
+  <node id="23" version="1" lat="45.5101000" lon="-73.3100000"/>
+  <node id="24" version="1" lat="45.5101000" lon="-73.3101000"/>
+  <node id="25" version="1" lat="45.5110000" lon="-73.3112000"/>
+  <node id="26" version="1" lat="45.5110000" lon="-73.3108000"/>
+  <node id="27" version="1" lat="45.5113000" lon="-73.3108000"/>
+  <node id="28" version="1" lat="45.5113000" lon="-73.3112000"/>
+  <node id="29" version="1" lat="45.5111000" lon="-73.3111000"/>
+  <node id="30" version="1" lat="45.5111000" lon="-73.3109000"/>
+  <node id="31" version="1" lat="45.5112000" lon="-73.3109000"/>
+  <node id="32" version="1" lat="45.5112000" lon="-73.3111000"/>
+  <node id="33" version="1" lat="45.5104000" lon="-73.3106000"/>
+  <node id="34" version="1" lat="45.5104000" lon="-73.3103000"/>
+  <node id="35" version="1" lat="45.5106000" lon="-73.3103000"/>
+  <node id="36" version="1" lat="45.5106000" lon="-73.3106000"/>
+  <node id="37" version="1" lat="45.5101000" lon="-73.3103000"/>
+  <node id="38" version="1" lat="45.5101000" lon="-73.3102500"/>
+  <node id="39" version="1" lat="45.5101500" lon="-73.3102500"/>
+  <node id="40" version="1" lat="45.5101500" lon="-73.3103000"/>
+  <node id="41" version="1" lat="45.5090000" lon="-73.3100000"/>
+  <node id="42" version="1" lat="45.5090000" lon="-73.3150000"/>
+  <node id="43" version="1" lat="45.5090000" lon="-73.3050000"/>
+  <node id="44" version="1" lat="45.5050000" lon="-73.3100000"/>
+  <node id="45" version="1" lat="45.5130000" lon="-73.3100000"/>
+  <node id="46" version="1" lat="45.4500000" lon="-73.4000000"/>
+  <node id="47" version="1" lat="45.5000000" lon="-73.3000000"/>
+  <node id="48" version="1" lat="45.5500000" lon="-73.2000000"/>
+  <node id="49" version="1" lat="45.5092000" lon="-73.3120000"/>
+  <node id="50" version="1" lat="45.5095000" lon="-73.3120000"/>
+  <node id="51" version="1" lat="45.5091000" lon="-73.3101000"/>
+  <node id="52" version="1" lat="45.5099000" lon="-73.3101000"/>
+  <way id="101" version="1">
+    <nd ref="1"/>
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <nd ref="4"/>
+    <nd ref="1"/>
+    <tag k="leisure" v="golf_course"/>
+    <tag k="name" v="Club de golf Fixture"/>
+  </way>
+  <way id="102" version="1">
+    <nd ref="5"/>
+    <nd ref="6"/>
+    <nd ref="7"/>
+    <nd ref="8"/>
+    <nd ref="5"/>
+    <tag k="golf" v="fairway"/>
+  </way>
+  <way id="103" version="1">
+    <nd ref="9"/>
+    <nd ref="10"/>
+    <nd ref="11"/>
+    <nd ref="12"/>
+    <nd ref="9"/>
+    <tag k="golf" v="water_hazard"/>
+    <tag k="natural" v="water"/>
+  </way>
+  <way id="104" version="1">
+    <nd ref="13"/>
+    <nd ref="14"/>
+    <nd ref="15"/>
+    <nd ref="16"/>
+    <nd ref="13"/>
+  </way>
+  <way id="105" version="1">
+    <nd ref="17"/>
+    <nd ref="18"/>
+    <nd ref="19"/>
+    <nd ref="20"/>
+    <nd ref="17"/>
+    <tag k="natural" v="wood"/>
+  </way>
+  <way id="106" version="1">
+    <nd ref="21"/>
+    <nd ref="22"/>
+    <nd ref="23"/>
+    <nd ref="24"/>
+    <nd ref="21"/>
+    <tag k="building" v="house"/>
+    <tag k="addr:housenumber" v="12"/>
+  </way>
+  <way id="107" version="1">
+    <nd ref="25"/>
+    <nd ref="26"/>
+    <nd ref="27"/>
+    <nd ref="28"/>
+    <nd ref="25"/>
+  </way>
+  <way id="108" version="1">
+    <nd ref="29"/>
+    <nd ref="30"/>
+    <nd ref="31"/>
+    <nd ref="32"/>
+    <nd ref="29"/>
+  </way>
+  <way id="109" version="1">
+    <nd ref="33"/>
+    <nd ref="34"/>
+    <nd ref="35"/>
+    <nd ref="36"/>
+    <nd ref="33"/>
+    <tag k="amenity" v="parking"/>
+  </way>
+  <way id="110" version="1">
+    <nd ref="37"/>
+    <nd ref="38"/>
+    <nd ref="39"/>
+    <nd ref="40"/>
+    <nd ref="37"/>
+    <tag k="leisure" v="swimming_pool"/>
+  </way>
+  <way id="111" version="1">
+    <nd ref="42"/>
+    <nd ref="41"/>
+    <nd ref="43"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Rue des Érables"/>
+  </way>
+  <way id="112" version="1">
+    <nd ref="44"/>
+    <nd ref="41"/>
+    <nd ref="45"/>
+    <tag k="highway" v="tertiary"/>
+    <tag k="name" v="Chemin Fixture"/>
+    <tag k="maxspeed" v="50"/>
+  </way>
+  <way id="113" version="1">
+    <nd ref="46"/>
+    <nd ref="47"/>
+    <nd ref="48"/>
+    <tag k="highway" v="motorway"/>
+    <tag k="ref" v="30"/>
+    <tag k="oneway" v="yes"/>
+  </way>
+  <way id="114" version="1">
+    <nd ref="49"/>
+    <nd ref="50"/>
+    <tag k="highway" v="footway"/>
+  </way>
+  <way id="115" version="1">
+    <nd ref="51"/>
+    <nd ref="52"/>
+    <tag k="highway" v="service"/>
+    <tag k="service" v="driveway"/>
+  </way>
+  <relation id="1001" version="1">
+    <member type="way" ref="104" role="outer"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="landuse" v="forest"/>
+    <tag k="source" v="CanVec"/>
+  </relation>
+  <relation id="1002" version="1">
+    <member type="way" ref="107" role="outer"/>
+    <member type="way" ref="108" role="inner"/>
+    <tag k="type" v="multipolygon"/>
+    <tag k="building" v="yes"/>
+  </relation>
+</osm>

@@ -69,11 +69,12 @@ animated.
    yourself. To restrict the query to part of a property, start a scan and tap
    two opposite corners of the area.
 2. The app builds an [Overpass QL](https://wiki.openstreetmap.org/wiki/Overpass_API)
-   query over that area and POSTs it to the Overpass API. It fetches the whole
-   picture, not just fairways: the `leisure=golf_course` boundary, every `golf=*`
-   feature, plus woods, water, buildings and parking. Three public mirrors are
-   tried in turn, because the main instance is frequently overloaded
-   (`src/lib/overpass.ts`).
+   query over that area. It fetches the whole picture, not just fairways: the
+   `leisure=golf_course` boundary, every `golf=*` feature, plus woods, water,
+   buildings and parking. In Quebec and Ontario it's answered from a nightly
+   archive of OpenStreetMap (below) in about a second; elsewhere it goes to the
+   Overpass API, three public mirrors tried in turn, because the main instance
+   is frequently overloaded (`src/lib/overpass.ts`).
 3. The OSM response is converted to GeoJSON with
    [`osmtogeojson`](https://github.com/tyrasd/osmtogeojson) and each polygon is
    measured with [`@turf/area`](https://turfjs.org/docs/api/area), then converted
@@ -197,7 +198,10 @@ A house lot is measured as a residential lawn in **square feet**:
 1. Search the address (or tap the house on the map). In
    Quebec, the app looks up the lot under that point in the provincial cadastre
    (cadastre allégé, through `/api/parcel`) and frames it on the map. Outside
-   Quebec (Ontario has no open lot data), **Trace the lot** instead.
+   Quebec there's no open lot data (Ontario's parcels are licensed), so the
+   lot is estimated around the house: the ground nearer it than any other
+   house, back from the street's road allowance. The panel says so; check it
+   on the map and **Trace the lot** where it's off.
 2. Buildings, pools, parking and paving on the lot come from OpenStreetMap and
    are taken out automatically (only the part on the lot), including
    driveways and parking aisles mapped as lines, widened to their width. OSM
@@ -462,8 +466,18 @@ Standard Next.js app, no extra configuration:
   Where there's no LiDAR, the mower fit says slope and trees weren't checked.
 - A grass run's driving times are routed on OpenStreetMap's roads at typical
   speeds, without live traffic; where the roads don't load (or don't join two
-  stops), that leg is estimated from the straight line. Its stops come from
-  the Quebec cadastre, so it plans Quebec properties only for now.
-- The public Overpass API is rate-limited and occasionally busy. The app races
-  three mirrors (from the server and from the browser) and surfaces a friendly
-  message if all of them are down.
+  stops), that leg is estimated from the straight line. Its stops' lots come
+  from the Quebec cadastre, or in Ontario are estimated from the houses
+  around (Ontario's parcels aren't open data): check those on the map.
+- The public Overpass API is rate-limited and occasionally busy, and from
+  Vercel's servers it took half a minute per lookup. So a GitHub Action
+  (`.github/workflows/osm-archive.yml`) rebuilds a tiled archive of the
+  features the app reads for Quebec and Ontario every night, from
+  [Geofabrik's](https://download.geofabrik.de/north-america/canada.html)
+  extracts, onto the repository's `osm-data` release (free for a public
+  repository; `scripts/osm-archive`). `/api/overpass` reads only the tiles
+  under a box. Elsewhere, or before the first build, the app races three
+  mirrors (from the server and from the browser) and surfaces a friendly
+  message if all of them are down. The archive is at most a day behind
+  OpenStreetMap; run the workflow by hand (Actions, OSM archive, Run
+  workflow) after fixing the map.

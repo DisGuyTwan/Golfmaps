@@ -7,16 +7,29 @@ import {
   type MirrorAttempt,
   type OverpassQuery,
 } from "@/lib/overpass";
+import { currentArchive, queryArchive } from "@/lib/osm-archive-server";
+import type { BBox } from "@/lib/types";
 
 /**
- * Cached Overpass lookup. The browser asks this route first; a 200 is cached
- * on Vercel's CDN for a day (and served stale for a week while it refreshes),
- * so a course measured once loads instantly for everyone and keeps working
- * when the free mirrors are busy. Errors are never cached; the browser then
- * falls back to calling the mirrors itself. Each lookup logs which mirrors it
- * asked and how long each took (also sent as Server-Timing).
+ * Cached Overpass lookup. In Quebec and Ontario it's answered from the
+ * nightly OSM archive (osm-archive-server.ts: a few tiles range-read in about
+ * a second); elsewhere, or when the archive can't, from the Overpass mirrors.
+ * The browser asks this route first; a 200 is cached on Vercel's CDN for a
+ * day (and served stale for a week while it refreshes), so a course measured
+ * once loads instantly for everyone and keeps working when the free mirrors
+ * are busy. Errors are never cached; the browser then falls back to calling
+ * the mirrors itself. Each lookup logs where it was answered from and how
+ * long each source took (also sent as Server-Timing).
  */
 export const maxDuration = 60;
+
+/** How long the archive gets before the mirrors are asked instead (ms). */
+const ARCHIVE_MS = 6000;
+
+async function fromArchive(kind: OverpassQuery, bbox: BBox) {
+  const archive = await currentArchive();
+  return archive ? queryArchive(archive, kind, bbox) : null;
+}
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -28,6 +41,26 @@ export async function GET(request: Request) {
       { error: `bbox must be south,west,north,east and at most ${kind === "streets" ? 0.05 : 0.3}° per side` },
       { status: 400 },
     );
+  }
+
+  const started = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const archived = await Promise.race([
+    fromArchive(kind, bbox),
+    new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), ARCHIVE_MS))),
+  ]).catch((err) => {
+    console.warn("[overpass] archive", JSON.stringify({ bbox, kind, error: String(err) }));
+    return null;
+  });
+  clearTimeout(timer);
+  const archiveMs = Date.now() - started;
+  if (archived) {
+    return Response.json(archived, {
+      headers: {
+        "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+        "Server-Timing": `archive;desc="OSM archive";dur=${archiveMs}`,
+      },
+    });
   }
 
   const attempts: MirrorAttempt[] = [];
@@ -42,7 +75,7 @@ export async function GET(request: Request) {
     return Response.json(data, {
       headers: {
         "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
-        "Server-Timing": serverTiming(attempts),
+        "Server-Timing": `archive;desc="no answer";dur=${archiveMs}, ${serverTiming(attempts)}`,
       },
     });
   } catch (err) {
@@ -50,7 +83,7 @@ export async function GET(request: Request) {
     console.error("[overpass]", JSON.stringify({ bbox, kind, status, error: String(err), attempts }));
     return Response.json(
       { error: "Overpass unavailable", status },
-      { status: status === 400 ? 400 : 502, headers: { "Cache-Control": "no-store", "Server-Timing": serverTiming(attempts) } },
+      { status: status === 400 ? 400 : 502, headers: { "Cache-Control": "no-store", "Server-Timing": `archive;desc="no answer";dur=${archiveMs}, ${serverTiming(attempts)}` } },
     );
   }
 }

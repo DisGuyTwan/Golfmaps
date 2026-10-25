@@ -1,0 +1,57 @@
+name: OSM archive
+
+# Nightly: Geofabrik's Quebec and Ontario extracts cut into the tiled file
+# /api/overpass reads (scripts/osm-archive, src/lib/osm-archive.ts) instead of
+# waiting half a minute on the Overpass mirrors. Published on the "osm-data"
+# release: osm-YYYYMMDD.bin and latest.json, which names it. The two newest
+# builds are kept, since an instance may still be reading yesterday's.
+on:
+  schedule:
+    # After Geofabrik's nightly extracts.
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: osm-archive
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q osmium-tool
+          pip install osmium==4.0.2 shapely==2.2.0
+      - name: Download the extracts
+        run: |
+          sudo mkdir -p /mnt/osm && sudo chown "$USER" /mnt/osm
+          for r in quebec ontario; do
+            curl -fsSL --retry 3 -o "/mnt/osm/$r.osm.pbf" "https://download.geofabrik.de/north-america/canada/$r-latest.osm.pbf"
+            curl -fsSL --retry 3 -o "/mnt/osm/$r.poly" "https://download.geofabrik.de/north-america/canada/$r.poly"
+          done
+          ls -l /mnt/osm
+      - name: Build
+        run: scripts/osm-archive/build.sh /mnt/osm /mnt/osm/out
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        working-directory: /mnt/osm/out
+        run: |
+          gh release view osm-data > /dev/null 2>&1 || gh release create osm-data --prerelease --target "$GITHUB_SHA" \
+            --title "OSM archive" --notes "OpenStreetMap features for Quebec and Ontario, rebuilt nightly for the calculator's /api/overpass. Data © OpenStreetMap contributors, ODbL."
+          # The new build first, then the pointer to it.
+          gh release upload osm-data osm-*.bin --clobber
+          gh release upload osm-data latest.json --clobber
+          gh release view osm-data --json assets -q '.assets[].name' | grep '^osm-.*\.bin$' | sort -r | tail -n +3 |
+            while read -r old; do gh release delete-asset osm-data "$old" -y; done

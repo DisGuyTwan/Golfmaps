@@ -22,8 +22,9 @@ fit: how hard the property is for a robot and which Kress model fits. A
 measured like a lawn) in the order with the least driving, routed on
 OpenStreetMap's roads. A "Proposal" tab turns it into one client document
 with a link the client opens and accepts. Small route handlers run on
-Vercel (Overpass cache, land cover, LiDAR terrain, aerial photo surfaces,
-Quebec cadastre lot, gas price, client error log; proposals, field records
+Vercel (Overpass cache, read from a nightly OSM archive in QC and ON, land
+cover, LiDAR terrain, aerial photo surfaces, Quebec cadastre lot, gas
+price, client error log; proposals, field records
 and usage counts); everything else goes straight from the browser to public
 APIs (built-in `fetch`). The measuring takes no API keys; proposals, records
 and usage keep a small database (Upstash Redis on Vercel, over its REST
@@ -35,8 +36,9 @@ without them the app runs as before and says what isn't connected.
 ```
 src/app/          layout.tsx (metadata, theme boot script), page.tsx, error.tsx,
                   not-found.tsx, globals.css (theme color variables), boot.css
-  api/overpass/   cached Overpass lookup (CDN 1 day, hedged mirror requests,
-                  Server-Timing per mirror); the browser races it with the mirrors.
+  api/overpass/   cached Overpass lookup (CDN 1 day): the nightly OSM archive in
+                  Quebec and Ontario, else hedged mirror requests (Server-Timing
+                  per source); the browser races it with the mirrors.
                   Kinds (q=): golf, lawn, and a grass run's roads / streets
   api/landcover/  satellite land cover as a small class grid (CDN 30 days):
                   ESA WorldCover (src=worldcover) or AAFC crop inventory (src=aci)
@@ -111,6 +113,10 @@ src/components/
                              go Voyager, mowing every 1-3 days), printable
 src/lib/
   overpass.ts   builds the Overpass QL query; cache route, raced by 3 mirrors
+  osm-archive.ts  the OSM archive's tiles under a box, each lookup's query
+                emulated, answered as Overpass JSON (pure, tested)
+  osm-archive-server.ts  range reads of the archive on its GitHub release
+                (latest.json, header and block indexes cached; route only)
   area.ts       OSM → GeoJSON → categorize → clip → acres  (the core logic)
   landcover.ts  land cover grids: grass inside an outline, sod fields, traced
                 shapes (pure, tested)
@@ -189,6 +195,10 @@ src/lib/
 src/types/      ambient module declarations for untyped deps
 scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
                 fully mapped OSM courses (Python: pyarrow, shapely, rasterio)
+scripts/osm-archive/  build.sh + build.py: Geofabrik's QC and ON extracts →
+                the tiled archive (osmium-tool, pyosmium, shapely); fixture/
+                is the test archive and its source
+.github/workflows/osm-archive.yml  builds it nightly onto the osm-data release
 ```
 
 ## Things to know
@@ -325,6 +335,24 @@ scripts/calibrate-satellite-turf.py  recomputes TURF_PER_GRASS / TURF_RANGE from
   (100 m) while the cadastre lot loads, and again on the lot's box only when
   the lot is bigger. The route's Server-Timing header shows each mirror's
   result and time.
+- **In Quebec and Ontario the route reads the OSM archive instead.** A
+  GitHub Action (`osm-archive.yml`, nightly, free on a public repo) cuts
+  Geofabrik's extracts down to what the lookups read and packs them in tiles
+  (`build.py`'s docstring has the format): f 0.01° (lots and courses), s
+  0.02° (every street), r 0.1° (main roads). Woods and water are kept only
+  within each course's box, clipped (Quebec's CanVec forests would outweigh
+  the rest; `osmium extract` was tried and drops a forest that surrounds a
+  course without a vertex in it). It's published on the `osm-data` release
+  as `osm-YYYYMMDD.bin` plus `latest.json`; the route range-reads the few
+  tiles under a box (neighbours merged into one read, `MAX_TILES` 64) and
+  answers in Overpass's JSON: each kind's query is emulated (`selects`,
+  bbox by node or segment, a lawn's course by the box's middle), nodes get
+  an id per point so streets that meet still share one, and multipolygons
+  come with their rings as member ways. The fixture test runs area.ts,
+  lawn.ts, roads.ts and detect.ts on it. Outside the regions' outlines
+  (`cover`, 0.1° cells), past 64 tiles, before the first build or after 6 s,
+  the mirrors answer as before. `OSM_ARCHIVE_URL` points elsewhere. Change
+  the format and `build.py`, `osm-archive.ts` and fixture.bin together.
 - **Mower fit is capability, then outlay.** `site.ts` scores the property
   (1-3 points per difficulty; 0-2 simple, 3-5 moderate, 6+ complex) and
   `mowers.ts` ranks the 12 Kress models quoted (KR161/172/173/174,
