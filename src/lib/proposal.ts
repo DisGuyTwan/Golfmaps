@@ -185,6 +185,8 @@ export interface ProposalData {
     client: boolean;
     mowEvery: number;
     window: MowWindow | null;
+    /** Of the grass to mow, how much is steeper than 20° (in the property's unit) and its share; null where the LiDAR couldn't tell, absent in older proposals. */
+    steep?: { amount: number; share: number } | null;
   };
   options: (ProposalOption & { priced: PricedOption })[];
   /** The option the rep recommends (its id). */

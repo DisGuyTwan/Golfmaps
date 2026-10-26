@@ -13,7 +13,7 @@ const park = (acres: number, terrain: TerrainStats = flat): Site => ({
   parts: 1,
   shape: null,
   terrain,
-  fairwayM2: 0,
+  steep: [], fairwayM2: 0,
   coverage: null,
   charger: null,
   chargerEstimated: true,

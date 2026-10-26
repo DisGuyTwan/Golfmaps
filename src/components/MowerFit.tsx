@@ -19,7 +19,8 @@ import {
 import { measuredRange, type AcreRange } from "@/lib/trust";
 import { MOW_EVERY, acresForQuote, lawnQuoteSqft, type AcreageMode, type MowEvery, type QuoteSettings } from "@/lib/quote";
 import { setQuoteSettings, useCharger, useCourseName, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
-import { complexity, golfSite, lawnSite, sodSite, type Complexity, type Level, type Reason, type Site } from "@/lib/site";
+import { STEEP_COLOR } from "@/lib/area";
+import { complexity, golfSite, lawnSite, sodSite, steepM2, type Complexity, type Level, type Reason, type Site } from "@/lib/site";
 import { slopeDeg, type TerrainGrid } from "@/lib/terrain";
 import type { Approach } from "@/lib/roi";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
@@ -303,8 +304,12 @@ export default function MowerFit({
       : robotWindowShare(mowWindow, main.runtimeMin)
     : undefined;
   const windowText = windowLine(mowWindow, lang);
-  const trimmedArea =
-    fit?.site.kind === "lawn" ? formatSqft(trimmedM2 * SQ_M_TO_SQ_FT, lang) : `${formatAcres(trimmedM2 / 4046.86, lang)} ac`;
+  const areaText = (m2: number) => (fit?.site.kind === "lawn" ? formatSqft(m2 * SQ_M_TO_SQ_FT, lang) : `${formatAcres(m2 / 4046.86, lang)} ac`);
+  const trimmedArea = areaText(trimmedM2);
+  // How much of the area to mow is steeper than 20° (null where the LiDAR can't tell: the reasons say so).
+  const steep = fit ? steepM2(fit.site) : null;
+  const steepShare = fit?.site.terrain?.over36 ?? 0;
+  const steepPct = steepShare > 0 && steepShare < 0.005 ? "<1" : (Math.round(steepShare * 100)).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA");
 
   return (
     <section className={`space-y-2 ${print ? "" : "animate-fade-up border-t border-line pt-3"}`} aria-live="polite">
@@ -320,6 +325,17 @@ export default function MowerFit({
         )}
       </div>
 
+
+      {steep !== null && (
+        <p className="flex flex-wrap items-center gap-x-1.5 rounded-lg bg-surface-2 px-3 py-1.5 text-xs text-ink-2 print:border print:border-line">
+          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: STEEP_COLOR }} />
+          <span className="font-semibold">
+            {t.fitSteep.label}
+            {colon}
+          </span>
+          <span className="font-bold text-ink">{steep > 0 ? t.fitSteep.area(areaText(steep), steepPct) : t.fitSteep.none}</span>
+        </p>
+      )}
 
       {fit && (
         <>

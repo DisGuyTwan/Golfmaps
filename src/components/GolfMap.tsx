@@ -17,7 +17,7 @@ import {
 } from "react-leaflet";
 import * as L from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
-import { TURF_COLORS } from "@/lib/area";
+import { STEEP_COLOR, TURF_COLORS } from "@/lib/area";
 import { UI, type Lang } from "@/lib/i18n";
 import { decodeView } from "@/lib/share";
 import { ICON_PATHS } from "./icons";
@@ -28,6 +28,9 @@ import "leaflet/dist/leaflet.css";
 const DEFAULT_CENTER: [number, number] = [46.3432, -72.5428];
 const DEFAULT_ZOOM = 14;
 const LOCATED_ZOOM = 16;
+
+/** Ground steeper than 20°: red over whatever is drawn, so the banks stand out on the turf. */
+const STEEP_STYLE: L.PathOptions = { color: "#991b1b", weight: 1, fillColor: STEEP_COLOR, fillOpacity: 0.45 };
 
 /** Per-category styling for detected golf polygons. */
 const CATEGORY_STYLE: Record<string, L.PathOptions> = {
@@ -129,6 +132,8 @@ export interface GolfMapProps {
   scanBox: [number, number, number, number] | null;
   /** The robot's charger, [lat, lon] (placed or estimated), or null. */
   charger: [number, number] | null;
+  /** Where the area to mow is steeper than 20° (the mower fit's LiDAR patches), or null. */
+  steep: FeatureCollection | null;
   /** Areas being read right now, swept while they load (live loading). */
   scans: LiveScan[];
   /** The point tapped or searched, pulsing while the property there is found. */
@@ -208,6 +213,7 @@ export default function GolfMap({
   overlay,
   scanBox,
   charger,
+  steep,
   scans,
   ping,
   run,
@@ -230,6 +236,12 @@ export default function GolfMap({
   if (geojson !== prevGeojson) {
     setPrevGeojson(geojson);
     setGeojsonKey((k) => k + 1);
+  }
+  const [prevSteep, setPrevSteep] = useState<FeatureCollection | null>(null);
+  const [steepKey, setSteepKey] = useState(0);
+  if (steep !== prevSteep) {
+    setPrevSteep(steep);
+    setSteepKey((k) => k + 1);
   }
 
   return (
@@ -271,6 +283,10 @@ export default function GolfMap({
           data={geojson}
           style={styleFeature}
         />
+      )}
+
+      {steep && steep.features.length > 0 && (
+        <GeoJSON key={`steep${steepKey}`} data={steep} interactive={false} style={STEEP_STYLE} />
       )}
 
       {scanBox && (

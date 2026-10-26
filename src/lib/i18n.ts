@@ -248,6 +248,11 @@ const en = {
   fitTitle: "Mower fit",
   fitLevel: { simple: "Simple", moderate: "Moderate", complex: "Complex" },
   fitClear: "Open, flat and clear: easy for a robot.",
+  fitSteep: {
+    label: "Steeper than 20° (36% grade)",
+    area: (area: string, pct: string) => `${area}, ${pct}% of the area to mow`,
+    none: "none",
+  },
   fitReason: {
     parts: (n: number, kind: "lawn" | "site" | "golf" | "sod") =>
       kind === "lawn" ? `${n} separate lawn areas` : kind === "golf" || kind === "site" ? `${n} separate turf areas` : `${n} fields`,
@@ -880,6 +885,11 @@ const fr: UiStrings = {
   fitTitle: "Choix du robot",
   fitLevel: { simple: "Simple", moderate: "Modéré", complex: "Complexe" },
   fitClear: "Dégagé, plat et ouvert : facile pour un robot.",
+  fitSteep: {
+    label: "Plus raide que 20° (pente de 36 %)",
+    area: (area: string, pct: string) => `${area}, ${pct} % de la surface à tondre`,
+    none: "aucune",
+  },
   fitReason: {
     parts: (n: number, kind: "lawn" | "site" | "golf" | "sod") =>
       kind === "lawn" ? `${n} surfaces de pelouse séparées` : kind === "golf" || kind === "site" ? `${n} zones de gazon séparées` : `${n} champs`,

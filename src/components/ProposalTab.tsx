@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
 import { computeIncentives, DEFAULT_INCENTIVE_INPUTS } from "@/lib/incentives";
-import { formatSqft } from "@/lib/lawn";
+import { SQ_M_TO_SQ_FT, formatSqft } from "@/lib/lawn";
 import { mainFleet } from "@/lib/mowers";
 import { useLang } from "@/lib/preferences";
 import { DEFAULT_FINANCING, edgesToMap, UNIT_PRICES } from "@/lib/prices";
@@ -22,6 +22,7 @@ import {
 } from "@/lib/quote-store";
 import { useRecords } from "@/lib/records-store";
 import { fmtMoney, formatPayback } from "@/lib/roi";
+import { steepM2 } from "@/lib/site";
 import { countUse } from "@/lib/usage";
 import { Icon } from "./icons";
 import { useMowerFit } from "./MowerFit";
@@ -191,6 +192,7 @@ export default function ProposalTab() {
     if (!ready || !fit || !recommended) return;
     setState({ kind: "saving" });
     const range = fit.range?.low != null && fit.range.high != null ? ([fit.range.low, fit.range.high] as [number, number]) : null;
+    const steep = steepM2(fit.site);
     const data: ProposalData = {
       version: 1,
       lang: clientLang,
@@ -207,6 +209,7 @@ export default function ProposalTab() {
         client: mode === "lawn" ? q.lawnOverride !== null : q.override !== null,
         mowEvery: q.mowEvery,
         window: q.window,
+        steep: steep === null ? null : { amount: mode === "lawn" && !q.commercial ? steep * SQ_M_TO_SQ_FT : steep / 4046.86, share: fit.site.terrain?.over36 ?? 0 },
       },
       options: included,
       recommended,

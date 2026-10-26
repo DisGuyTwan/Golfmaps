@@ -318,6 +318,31 @@ export interface TerrainStats {
 
 /** Steep cells only count in patches at least this big (m²): a bank, not a curb, a wall's foot or a bed's edge. */
 const MIN_STEEP_M2 = 8;
+/** 20° as a grade (tan 20° = 36.4 %): the limit of every Kress robot without four-wheel drive. */
+export const STEEP_PCT = 36;
+
+/** The cells of the shapes the LiDAR reads (slope known), and the patches steeper than `limit` % among them, big enough to matter. */
+function steepRegions(grid: TerrainGrid, mask: Uint8Array, limit: number): { counted: number; regions: number[][] } {
+  const on = new Uint8Array(mask.length);
+  let counted = 0;
+  for (let i = 0; i < mask.length; i++) {
+    if (!mask[i] || grid.slope[i] === NO_SLOPE) continue;
+    counted++;
+    if (grid.slope[i] > limit) on[i] = 1;
+  }
+  const minCells = Math.max(1, MIN_STEEP_M2 / (grid.cellM * grid.cellM));
+  return { counted, regions: labelRegions(on, grid.width, grid.height).regions.filter((cells) => cells.length >= minCells) };
+}
+
+/**
+ * Where the shapes are steeper than `limitPct` (20° by default), as outlines
+ * for the map: the same patches the steep shares count (terrainStats). Not
+ * straightened like roofs: a bank has no walls, and straightening cut a
+ * 4 × 5 m one to 16 m².
+ */
+export function steepAreas(grid: TerrainGrid, geoms: (Polygon | MultiPolygon)[], limitPct = STEEP_PCT): (Polygon | MultiPolygon)[] {
+  return steepRegions(grid, polygonMask(grid, geoms), limitPct).regions.map((cells) => regionGeometry(grid, cells));
+}
 /**
  * Crown area per tree (m²): in the LiDAR, the dominant crowns in Mont
  * Saint-Bruno's forest and in Boucherville's and Mount Royal's streets take
@@ -337,14 +362,12 @@ const MIN_CROWN_M2 = 4;
 export function terrainStats(grid: TerrainGrid, geoms: (Polygon | MultiPolygon)[]): TerrainStats | null {
   const mask = polygonMask(grid, geoms);
   let inside = 0, canopy = 0;
-  const counted = new Uint8Array(mask.length);
   const slopes: number[] = [];
   const crowns = new Uint8Array(mask.length);
   for (let i = 0; i < mask.length; i++) {
     if (!mask[i]) continue;
     inside++;
     if (grid.slope[i] === NO_SLOPE) continue;
-    counted[i] = 1;
     slopes.push(grid.slope[i]);
     if (grid.cover[i] === COVER.tree) {
       canopy++;
@@ -360,21 +383,14 @@ export function terrainStats(grid: TerrainGrid, geoms: (Polygon | MultiPolygon)[
   }
   slopes.sort((a, b) => a - b);
   const pct = (q: number) => slopes[Math.min(slopes.length - 1, Math.floor(q * slopes.length))];
-  const minCells = Math.max(1, MIN_STEEP_M2 / (grid.cellM * grid.cellM));
   /** Share of the counted cells steeper than `limit` %, in patches big enough to matter. */
-  const steeper = (limit: number) => {
-    const on = new Uint8Array(mask.length);
-    for (let i = 0; i < mask.length; i++) on[i] = counted[i] && grid.slope[i] > limit ? 1 : 0;
-    let n = 0;
-    for (const cells of labelRegions(on, grid.width, grid.height).regions) if (cells.length >= minCells) n += cells.length;
-    return n / slopes.length;
-  };
+  const steeper = (limit: number) => steepRegions(grid, mask, limit).regions.reduce((n, cells) => n + cells.length, 0) / slopes.length;
   return {
     coverage: slopes.length / inside,
     slopeP50: pct(0.5),
     slopeP90: pct(0.9),
     over25: steeper(25),
-    over36: steeper(36),
+    over36: steeper(STEEP_PCT),
     over47: steeper(47),
     over84: steeper(84),
     canopy: canopy / slopes.length,

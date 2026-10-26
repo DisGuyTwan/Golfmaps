@@ -246,6 +246,11 @@ export default function GolfCourseCalculator() {
   const [placingCharger, setPlacingCharger] = useState(false);
   const charger = useCharger();
   const fit = useMowerFit();
+  // Where the area to mow is steeper than 20°, drawn over the property.
+  const steepGeojson = useMemo<FeatureCollection | null>(
+    () => (fit?.site.steep.length ? { type: "FeatureCollection", features: fit.site.steep.map((geometry) => ({ type: "Feature", geometry, properties: {} })) } : null),
+    [fit],
+  );
   /** A grass run being planned: taps and searches add its stops (or set its shop) instead. */
   const run = useRun();
   const runPlan = useRunPlan();
@@ -1202,6 +1207,7 @@ export default function GolfCourseCalculator() {
         geojson={mapGeojson}
         capturing={run.open || selecting || picking !== null || placingCharger || tracing !== null}
         charger={!run.open && fit?.site.charger ? [fit.site.charger[1], fit.site.charger[0]] : null}
+        steep={run.open ? null : steepGeojson}
         firstCorner={firstCorner}
         tracePoints={tracing ? tracePoints : null}
         overlay={mode === "golf" && !run.open ? overlay : null}

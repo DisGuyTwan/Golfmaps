@@ -10,6 +10,7 @@ import {
   lidarBuildings,
   slopeDeg,
   slopePct,
+  steepAreas,
   terrainCellM,
   terrainStats,
   toLambert,
@@ -177,6 +178,22 @@ describe("steep patches and wooded slopes", () => {
     });
     expect(terrainStats(bank, [all])!.over36).toBeCloseTo(12 / 400, 5);
     expect(terrainStats(bank, [all])!.over84).toBe(0);
+  });
+
+  it("outlines where it's steeper than 20°: the bank, not the curb", () => {
+    const both = grid((s) => {
+      [0, 1, 2].forEach((c) => (s[5 * w + c] = 60));
+      for (let r = 10; r < 14; r++) for (let c = 8; c < 13; c++) s[r * w + c] = 40;
+    });
+    const patches = steepAreas(both, [all]);
+    expect(patches).toHaveLength(1);
+    // The 4 × 5 m bank, as counted (20 of the 400 cells; the outline rounds its corners).
+    expect(area({ type: "Feature", geometry: patches[0], properties: {} })).toBeGreaterThan(19);
+    expect(area({ type: "Feature", geometry: patches[0], properties: {} })).toBeLessThan(20.5);
+    expect(terrainStats(both, [all])!.over36).toBeCloseTo(20 / 400, 5);
+    // Only what's on the shapes: a lawn that stops short of the bank has none.
+    const westHalf: Polygon = { type: "Polygon", coordinates: [[[bbox.west, bbox.south], [bbox.west + (bbox.east - bbox.west) * 0.35, bbox.south], [bbox.west + (bbox.east - bbox.west) * 0.35, bbox.north], [bbox.west, bbox.north], [bbox.west, bbox.south]]] };
+    expect(steepAreas(both, [westHalf])).toHaveLength(0);
   });
 
   it("counts the slope under the trees: a wooded hillside above a graded lawn", () => {

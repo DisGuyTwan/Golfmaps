@@ -11,7 +11,7 @@ const site = (kind: Site["kind"], acres: number, fairwayAcres = 0): Site => ({
   parts: 1,
   shape: null,
   terrain,
-  fairwayM2: fairwayAcres * ACRE,
+  steep: [], fairwayM2: fairwayAcres * ACRE,
   coverage: null,
   charger: null,
   chargerEstimated: true,

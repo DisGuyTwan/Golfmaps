@@ -489,7 +489,13 @@ scripts/osm-archive/  build.sh + build.py: Geofabrik's QC and ON extracts →
   (`CANOPY_SLOPE_M`). Every cell counts, wooded or not: reading open ground
   only called a wooded mountain lot "about 20 %" and recommended a KR238
   (the route's `v=2` param skips grids the CDN cached before). Steep shares
-  only count patches of 8 m² or more. Roofs are smooth, crowns rough
+  only count patches of 8 m² or more. The area steeper than 20°
+  (`STEEP_PCT` 36 %) is always shown: `steepM2(site)` (the share `over36` ×
+  the area to mow, null under half LiDAR coverage) at the top of the mower
+  fit card (so in the PDF) and in the proposal (`property.steep`), and its
+  patches (`steepAreas`, the same cells, not straightened: a bank has no
+  walls) are `site.steep`, drawn red on the map (`STEEP_COLOR`); on a course
+  they leave out the woods like the stats. Roofs are smooth, crowns rough
   (`coverClasses`, 1-2 m cells only); a smooth patch over 18 m
   (`MAX_BUILDING_M`) is a forest canopy, not a roof (Mont Saint-Bruno's reads
   smooth at 20-28 m and came out as buildings). LiDAR buildings are

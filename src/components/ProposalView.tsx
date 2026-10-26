@@ -143,6 +143,13 @@ export default function ProposalView({
             {c.mowing(p.mowEvery)}
             {windowLine(p.window, lang) && ` · ${windowLine(p.window, lang)}`}
           </p>
+          {p.steep && (
+            <p className="text-sm">
+              {p.steep.amount > 0
+                ? c.steep(amount(p.steep.amount), p.steep.share < 0.005 ? "<1" : Math.round(p.steep.share * 100).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA"))
+                : c.steepNone}
+            </p>
+          )}
         </section>
 
         <section data-section="options" className="space-y-3">

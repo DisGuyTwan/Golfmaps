@@ -21,6 +21,9 @@ export const TURF_COLORS = {
   grass: "#4ade80",
 } as const;
 
+/** Ground steeper than 20° on the map, and its swatch in the mower fit card. */
+export const STEEP_COLOR = "#dc2626";
+
 type Category =
   | "course"
   | "fairway"

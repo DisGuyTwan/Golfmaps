@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MultiPolygon, Polygon, Position } from "geojson";
-import { complexity, lawnShape, lawnSite, type Site } from "./site";
+import { complexity, lawnShape, lawnSite, steepM2, type Site } from "./site";
 import { COVER, type TerrainGrid, type TerrainStats } from "./terrain";
 
 // Shapes built in metres around a Boucherville lot.
@@ -50,8 +50,16 @@ const flat: TerrainStats = { coverage: 1, slopeP50: 3, slopeP90: 6, over25: 0, o
 describe("complexity", () => {
   const lawn = (shape: Polygon | MultiPolygon, terrain: TerrainStats | null): Site => {
     const s = lawnShape(shape);
-    return { kind: "lawn", areaM2: s.areaM2, parts: s.parts, shape: s, terrain, fairwayM2: 0, coverage: null, charger: null, chargerEstimated: true };
+    return { kind: "lawn", areaM2: s.areaM2, parts: s.parts, shape: s, terrain, steep: [], fairwayM2: 0, coverage: null, charger: null, chargerEstimated: true };
   };
+
+  it("says how much of the area to mow is steeper than 20°, where the LiDAR can tell", () => {
+    const yard = lawn(rect(0, 0, 25, 40), { ...flat, over36: 0.15 });
+    expect(steepM2(yard)).toBeCloseTo(0.15 * 1000, -1);
+    expect(steepM2(lawn(rect(0, 0, 25, 40), flat))).toBe(0);
+    expect(steepM2(lawn(rect(0, 0, 25, 40), null))).toBeNull();
+    expect(steepM2(lawn(rect(0, 0, 25, 40), { ...flat, over36: 0.15, coverage: 0.3 }))).toBeNull();
+  });
 
   it("calls an open, flat, sunny backyard simple", () => {
     const c = complexity(lawn(rect(0, 0, 25, 30), flat));

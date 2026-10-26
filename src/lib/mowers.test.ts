@@ -15,7 +15,7 @@ const shape = (areaM2: number, patch: Partial<ShapeStats> = {}): ShapeStats => (
   zonesAt: () => 1,
   ...patch,
 });
-const noLayout = { coverage: null, charger: null, chargerEstimated: true };
+const noLayout = { steep: [], coverage: null, charger: null, chargerEstimated: true };
 const lawn = (areaM2: number, terrain: TerrainStats | null = flat, patch: Partial<ShapeStats> = {}): Site => ({
   kind: "lawn",
   areaM2,

@@ -52,7 +52,7 @@ describe("when the robots may mow", () => {
   it("sizes a bigger fleet for a course mowed only at night", () => {
     const kr238 = mower("KR238");
     expect(capacityM2(kr238, 2, { window: WINDOW_PRESETS.nights })).toBeCloseTo(capacityM2(kr238, 2) * (6.5 / 12), 3);
-    const site: Site = { kind: "golf", areaM2: 60 * 4046.86, parts: 1, fairwayM2: 0, terrain: null, shape: null, coverage: null, charger: null, chargerEstimated: true };
+    const site: Site = { kind: "golf", areaM2: 60 * 4046.86, parts: 1, steep: [], fairwayM2: 0, terrain: null, shape: null, coverage: null, charger: null, chargerEstimated: true };
     const anyTime = fitMower(site, kr238, 2).units;
     const nights = fitMower(site, kr238, 2, { window: WINDOW_PRESETS.nights }).units;
     expect(anyTime).toBe(4);

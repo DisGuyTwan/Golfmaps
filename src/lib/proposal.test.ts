@@ -12,7 +12,7 @@ const course = (acres: number, fairways = 0): Site => ({
   parts: 1,
   shape: null,
   terrain: flat,
-  fairwayM2: fairways * ACRE,
+  steep: [], fairwayM2: fairways * ACRE,
   coverage: null,
   charger: null,
   chargerEstimated: true,

@@ -251,9 +251,13 @@ hard the property is for a robot and which Kress model to quote:
   read over 3 m on open ground and over about 9 m under trees (the bare earth
   there is interpolated from few pulses), so a wooded hillside reads as steep
   and a wooded flat lot as flat; only patches of 8 m² or more count as steep
-  (a bank, not a curb). What stands on the ground is low plants, trees (rough
-  crowns, or anything smooth taller than 18 m: a forest canopy) or buildings
-  (smooth roofs).
+  (a bank, not a curb). The card opens with how much of the area to mow is
+  **steeper than 20°** (36 % grade, where every Kress robot but the EyePilot
+  4x4 stops), in acres (square feet on a lawn) and as a share; those banks
+  are drawn in red on the map, and the figure is in the PDF and the client's
+  proposal. What stands on the ground is low plants, trees (rough crowns, or
+  anything smooth taller than 18 m: a forest canopy) or buildings (smooth
+  roofs).
 - **Shape** (lawns): separate lawn areas, the narrowest passage a robot must
   drive through (from the distance to the nearest edge) and islands to go
   around.
