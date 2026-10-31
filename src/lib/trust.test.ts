@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_QUOTE } from "./quote";
-import { assumptions, compareClient, measuredRange, MIN_RECORD } from "./trust";
+import { assumptions, compareClient, measuredRange, MIN_RECORD, lotRange, MISSED_DRIVEWAY_M2 } from "./trust";
 import type { CourseMeasurement, SatelliteTurf } from "./types";
 
 const mapped = {
@@ -82,5 +82,35 @@ describe("what the numbers rest on", () => {
     expect(keys).toContain("record:measured");
     expect(keys).toContain("charger:client");
     expect(keys).toContain("window:estimate");
+  });
+});
+
+describe("how sure a lot's lawn is", () => {
+  const base = { lotSource: "cadastre" as const, lotM2: 600, lawnM2: 400, osmM2: 150, lidarM2: 0, photoM2: 0, edgeM: 100, noDriveway: false, trimM2: 0, slopeM2: 0 };
+
+  it("is narrow on a cadastre lot with mapped buildings: its edges are the doubt", () => {
+    const r = lotRange(base);
+    // √(18² + 7.5² + 10²) = 21.9 m², × 1.28 either way: about ±7 % of 400.
+    expect(r.high).toBeCloseTo(1 + (1.2816 * Math.sqrt(18 ** 2 + 7.5 ** 2 + 10 ** 2)) / 400, 4);
+    expect(r.low).toBeCloseTo(2 - r.high, 6);
+    expect(r.doubts).toEqual(["edges"]);
+  });
+
+  it("widens with an estimated lot, buildings only the LiDAR sees and paving only the photos show", () => {
+    const est = lotRange({ ...base, lotSource: "estimated" });
+    expect(est.high - est.low).toBeGreaterThan(0.9);
+    expect(est.doubts[0]).toBe("estimatedLot");
+    const lidar = lotRange({ ...base, lidarM2: 150, photoM2: 60 });
+    expect(lidar.high).toBeGreaterThan(lotRange(base).high);
+    expect(lidar.doubts.slice(0, 2)).toEqual(["lidar", "photos"]);
+  });
+
+  it("lowers only the low end for a driveway nobody found, and widens with ragged edges and what's trimmed", () => {
+    const r = lotRange({ ...base, noDriveway: true });
+    expect(r.high).toBeCloseTo(lotRange(base).high, 6);
+    expect(r.low).toBeCloseTo(lotRange(base).low - MISSED_DRIVEWAY_M2 / 400, 6);
+    expect(r.doubts).toContain("driveway");
+    expect(lotRange({ ...base, edgeM: 400 }).high).toBeGreaterThan(lotRange(base).high);
+    expect(lotRange({ ...base, trimM2: 80 }).doubts).toContain("trim");
   });
 });

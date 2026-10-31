@@ -85,6 +85,8 @@ export interface LawnTotals {
   lawn: Polygon | MultiPolygon | null;
   /** The paving on the lot (driveways, walks, parking), for the edges a crew blows clear. */
   paved?: Polygon | MultiPolygon | null;
+  /** What came off the lot by source (sq ft, on the lot): how sure the lawn is depends on it (trust.ts lotRange). */
+  sources?: { osm: number; lidar: number; photos: number };
 }
 
 type Poly = Feature<Polygon | MultiPolygon>;
@@ -246,6 +248,12 @@ export function lawnTotals(m: LawnMeasurement): LawnTotals {
     const paved = minus(clip(merge([...mapped.filter(isPaving), ...photoPaving].map((a) => a.geometry)), lotF), built);
     const traced = minus(clip(merge(m.traced.map((a) => a.geometry)), lotF), built, paved);
     const lawn = minus(lotF, built, paved, traced);
+    const onLot = (areas: LawnArea[]) => sqft(clip(merge(areas.map((a) => a.geometry)), lotF));
+    const sources = {
+      osm: onLot(mapped),
+      lidar: onLot(lidar),
+      photos: onLot([...notInOsm(pools, osmBuilt), ...notInOsm(photoPaving, osmPaved)]),
+    };
     return {
       lotSqft,
       builtSqft: sqft(built),
@@ -257,6 +265,7 @@ export function lawnTotals(m: LawnMeasurement): LawnTotals {
       lawnSqft: sqft(lawn),
       lawn: lawn?.geometry ?? null,
       paved: paved?.geometry ?? null,
+      sources,
     };
   } catch {
     // Invalid geometry: fall back to plain sums (may double count overlaps).

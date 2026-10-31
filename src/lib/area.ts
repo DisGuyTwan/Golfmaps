@@ -23,6 +23,8 @@ export const TURF_COLORS = {
 
 /** Ground steeper than 20° on the map, and its swatch in the mower fit card. */
 export const STEEP_COLOR = "#dc2626";
+/** What no robot reaches, left to a trimmer (ground.ts), on the map and in the card. */
+export const TRIM_COLOR = "#f97316";
 
 type Category =
   | "course"

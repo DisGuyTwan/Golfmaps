@@ -181,6 +181,9 @@ src/lib/
   estimated-lot.ts  a house lot where there's no open cadastre (Ontario):
                 nearer this house than the others, back from the street's
                 road allowance (pure, tested)
+  ground.ts     the robots' ground: what no robot reaches (strips, over 40°,
+                small pockets) left to a trimmer, slopes as real surface
+                (pure, tested)
   share.ts      share-link helpers + polylines (pure, tested); keys r_ / i_ / q_ /
                 v, m, b, n, a, o, sf, sx, lp, lo, lx, ld, lk, ch; a run's a=run,
                 rs, rn, rh, rhn, rv, rc, rk, ru, rt
@@ -512,13 +515,43 @@ scripts/osm-archive/  build.sh + build.py: Geofabrik's QC and ON extracts →
   to its title row on a tap, and keeps that height across panels. On a phone
   it otherwise covered the map the rep taps. `fitAbovePanel` frames the map
   above whatever height it has.
+- **The map's area isn't the robots'.** `ground.ts` turns the quoted (map)
+  area into what the robots mow: what no robot reaches goes to a trimmer
+  (strips narrower than `MIN_PASSAGE_M`, the narrowest any robot gets
+  through, 0.9 m; ground over 40°, `TRIM_STEEP_PCT`; pieces under
+  `MIN_ZONE_M2`, 10 m², not worth a zone), and slopes count as their real
+  ground surface (mean √(1 + grade²) from the LiDAR: a 20° bank is 6 %
+  more grass than its map area, 30° 15 %). On a lawn or site the lawn is
+  rastered (10 cm, at most 2 M cells) and opened by the robot's half-width
+  (exact distance transforms): strips drop out, corners lose a sliver; it's
+  cached per lawn and terrain in MowerFit (`lawnShares`). On a course or
+  farm only the steep trim and the surface (strips don't matter there). The
+  result is `site.ground` (absent when the area is the client's number):
+  the fit sizes fleets on `workM2(site)` = the site's area × `robotRatio`
+  (replacing the old `trimmerShare`, kept only without ground), Send to
+  ROI and the ROI tab's "use the acreage" take `robotAcres`, the card
+  shows "Robots mow … on the ground" and the hand trim by reason, the map
+  draws the trim in orange (`TRIM_COLOR`), the proposal carries both.
+  The headline acreage stays the map's (what the client and installs
+  compare with).
 - **Every number says how sure it is.** The client's own acreage (`override`,
   "Client's acreage") replaces ours, and the panel shows ours beside it with
   whether theirs falls in our likely range (`trust.ts` `compareClient`). The
   likely range is the photo or satellite count's calibrated range, or, once
   a basis has `MIN_RECORD` (5) installs, the 10th-90th percentile of what
   installs measured over ours (`RecordSpread`); mapped OSM turf has none
-  until then (don't invent one). The fleet is sized at both ends of the
+  until then (don't invent one). A lot (lawn or site) has one from its
+  sources (`trust.ts` `lotRange`, `rangeFrom: "sources"`): one standard
+  deviation each for the lot (cadastre 3 %, traced 5 %, estimated 27 %),
+  what came off it (OSM 5 %, LiDAR-only buildings 15 %, photo pools and
+  paving 25 %; `LawnTotals.sources`), the edges (10 cm × the lawn's
+  perimeter, so a ragged lawn is less sure), the trim (30 %) and the
+  slopes' extra surface (15 %), added in quadrature, ±1.28 σ (p10-p90); a
+  house lot with no paving taken off lowers only its low end by
+  `MISSED_DRIVEWAY_M2` (45 m²). The causes (`doubts`) are named under the
+  total ("mostly: the lot is estimated"); `fit.lawnRange` is ours even
+  while the client's number is used, to compare. Five lawn installs replace
+  it with their recorded spread. The fleet is sized at both ends of the
   range (`unitsAt` in MowerFit) and the ROI tab shows payback across it
   (`RoiImport.range`, link `r_range`). Every assumption is listed with its
   kind (measured, Kress rating, estimate, client, rule) in "Where these

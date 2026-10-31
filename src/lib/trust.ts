@@ -13,7 +13,8 @@
  * Pure, so it's tested without a browser.
  */
 import { estimatedTurf, PHOTO_TURF_PER_GRASS, PHOTO_TURF_RANGE, TURF_PER_GRASS, TURF_RANGE } from "./landcover";
-import { MOWERS_AS_OF } from "./mowers";
+import { MIN_ZONE_M2 } from "./ground";
+import { MIN_PASSAGE_M, MOWERS_AS_OF } from "./mowers";
 import { acresForQuote, type AcreageMode, type QuoteSettings } from "./quote";
 import type { CourseMeasurement, SodMeasurement } from "./types";
 
@@ -34,10 +35,96 @@ export interface AcreRange {
   low: number | null;
   high: number | null;
   basis: AcreBasis;
-  /** Where the range comes from: the calibration of the count, or the installs recorded. */
-  rangeFrom: "calibration" | "record" | null;
+  /**
+   * Where the range comes from: the calibration of the count, the installs
+   * recorded, or (a lot) how sure each source behind it is (lotRange).
+   */
+  rangeFrom: "calibration" | "record" | "sources" | null;
   /** Installs behind a recorded range. */
   n: number;
+  /** A lot's range: what widens it most, biggest first. */
+  doubts?: LotDoubt[];
+}
+
+/**
+ * How sure each part of a lot's lawn is, as one standard deviation of what
+ * it measures (estimates, from what each source is known to be off by):
+ * - the lot: the cadastre allégé is simplified from the official one (3 %);
+ *   traced by the rep on the photos (5 %); estimated around the house
+ *   (27 %: the 12 Aylmer lots checked against the cadastre, half within
+ *   25 %, see estimated-lot.ts);
+ * - what came off it: OSM's footprints (5 %), buildings only the LiDAR sees
+ *   (15 %: 1 m cells, eaves and trees beside them), pools and paving only
+ *   the photos show (25 %: a pixel rule, see surface.ts);
+ * - the edges: where every edge of the lawn is drawn, 10 cm either way on
+ *   average (cadastre lines, footprints, photo pixels): a ragged lawn with
+ *   long edges is less sure than a square one of the same area;
+ * - the ground: what no robot reaches (30 %) and the slopes' extra surface
+ *   (15 % of it).
+ */
+export const LOT_SIGMA = { cadastre: 0.03, traced: 0.05, estimated: 0.27 } as const;
+const SOURCE_SIGMA = { osm: 0.05, lidar: 0.15, photos: 0.25, trim: 0.3, slope: 0.15 } as const;
+const EDGE_SIGMA_M = 0.1;
+/**
+ * A driveway nobody found (m²): OSM maps 1-30 % of residential driveways,
+ * so a house lot with no paving taken off may still have one. Only lowers
+ * the low end.
+ */
+export const MISSED_DRIVEWAY_M2 = 45;
+/** The 10th and 90th percentiles of a normal spread, in standard deviations. */
+const Z90 = 1.2816;
+
+/** What makes a lot's lawn less sure. */
+export type LotDoubt = "estimatedLot" | "tracedLot" | "lidar" | "photos" | "edges" | "driveway" | "trim" | "slope";
+
+export interface LotRangeInputs {
+  lotSource: "cadastre" | "traced" | "estimated";
+  /** The lot, and the lawn measured on it (m², on the map). */
+  lotM2: number;
+  lawnM2: number;
+  /** What came off it, by source (m²). */
+  osmM2: number;
+  lidarM2: number;
+  photoM2: number;
+  /** The lawn's edges (m). */
+  edgeM: number;
+  /** A house lot (not a commercial site) with no paving taken off: a driveway may be missing. */
+  noDriveway: boolean;
+  /** The robots' ground (m²): what no robot reaches, and the slopes' extra surface. */
+  trimM2: number;
+  slopeM2: number;
+}
+
+/**
+ * A lot's likely lawn, from how sure each source behind it is: the parts'
+ * uncertainties added up (as independent errors), the 10th to 90th
+ * percentile around what was measured, the low end lowered for a driveway
+ * that may be missing. Ratios of the lawn, and what widens it most. Once
+ * installs are recorded for lawns, their spread is used instead (in
+ * MowerFit).
+ */
+export function lotRange(i: LotRangeInputs): { low: number; high: number; doubts: LotDoubt[] } {
+  if (i.lawnM2 <= 0) return { low: 1, high: 1, doubts: [] };
+  const parts: [LotDoubt | null, number][] = [
+    [i.lotSource === "estimated" ? "estimatedLot" : i.lotSource === "traced" ? "tracedLot" : null, LOT_SIGMA[i.lotSource] * i.lotM2],
+    [null, SOURCE_SIGMA.osm * i.osmM2],
+    ["lidar", SOURCE_SIGMA.lidar * i.lidarM2],
+    ["photos", SOURCE_SIGMA.photos * i.photoM2],
+    ["edges", EDGE_SIGMA_M * i.edgeM],
+    ["trim", SOURCE_SIGMA.trim * i.trimM2],
+    ["slope", SOURCE_SIGMA.slope * i.slopeM2],
+  ];
+  const sigma = Math.sqrt(parts.reduce((s, [, v]) => s + v * v, 0));
+  const driveway = i.noDriveway ? MISSED_DRIVEWAY_M2 : 0;
+  const low = Math.max(0, i.lawnM2 - Z90 * sigma - driveway) / i.lawnM2;
+  const high = (i.lawnM2 + Z90 * sigma) / i.lawnM2;
+  // What widens it: each part at least a quarter of the whole, biggest first (the driveway when it's the low end's biggest piece).
+  const doubts = parts
+    .filter((p): p is [LotDoubt, number] => p[0] !== null && p[1] >= 0.25 * sigma && p[1] > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([d]) => d);
+  if (driveway > 0) doubts.splice(driveway >= Z90 * sigma ? 0 : doubts.length, 0, "driveway");
+  return { low, high, doubts };
 }
 
 /**
@@ -94,7 +181,9 @@ export interface Assumption {
     | "anyTime"
     | "fleet"
     | "charger"
-    | "record";
+    | "record"
+    | "ground"
+    | "lotRange";
   kind: AssumptionKind;
   /** Values the copy fills in (percentages, dates, counts). */
   values: (string | number)[];
@@ -115,6 +204,10 @@ export interface AssumptionInputs {
   calibratedChecks: number;
   /** Installs recorded with our predictions (records.ts). */
   installs: number;
+  /** The robots' ground was worked out (ground.ts): what no robot reaches, the slopes' surface. */
+  ground?: boolean;
+  /** A lot's likely range comes from how sure its sources are (lotRange). */
+  lotRange?: boolean;
 }
 
 /** Everything the Acreage tab's numbers rest on, in the order a client reads them. */
@@ -135,7 +228,9 @@ export function assumptions(a: AssumptionInputs): Assumption[] {
     out.push({ key: "mapped", kind: "measured", values: [] });
     if (m.roughEstimated && q.include.rough) out.push({ key: "roughEstimated", kind: "estimate", values: [q.roughPct] });
   }
+  if (a.lotRange) out.push({ key: "lotRange", kind: "estimate", values: [] });
   if (a.lidar !== null) out.push({ key: a.lidar ? "lidar" : "noLidar", kind: a.lidar ? "measured" : "rule", values: [] });
+  if (a.ground) out.push({ key: "ground", kind: "rule", values: [MIN_PASSAGE_M, MIN_ZONE_M2] });
   out.push({ key: "ratings", kind: "rating", values: [MOWERS_AS_OF] });
   out.push(a.calibratedChecks > 0 ? { key: "calibrated", kind: "measured", values: [a.calibratedChecks] } : { key: "pace", kind: "estimate", values: [] });
   out.push({ key: "every", kind: "client", values: [q.mowEvery] });

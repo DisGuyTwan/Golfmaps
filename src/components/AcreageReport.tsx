@@ -192,6 +192,7 @@ function LawnReport() {
   const q = useQuoteSettings();
   const address = useCourseName();
   const terrain = useTerrain();
+  const lawnRange = useMowerFit()?.lawnRange ?? null;
   // A commercial or municipal site is measured like a lawn and given in acres.
   const sq = (n: number) => (q.commercial ? `${formatAcres(n / 43_560, lang)} ac` : formatSqft(n, lang));
   const date = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { dateStyle: "long" });
@@ -241,7 +242,14 @@ function LawnReport() {
             )}
 
             <div className="flex items-center justify-between rounded-xl bg-brand px-5 py-3 text-white">
-              <span className="text-sm font-semibold">{q.commercial ? t.siteQuoteTitle : t.lawnQuoteTotal}</span>
+              <span className="text-sm font-semibold">
+                {q.commercial ? t.siteQuoteTitle : t.lawnQuoteTotal}
+                {lawnRange?.low != null && lawnRange.high != null && q.lawnOverride === null && (
+                  <span className="block text-xs font-medium text-white/80">
+                    {t.sources.likely(q.commercial ? formatAcres(lawnRange.low, lang) : formatSqft(lawnRange.low * 43_560, lang, false), sq(lawnRange.high * 43_560))}
+                  </span>
+                )}
+              </span>
               <span className={ui.kpi}>{quoted !== null ? sq(quoted) : "–"}</span>
             </div>
 

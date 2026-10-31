@@ -6,6 +6,7 @@ import { useCharger, useLawn, useMeasurement, useMode, useQuoteSettings, useSod,
 import { useRecords } from "@/lib/records-store";
 import { assumptions, type Assumption, type AssumptionKind } from "@/lib/trust";
 import { Icon } from "./icons";
+import { useMowerFit } from "./MowerFit";
 
 /** Everything the Acreage tab's numbers rest on, from the measurement on screen. */
 export function useAssumptions(): Assumption[] {
@@ -14,6 +15,7 @@ export function useAssumptions(): Assumption[] {
   const lawn = useLawn();
   const terrain = useTerrain();
   const records = useRecords();
+  const fit = useMowerFit();
   return assumptions({
     mode,
     measurement: useMeasurement(),
@@ -24,6 +26,8 @@ export function useAssumptions(): Assumption[] {
     chargerPlaced: useCharger() !== null,
     calibratedChecks: Object.values(records.calibration).reduce((n, c) => n + c.n, 0),
     installs: records.installs,
+    ground: !!fit?.site.ground,
+    lotRange: mode === "lawn" && q.lawnOverride === null && fit?.lawnRange?.rangeFrom === "sources",
   });
 }
 
@@ -78,6 +82,10 @@ function text(a: Assumption, lang: Lang, mode: string): string {
       return s.charger(n(v0) === 1);
     case "record":
       return s.record(n(v0));
+    case "ground":
+      return s.ground(n(v0).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA"), n(v1));
+    case "lotRange":
+      return s.lotRange;
   }
 }
 

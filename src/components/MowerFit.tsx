@@ -2,8 +2,10 @@
 
 import { useMemo } from "react";
 import { UI, formatAcres, type Lang } from "@/lib/i18n";
-import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, photoAreas, type LawnMeasurement } from "@/lib/lawn";
+import { MIN_ZONE_M2, groundOf, lawnGroundShares, trimM2, type Ground, type GroundShares } from "@/lib/ground";
+import { SQ_M_TO_SQ_FT, formatSqft, lawnTotals, perimeterM, photoAreas, type LawnMeasurement, type LawnTotals } from "@/lib/lawn";
 import {
+  MIN_PASSAGE_M,
   MOWERS_AS_OF,
   capacityM2,
   fitMower,
@@ -16,10 +18,10 @@ import {
   type FitOptions,
   type Recommendation,
 } from "@/lib/mowers";
-import { measuredRange, type AcreRange } from "@/lib/trust";
+import { lotRange, measuredRange, MIN_RECORD, type AcreRange, type RecordSpread } from "@/lib/trust";
 import { MOW_EVERY, acresForQuote, lawnQuoteSqft, type AcreageMode, type MowEvery, type QuoteSettings } from "@/lib/quote";
 import { setQuoteSettings, useCharger, useCourseName, useLawn, useMeasurement, useMode, useQuoteSettings, useSod, useTerrain } from "@/lib/quote-store";
-import { STEEP_COLOR } from "@/lib/area";
+import { STEEP_COLOR, TRIM_COLOR, TURF_COLORS } from "@/lib/area";
 import { complexity, golfSite, lawnSite, sodSite, steepM2, type Complexity, type Level, type Reason, type Site } from "@/lib/site";
 import { slopeDeg, type TerrainGrid } from "@/lib/terrain";
 import type { Approach } from "@/lib/roi";
@@ -42,8 +44,10 @@ export interface MowerFitResult {
   approaches: Approaches | null;
   /** How the robots work: picked by the rep, else suggested (golf); always cut and go on a sod farm; null on a lawn. */
   approach: Approach | null;
-  /** The acres we measured and their likely range (null on a lawn, or while the client's number is used). */
+  /** The acres we measured and their likely range (null while the client's number is used): what the fleet is sized at both ends of. */
   range: AcreRange | null;
+  /** A lot's lawn as we measured it and how sure (even while the client's number is used, to compare): null elsewhere. */
+  lawnRange: AcreRange | null;
   /** What sized the fleet besides the site: the window and the field checks. */
   opts: FitOptions;
 }
@@ -63,6 +67,35 @@ type FitInputs = [
 /** The last fit, so the panel, the PDF and the quote share one computation per change. */
 let last: { inputs: FitInputs; result: MowerFitResult | null } | null = null;
 
+/** The lawn's reach, kept while the lawn and the terrain are the same: rastering a big site takes a moment. */
+let reach: { lawn: LawnMeasurement; terrain: TerrainGrid | null; shares: GroundShares } | null = null;
+function lawnShares(lawn: LawnMeasurement, polygon: NonNullable<LawnTotals["lawn"]>, terrain: TerrainGrid | null): GroundShares {
+  if (reach?.lawn !== lawn || reach.terrain !== terrain) reach = { lawn, terrain, shares: lawnGroundShares(polygon, MIN_PASSAGE_M, terrain) };
+  return reach.shares;
+}
+
+/** How sure a lot's lawn is: the installs recorded for lawns once there are enough, else what each source behind it is worth (trust.ts). */
+function lawnRangeOf(lawn: LawnMeasurement, totals: LawnTotals, ground: Ground, commercial: boolean, spread: RecordSpread): AcreRange {
+  const value = totals.lawnSqft / 43_560;
+  const rec = spread.lawn;
+  if (rec && rec.n >= MIN_RECORD) return { value, low: value * rec.low, high: value * rec.high, basis: "lawn", rangeFrom: "record", n: rec.n };
+  const m2 = (sqft: number) => sqft / SQ_M_TO_SQ_FT;
+  const trim = trimM2(ground);
+  const r = lotRange({
+    lotSource: lawn.lotSource,
+    lotM2: m2(totals.lotSqft),
+    lawnM2: m2(totals.lawnSqft),
+    osmM2: m2(totals.sources?.osm ?? 0),
+    lidarM2: m2(totals.sources?.lidar ?? 0),
+    photoM2: m2(totals.sources?.photos ?? 0),
+    edgeM: totals.lawn ? perimeterM(totals.lawn) : 0,
+    noDriveway: !commercial && totals.pavedSqft === 0 && !lawn.traced.some((a) => a.kind === "driveway"),
+    trimM2: trim,
+    slopeM2: (ground.surface - 1) * (ground.mapM2 - trim),
+  });
+  return { value, low: value * r.low, high: value * r.high, basis: "lawn", rangeFrom: "sources", n: 0, doubts: r.doubts };
+}
+
 function computeFit(...inputs: FitInputs): MowerFitResult | null {
   if (last && inputs.every((v, i) => v === last!.inputs[i])) return last.result;
   const [mode, lawn, measurement, sod, q, terrain, placed, measured, spread] = inputs;
@@ -70,6 +103,7 @@ function computeFit(...inputs: FitInputs): MowerFitResult | null {
   // The store keeps [lat, lon] like the map; sites work in GeoJSON's [lon, lat].
   const charger: [number, number] | null = placed && [placed[1], placed[0]];
   let site: Site | null = null;
+  let lawnRange: AcreRange | null = null;
   if (mode === "lawn") {
     if (lawn) {
       const totals = lawnTotals(lawn);
@@ -78,14 +112,19 @@ function computeFit(...inputs: FitInputs): MowerFitResult | null {
       const blocked = [...(lawn.mapped ?? []), ...(lawn.lidar ?? []), ...photoAreas(lawn).removed]
         .filter((a) => a.kind !== "paving")
         .map((a) => a.geometry);
+      // What the robots meet on our lawn: what none reaches, and the slopes' surface (ground.ts).
+      const ground = totals.lawn && totals.lawnSqft > 0 ? groundOf(lawnShares(lawn, totals.lawn, terrain), totals.lawnSqft / SQ_M_TO_SQ_FT) : null;
       if (sqft > 0) site = lawnSite(totals.lawn, lawn.lot, blocked, charger, sqft / SQ_M_TO_SQ_FT, terrain);
+      // The client's own number is taken as it is.
+      if (site && ground && q.lawnOverride === null) site = { ...site, ground };
       // A commercial or municipal site is measured like a lawn, and every robot competes for it.
       if (site && q.commercial) site = { ...site, kind: "site" };
+      if (ground) lawnRange = lawnRangeOf(lawn, totals, ground, q.commercial, spread);
     }
   } else {
     const acres = acresForQuote(mode, measurement, sod, q);
-    if (acres && mode === "golf" && measurement) site = golfSite(measurement, q, acres, terrain, charger);
-    if (acres && mode === "sod" && sod) site = sodSite(sod, acres, terrain, charger);
+    if (acres && mode === "golf" && measurement) site = golfSite(measurement, q, acres, terrain, charger, q.override === null);
+    if (acres && mode === "sod" && sod) site = sodSite(sod, acres, terrain, charger, q.override === null);
   }
   let result: MowerFitResult | null = null;
   if (site) {
@@ -94,11 +133,16 @@ function computeFit(...inputs: FitInputs): MowerFitResult | null {
     const recommendation = approaches && approach ? approaches[approach] : recommend(site, q.mowEvery, null, opts);
     // Each unit drives within its own zone: the fleet covering the whole site sets the zones (on a course with fairways, the rough's).
     const fleet = mainFleet(recommendation);
-    const range = mode !== "lawn" && q.override === null ? measuredRange(mode, measurement, sod, q, spread) : null;
-    result = { site, complexity: complexity(site, fleet?.units ?? 1), recommendation, approaches, approach, range, opts };
+    const range = mode === "lawn" ? (q.lawnOverride === null ? lawnRange : null) : q.override === null ? measuredRange(mode, measurement, sod, q, spread) : null;
+    result = { site, complexity: complexity(site, fleet?.units ?? 1), recommendation, approaches, approach, range, lawnRange, opts };
   }
   last = { inputs, result };
   return result;
+}
+
+/** The acres the robots mow, for the ROI tab: on the ground and less the trim where we measured it, else the acres quoted. */
+export function robotAcres(fit: MowerFitResult | null, acres: number): number {
+  return fit?.site.ground ? fit.site.ground.robotM2 / 4046.86 : acres;
 }
 
 /**
@@ -310,6 +354,14 @@ export default function MowerFit({
   const steep = fit ? steepM2(fit.site) : null;
   const steepShare = fit?.site.terrain?.over36 ?? 0;
   const steepPct = steepShare > 0 && steepShare < 0.005 ? "<1" : (Math.round(steepShare * 100)).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA");
+  // What the robots meet: shown where it differs from the map (something to trim, or slopes that add ground).
+  const ground = fit?.site.ground;
+  // Only what shows in the property's unit (a few square metres on a site in acres would read 0.00 ac).
+  const shows = (m2: number) => (fit?.site.kind === "lawn" ? m2 * SQ_M_TO_SQ_FT >= 1 : m2 / 4046.86 >= 0.005);
+  const trim = ground && shows(trimM2(ground)) ? trimM2(ground) : 0;
+  const slopeAdds = ground ? ground.surface - 1 : 0;
+  const groundShown = ground && (trim > 0 || Math.abs(ground.robotM2 - ground.mapM2) >= 0.005 * ground.mapM2);
+  const local = (n: number, digits = 0) => n.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA", { maximumFractionDigits: digits });
 
   return (
     <section className={`space-y-2 ${print ? "" : "animate-fade-up border-t border-line pt-3"}`} aria-live="polite">
@@ -335,6 +387,38 @@ export default function MowerFit({
           </span>
           <span className="font-bold text-ink">{steep > 0 ? t.fitSteep.area(areaText(steep), steepPct) : t.fitSteep.none}</span>
         </p>
+      )}
+
+      {ground && groundShown && (
+        <div className="space-y-0.5 rounded-lg bg-surface-2 px-3 py-1.5 text-xs text-ink-2 print:border print:border-line">
+          <p className="flex flex-wrap items-center gap-x-1.5">
+            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: TURF_COLORS.grass }} />
+            <span className="font-semibold">{t.ground.robot}</span>
+            <span className="font-bold text-ink">{areaText(ground.robotM2)}</span>
+            <span>{t.ground.how(areaText(ground.mapM2), trim > 0, slopeAdds >= 0.005 ? local(slopeAdds * 100) : null)}</span>
+          </p>
+          {trim > 0 && (
+            <p className="flex flex-wrap items-center gap-x-1.5">
+              <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: TRIM_COLOR }} />
+              <span className="font-semibold">
+                {t.ground.trim}
+                {colon}
+              </span>
+              <span className="font-bold text-ink">{areaText(trim)}</span>
+              <span>
+                (
+                {[
+                  shows(ground.trim.narrow) && t.ground.narrow(areaText(ground.trim.narrow), local(MIN_PASSAGE_M, 1)),
+                  shows(ground.trim.steep) && t.ground.steep(areaText(ground.trim.steep)),
+                  shows(ground.trim.pocket) && t.ground.pocket(areaText(ground.trim.pocket), MIN_ZONE_M2),
+                ]
+                  .filter(Boolean)
+                  .join(", ")}
+                )
+              </span>
+            </p>
+          )}
+        </div>
       )}
 
       {fit && (
@@ -432,7 +516,7 @@ export default function MowerFit({
               span={unitsAt(rec.rough, { ...fit.site, fairwayM2: 0, areaM2: fit.site.areaM2 - fit.site.fairwayM2 }, mowEvery, fit.range, fit.opts)}
             />
           )}
-          {rec && rec.trimmed > 0 && <Notice tone="warn">{t.fitTrimmer(trimmedArea)}</Notice>}
+          {rec && rec.trimmed > 0 && !fit.site.ground && <Notice tone="warn">{t.fitTrimmer(trimmedArea)}</Notice>}
           {runnerUp && (
             <p className="text-[11px] text-muted">
               <span className="font-semibold">

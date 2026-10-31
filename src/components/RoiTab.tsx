@@ -27,6 +27,7 @@ import {
 import { buildShareUrl, prefixed, readParams } from "@/lib/share";
 import { useRecords } from "@/lib/records-store";
 import { Icon, type IconName } from "./icons";
+import { robotAcres, useMowerFit } from "./MowerFit";
 import WindowPicker, { windowLine } from "./WindowPicker";
 import { decodeWindow, encodeWindow, robotWindowShare, voyagerWindowShare, type MowWindow } from "@/lib/window";
 import { Pop, SectionTitle, Segmented, TabHeader, delay, ui } from "./ui";
@@ -245,7 +246,10 @@ export default function RoiTab() {
       }),
     }));
   }
-  const measuredAcres = acresForQuote(useMode(), useMeasurement(), useSod(), useQuoteSettings(), useLawn());
+  // What the Acreage tab would send: the robots' acres (on the ground, less the trim) where it measured them.
+  const quoted = acresForQuote(useMode(), useMeasurement(), useSod(), useQuoteSettings(), useLawn());
+  const fit = useMowerFit();
+  const measuredAcres = quoted === null ? null : robotAcres(fit, quoted);
 
   // Live gas price (Statistics Canada via /api/gas-price), unless the price
   // came from a share link or the user typed one; otherwise the dated default.

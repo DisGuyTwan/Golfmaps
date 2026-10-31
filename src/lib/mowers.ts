@@ -15,6 +15,7 @@
  * between robots that fit equally well, never shown.
  */
 import { overhead, share, type Overhead, type Pace } from "./coverage";
+import { robotRatio } from "./ground";
 import type { MowEvery } from "./quote";
 import { ROI_DEFAULTS, type Approach } from "./roi";
 import type { Site } from "./site";
@@ -84,6 +85,9 @@ export const MOWERS: Mower[] = [
   { ...RESIDENTIAL, id: "KR800", line: "voyager", areaM2: ac(7), maxSlopePct: 36, cutWidthCm: 102, minCutMm: 38, passageM: 2, speedMS: 2.5, turnS: 12, runtimeMin: 480, commercial: true, listUsd: 62000 },
   { ...RESIDENTIAL, id: "KR804", line: "voyager", areaM2: ac(19), maxSlopePct: 47, cutWidthCm: 152, minCutMm: 38, passageM: 2.5, speedMS: 2.5, turnS: 12, runtimeMin: 480, commercial: true, listUsd: 84000 },
 ];
+
+/** The narrowest gap any of them gets through (m): a strip narrower than this is left to a trimmer (ground.ts). */
+export const MIN_PASSAGE_M = Math.min(...MOWERS.map((m) => m.passageM));
 
 const LINE_NAME: Record<MowerLine, string> = {
   rtkn: "RTKn",
@@ -189,6 +193,16 @@ function trimmerShare(site: Site): number {
   return t && t.coverage >= 0.5 && tooMuch(site, t.over84) ? t.over84 : 0;
 }
 
+/**
+ * The area a fleet must keep up with: the robots' part of the site on the
+ * ground (ground.ts: slopes as real surface, less what no robot reaches),
+ * else the quoted area less what's too steep for any robot. A share of the
+ * site (its fairways, its rough) gets the same share of that.
+ */
+export function workM2(site: Site): number {
+  return site.ground ? site.areaM2 * robotRatio(site.ground) : site.areaM2 * (1 - trimmerShare(site));
+}
+
 /** Share of the site steeper than a robot's slope limit (the LiDAR shares are at 36, 47 and 84 %). */
 function overLimit(terrain: TerrainStats, limitPct: number): number {
   return limitPct >= 84 ? terrain.over84 : limitPct >= 47 ? terrain.over47 : limitPct >= 36 ? terrain.over36 : terrain.over25;
@@ -210,8 +224,8 @@ export function fitMower(site: Site, mower: Mower, everyDays: MowEvery = 2, opts
   const { terrain, shape } = site;
   const pace = paceOf(mower);
   const capacity = capacityM2(mower, everyDays, opts);
-  const left = trimmerShare(site);
-  const areaM2 = site.areaM2 * (1 - left);
+  const left = site.ground ? site.ground.trim.steep / Math.max(1, site.ground.mapM2) : trimmerShare(site);
+  const areaM2 = workM2(site);
   const zone = (units: number) => (site.coverage ? overhead(share(site.coverage, units), pace) : null);
   const load = (units: number) => (areaM2 * Math.max(MIN_FACTOR, zone(units)?.factor ?? 1)) / (units * capacity);
   // One unit if it keeps up; else the fewest that each stay under LIMIT_LOAD (more units, smaller zones, shorter

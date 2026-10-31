@@ -187,6 +187,8 @@ export interface ProposalData {
     window: MowWindow | null;
     /** Of the grass to mow, how much is steeper than 20° (in the property's unit) and its share; null where the LiDAR couldn't tell, absent in older proposals. */
     steep?: { amount: number; share: number } | null;
+    /** What the robots mow on the ground and what's trimmed by hand (in the property's unit), where we measured it (ground.ts). */
+    ground?: { robot: number; trim: number } | null;
   };
   options: (ProposalOption & { priced: PricedOption })[];
   /** The option the rep recommends (its id). */

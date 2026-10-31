@@ -253,6 +253,15 @@ const en = {
     area: (area: string, pct: string) => `${area}, ${pct}% of the area to mow`,
     none: "none",
   },
+  ground: {
+    robot: "Robots mow",
+    how: (map: string, trimmed: boolean, pct: string | null) =>
+      `on the ground (${map} on the map${trimmed ? ", less the trim" : ""}${pct ? `, +${pct}% for the slopes` : ""})`,
+    trim: "Hand trim",
+    narrow: (area: string, m: string) => `${area} in strips under ${m} m`,
+    steep: (area: string) => `${area} over 40°`,
+    pocket: (area: string, m2: number) => `${area} in pockets under ${m2} m²`,
+  },
   fitReason: {
     parts: (n: number, kind: "lawn" | "site" | "golf" | "sod") =>
       kind === "lawn" ? `${n} separate lawn areas` : kind === "golf" || kind === "site" ? `${n} separate turf areas` : `${n} fields`,
@@ -518,9 +527,24 @@ const en = {
     fleet: (pct: number) => `Several robots: each kept under ${pct}% of its capacity, with its own zone and charger.`,
     charger: (placed: boolean): string => (placed ? "The charger where the rep placed it." : "Charger position estimated (next to the house, or the middle of the biggest area)."),
     record: (n: number) => `Our acreage and mowing hours have been checked on ${n} install${n === 1 ? "" : "s"} so far.`,
+    ground: (m: string, m2: number) =>
+      `The robots' area: the grass on the map less what no robot reaches (strips under ${m} m, slopes over 40°, pockets under ${m2} m²), with the slopes counted as their real ground surface from the LiDAR. The rest is trimmed by hand.`,
+    lotRange:
+      "The lot's likely range, from how sure each source is: the cadastre ±3%, a traced lot ±5%, a lot estimated from the houses around ±27%, OpenStreetMap's footprints ±5%, buildings only the LiDAR sees ±15%, pools and paving from the photos ±25%, every edge ±10 cm; a driveway nobody found lowers the low end.",
     likely: (lo: string, hi: string) => `Likely ${lo} to ${hi}`,
     fromCalibration: "from the count's calibration",
     fromRecord: (n: number) => `from ${n} installs`,
+    fromSources: (doubts: string[]) => (doubts.length ? `mostly: ${doubts.join(", ")}` : "from how sure each source is"),
+    doubts: {
+      estimatedLot: "the lot is estimated",
+      tracedLot: "the lot is traced",
+      lidar: "buildings only the LiDAR sees",
+      photos: "pools and paving from the photos",
+      edges: "long, ragged edges",
+      driveway: "a driveway may be missing",
+      trim: "what's left to trim",
+      slope: "the slopes",
+    },
     noRange: "No likely range measured yet: compare with the client's number.",
     ours: (value: string) => `Ours: ${value}`,
     inRange: "within our likely range",
@@ -890,6 +914,15 @@ const fr: UiStrings = {
     area: (area: string, pct: string) => `${area}, ${pct} % de la surface à tondre`,
     none: "aucune",
   },
+  ground: {
+    robot: "Les robots tondent",
+    how: (map: string, trimmed: boolean, pct: string | null) =>
+      `au sol (${map} sur la carte${trimmed ? ", moins le coupe-bordure" : ""}${pct ? `, +${pct} % pour les pentes` : ""})`,
+    trim: "Au coupe-bordure",
+    narrow: (area: string, m: string) => `${area} en bandes de moins de ${m} m`,
+    steep: (area: string) => `${area} à plus de 40°`,
+    pocket: (area: string, m2: number) => `${area} en petites poches de moins de ${m2} m²`,
+  },
   fitReason: {
     parts: (n: number, kind: "lawn" | "site" | "golf" | "sod") =>
       kind === "lawn" ? `${n} surfaces de pelouse séparées` : kind === "golf" || kind === "site" ? `${n} zones de gazon séparées` : `${n} champs`,
@@ -1151,9 +1184,24 @@ const fr: UiStrings = {
     fleet: (pct: number) => `Plusieurs robots : chacun gardé sous ${pct} % de sa capacité, avec sa zone et sa station.`,
     charger: (placed: boolean) => (placed ? "La station là où le représentant l’a placée." : "Position de la station estimée (près de la maison, ou au milieu de la plus grande surface)."),
     record: (n: number) => `Nos superficies et heures de tonte ont été vérifiées sur ${n} installation${n === 1 ? "" : "s"} jusqu’ici.`,
+    ground: (m: string, m2: number) =>
+      `La surface des robots : le gazon sur la carte moins ce qu’aucun robot n’atteint (bandes de moins de ${m} m, pentes de plus de 40°, poches de moins de ${m2} m²), les pentes comptées à leur vraie surface au sol selon le LiDAR. Le reste se fait au coupe-bordure.`,
+    lotRange:
+      "La plage probable du terrain, selon la fiabilité de chaque source : le cadastre ±3 %, un terrain tracé ±5 %, un terrain estimé d’après les maisons voisines ±27 %, les empreintes d’OpenStreetMap ±5 %, les bâtiments vus seulement au LiDAR ±15 %, les piscines et surfaces pavées tirées des photos ±25 %, chaque bordure ±10 cm ; une entrée que personne n’a trouvée abaisse le bas de la plage.",
     likely: (lo: string, hi: string) => `Probablement ${lo} à ${hi}`,
     fromCalibration: "selon la calibration du décompte",
     fromRecord: (n: number) => `selon ${n} installations`,
+    fromSources: (doubts: string[]) => (doubts.length ? `surtout : ${doubts.join(", ")}` : "selon la fiabilité de chaque source"),
+    doubts: {
+      estimatedLot: "le terrain est estimé",
+      tracedLot: "le terrain est tracé",
+      lidar: "bâtiments vus seulement au LiDAR",
+      photos: "piscines et surfaces pavées tirées des photos",
+      edges: "bordures longues et découpées",
+      driveway: "une entrée peut manquer",
+      trim: "ce qui reste au coupe-bordure",
+      slope: "les pentes",
+    },
     noRange: "Pas encore de plage probable mesurée : comparez avec le chiffre du client.",
     ours: (value: string) => `Le nôtre : ${value}`,
     inRange: "dans notre plage probable",

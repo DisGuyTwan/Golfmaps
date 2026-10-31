@@ -9,7 +9,7 @@ import { goToTab } from "@/lib/tabs";
 import { countUse } from "@/lib/usage";
 import type { CourseMeasurement, SodMeasurement } from "@/lib/types";
 import { Icon } from "./icons";
-import { useMowerFit } from "./MowerFit";
+import { robotAcres, useMowerFit } from "./MowerFit";
 import { useRecords } from "@/lib/records-store";
 import { compareClient, measuredRange, type AcreRange } from "@/lib/trust";
 import { CopyLinkButton, Notice, Pop, printAs, ui } from "./ui";
@@ -38,14 +38,19 @@ function PctInput({ label, field, q }: { label: string; field: "roughPct" | "gra
  * when the client gave their own number, ours beside it and whether theirs
  * falls in our range.
  */
-function RangeLine({ lang, range, client }: { lang: Lang; range: AcreRange | null; client: number | null }) {
+function RangeLine({ lang, range, client, sqft = false }: { lang: Lang; range: AcreRange | null; client: number | null; sqft?: boolean }) {
   const s = UI[lang].sources;
   if (!range) return null;
-  const ac = (n: number) => `${formatAcres(n, lang)} ac`;
-  const likely =
-    range.low !== null && range.high !== null
-      ? `${s.likely(formatAcres(range.low, lang), ac(range.high))} (${range.rangeFrom === "record" ? s.fromRecord(range.n) : s.fromCalibration})`
-      : null;
+  // A house lot's range is in square feet; acres everywhere else.
+  const ac = (n: number) => (sqft ? formatSqft(n * 43_560, lang) : `${formatAcres(n, lang)} ac`);
+  const bare = (n: number) => (sqft ? formatSqft(n * 43_560, lang, false) : formatAcres(n, lang));
+  const from =
+    range.rangeFrom === "record"
+      ? s.fromRecord(range.n)
+      : range.rangeFrom === "sources"
+        ? s.fromSources((range.doubts ?? []).slice(0, 3).map((d) => s.doubts[d]))
+        : s.fromCalibration;
+  const likely = range.low !== null && range.high !== null ? `${s.likely(bare(range.low), ac(range.high))} (${from})` : null;
   if (client !== null) {
     const { inRange, diffPct } = compareClient(client, range);
     const pct = `${diffPct > 0 ? "+" : ""}${Math.round(diffPct)}${lang === "fr" ? " %" : "%"}`;
@@ -104,6 +109,7 @@ function LawnQuote({ lang, lawn, getShareUrl }: { lang: Lang; lawn: LawnMeasurem
           className="text-lg font-bold tabular-nums text-accent-ink"
         />
       </div>
+      <RangeLine lang={lang} range={fit?.lawnRange ?? null} client={q.lawnOverride !== null ? q.lawnOverride / SQFT_PER_ACRE : null} sqft={!commercial} />
       {commercial && acres !== null && (
         <button
           type="button"
@@ -111,13 +117,13 @@ function LawnQuote({ lang, lawn, getShareUrl }: { lang: Lang; lawn: LawnMeasurem
             const fleet = fit ? mainFleet(fit.recommendation) : null;
             const voyager = fit?.approaches ? mainFleet(fit.approaches.go) : fleet;
             sendAcresToRoi({
-              acres,
+              acres: robotAcres(fit, acres),
               approach: fit?.approach ?? null,
               every: q.mowEvery,
               model: roiModel(voyager?.mower),
               layoutPct: fleet?.work ? Math.max(0, Math.round((fleet.work.factor - 1) * 100)) : null,
               window: q.window,
-              range: null,
+              range: q.lawnOverride === null && fit?.lawnRange?.low != null && fit.lawnRange.high != null ? [fit.lawnRange.low / fit.lawnRange.value, fit.lawnRange.high / fit.lawnRange.value] : null,
             });
             goToTab("#roi");
           }}
@@ -279,7 +285,7 @@ function AcreQuote({
             if (acres === null) return;
             countUse("roi.send");
             sendAcresToRoi({
-              acres,
+              acres: robotAcres(fit, acres),
               approach: fit?.approach ?? null,
               every: q.mowEvery,
               model: roiModel(voyager?.mower),

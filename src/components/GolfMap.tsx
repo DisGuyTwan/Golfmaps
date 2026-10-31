@@ -17,7 +17,7 @@ import {
 } from "react-leaflet";
 import * as L from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
-import { STEEP_COLOR, TURF_COLORS } from "@/lib/area";
+import { STEEP_COLOR, TRIM_COLOR, TURF_COLORS } from "@/lib/area";
 import { UI, type Lang } from "@/lib/i18n";
 import { decodeView } from "@/lib/share";
 import { ICON_PATHS } from "./icons";
@@ -31,6 +31,9 @@ const LOCATED_ZOOM = 16;
 
 /** Ground steeper than 20°: red over whatever is drawn, so the banks stand out on the turf. */
 const STEEP_STYLE: L.PathOptions = { color: "#991b1b", weight: 1, fillColor: STEEP_COLOR, fillOpacity: 0.45 };
+
+/** What no robot reaches: orange, dashed, under the steep banks (those over 40° are both). */
+const TRIM_STYLE: L.PathOptions = { color: "#c2410c", weight: 1, dashArray: "3 3", fillColor: TRIM_COLOR, fillOpacity: 0.55 };
 
 /** Per-category styling for detected golf polygons. */
 const CATEGORY_STYLE: Record<string, L.PathOptions> = {
@@ -134,6 +137,8 @@ export interface GolfMapProps {
   charger: [number, number] | null;
   /** Where the area to mow is steeper than 20° (the mower fit's LiDAR patches), or null. */
   steep: FeatureCollection | null;
+  /** What no robot reaches, left to a trimmer (the mower fit's ground), or null. */
+  trim: FeatureCollection | null;
   /** Areas being read right now, swept while they load (live loading). */
   scans: LiveScan[];
   /** The point tapped or searched, pulsing while the property there is found. */
@@ -214,6 +219,7 @@ export default function GolfMap({
   scanBox,
   charger,
   steep,
+  trim,
   scans,
   ping,
   run,
@@ -236,6 +242,12 @@ export default function GolfMap({
   if (geojson !== prevGeojson) {
     setPrevGeojson(geojson);
     setGeojsonKey((k) => k + 1);
+  }
+  const [prevTrim, setPrevTrim] = useState<FeatureCollection | null>(null);
+  const [trimKey, setTrimKey] = useState(0);
+  if (trim !== prevTrim) {
+    setPrevTrim(trim);
+    setTrimKey((k) => k + 1);
   }
   const [prevSteep, setPrevSteep] = useState<FeatureCollection | null>(null);
   const [steepKey, setSteepKey] = useState(0);
@@ -283,6 +295,10 @@ export default function GolfMap({
           data={geojson}
           style={styleFeature}
         />
+      )}
+
+      {trim && trim.features.length > 0 && (
+        <GeoJSON key={`trim${trimKey}`} data={trim} interactive={false} style={TRIM_STYLE} />
       )}
 
       {steep && steep.features.length > 0 && (

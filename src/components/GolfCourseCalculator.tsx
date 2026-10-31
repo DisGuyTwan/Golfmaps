@@ -251,6 +251,11 @@ export default function GolfCourseCalculator() {
     () => (fit?.site.steep.length ? { type: "FeatureCollection", features: fit.site.steep.map((geometry) => ({ type: "Feature", geometry, properties: {} })) } : null),
     [fit],
   );
+  // What no robot reaches on it, left to a trimmer.
+  const trimGeojson = useMemo<FeatureCollection | null>(
+    () => (fit?.site.ground?.trimAreas.length ? { type: "FeatureCollection", features: fit.site.ground.trimAreas.map((geometry) => ({ type: "Feature", geometry, properties: {} })) } : null),
+    [fit],
+  );
   /** A grass run being planned: taps and searches add its stops (or set its shop) instead. */
   const run = useRun();
   const runPlan = useRunPlan();
@@ -1208,6 +1213,7 @@ export default function GolfCourseCalculator() {
         capturing={run.open || selecting || picking !== null || placingCharger || tracing !== null}
         charger={!run.open && fit?.site.charger ? [fit.site.charger[1], fit.site.charger[0]] : null}
         steep={run.open ? null : steepGeojson}
+        trim={run.open ? null : trimGeojson}
         firstCorner={firstCorner}
         tracePoints={tracing ? tracePoints : null}
         overlay={mode === "golf" && !run.open ? overlay : null}

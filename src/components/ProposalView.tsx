@@ -143,6 +143,9 @@ export default function ProposalView({
             {c.mowing(p.mowEvery)}
             {windowLine(p.window, lang) && ` · ${windowLine(p.window, lang)}`}
           </p>
+          {p.ground && shown !== null && (p.ground.trim > 0 || Math.abs(p.ground.robot - shown) >= 0.005 * shown) && (
+            <p className="text-sm">{c.ground(amount(p.ground.robot), p.ground.trim > 0 ? amount(p.ground.trim) : null)}</p>
+          )}
           {p.steep && (
             <p className="text-sm">
               {p.steep.amount > 0

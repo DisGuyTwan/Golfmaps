@@ -255,7 +255,19 @@ hard the property is for a robot and which Kress model to quote:
   **steeper than 20°** (36 % grade, where every Kress robot but the EyePilot
   4x4 stops), in acres (square feet on a lawn) and as a share; those banks
   are drawn in red on the map, and the figure is in the PDF and the client's
-  proposal. What stands on the ground is low plants, trees (rough crowns, or
+  proposal.
+- **The robots' ground**: the map's area isn't what a robot mows. Strips
+  narrower than the narrowest robot gets through (0.9 m), ground steeper
+  than 40° and pockets under 10 m² are left to a trimmer (shown by reason,
+  and in orange on the map), and slopes count as their real ground
+  surface, from the LiDAR (a 20° bank holds 6 % more grass than its map
+  area). Fleets are sized, and the ROI tab is sent, on what the robots
+  mow; the headline stays the map's area.
+- **How sure a lot is**: every lawn or site gets a likely range from how
+  reliable each source behind it is (the cadastre or an estimated lot, the
+  buildings from OSM or only the LiDAR, the photos' paving, how ragged its
+  edges are), with what widens it named under the total. Once five lawn
+  installs are recorded, their spread replaces it. What stands on the ground is low plants, trees (rough crowns, or
   anything smooth taller than 18 m: a forest canopy) or buildings (smooth
   roofs).
 - **Shape** (lawns): separate lawn areas, the narrowest passage a robot must

@@ -22,6 +22,7 @@ import {
 } from "@/lib/quote-store";
 import { useRecords } from "@/lib/records-store";
 import { fmtMoney, formatPayback } from "@/lib/roi";
+import { trimM2 } from "@/lib/ground";
 import { steepM2 } from "@/lib/site";
 import { countUse } from "@/lib/usage";
 import { Icon } from "./icons";
@@ -191,8 +192,13 @@ export default function ProposalTab() {
   const create = async () => {
     if (!ready || !fit || !recommended) return;
     setState({ kind: "saving" });
-    const range = fit.range?.low != null && fit.range.high != null ? ([fit.range.low, fit.range.high] as [number, number]) : null;
+    const residential = mode === "lawn" && !q.commercial;
+    // The property's unit: square feet on a house lot, acres elsewhere.
+    const inUnit = (m2: number) => (residential ? m2 * SQ_M_TO_SQ_FT : m2 / 4046.86);
+    const ours = mode === "lawn" ? (q.lawnOverride === null ? fit.lawnRange : null) : fit.range;
+    const range = ours?.low != null && ours.high != null ? ([ours.low, ours.high].map((a) => (residential ? a * 43_560 : a)) as [number, number]) : null;
     const steep = steepM2(fit.site);
+    const ground = fit.site.ground;
     const data: ProposalData = {
       version: 1,
       lang: clientLang,
@@ -205,11 +211,12 @@ export default function ProposalTab() {
         name: courseName,
         acres: mode === "lawn" ? (q.commercial ? acres : null) : acres,
         sqft: mode === "lawn" && !q.commercial ? sqft : null,
-        range: mode === "lawn" ? null : range,
+        range,
         client: mode === "lawn" ? q.lawnOverride !== null : q.override !== null,
         mowEvery: q.mowEvery,
         window: q.window,
-        steep: steep === null ? null : { amount: mode === "lawn" && !q.commercial ? steep * SQ_M_TO_SQ_FT : steep / 4046.86, share: fit.site.terrain?.over36 ?? 0 },
+        steep: steep === null ? null : { amount: inUnit(steep), share: fit.site.terrain?.over36 ?? 0 },
+        ground: ground ? { robot: inUnit(ground.robotM2), trim: inUnit(trimM2(ground)) } : null,
       },
       options: included,
       recommended,

@@ -20,6 +20,8 @@ const en = {
   mowing: (days: number) => `Mowed ${days === 1 ? "every day" : `every ${days} days`}`,
   steep: (area: string, pct: string) => `Steeper than 20°: ${area} (${pct}% of the grass)`,
   steepNone: "Nothing steeper than 20°",
+  ground: (robot: string, trim: string | null) =>
+    `Robots mow ${robot} on the ground${trim ? `; ${trim} is trimmed by hand (too narrow, too steep or too small for a robot)` : ""}`,
   options: "Options",
   recommended: "Recommended",
   optionTitle: (id: string) => `Option ${id.toUpperCase()}`,
@@ -76,6 +78,7 @@ const fr: ProposalCopy = {
   mowing: (days) => `Tondu ${days === 1 ? "chaque jour" : `aux ${days} jours`}`,
   steep: (area, pct) => `Plus raide que 20° : ${area} (${pct} % du gazon)`,
   steepNone: "Rien de plus raide que 20°",
+  ground: (robot, trim) => `Les robots tondent ${robot} au sol${trim ? ` ; ${trim} se fait au coupe-bordure (trop étroit, trop raide ou trop petit pour un robot)` : ""}`,
   options: "Options",
   recommended: "Recommandée",
   optionTitle: (id) => `Option ${id.toUpperCase()}`,

@@ -9,6 +9,7 @@ import type { MultiPolygon, Polygon, Position } from "geojson";
 import { labelRegions, polygonMask } from "./landcover";
 import { QUOTE_CATEGORIES, type QuoteSettings } from "./quote";
 import { baseline, overhead, polygonArea, reachOnFields, reachOnLot, share, stripes, type Coverage, type LocalPolygon, type Pace } from "./coverage";
+import { fieldGroundShares, groundOf, type Ground } from "./ground";
 import { COVER, NO_SLOPE, steepAreas, terrainStats, type TerrainGrid, type TerrainStats } from "./terrain";
 import type { CourseMeasurement, SodMeasurement } from "./types";
 
@@ -230,6 +231,12 @@ export interface Site {
   terrain: TerrainStats | null;
   /** Where the area to mow is steeper than 20° (the LiDAR's patches, for the map); [] when none or no LiDAR. */
   steep: Shape[];
+  /**
+   * The robots' ground (ground.ts): what no robot reaches, left to a
+   * trimmer, and the slopes' real surface. Absent where the area quoted is
+   * the client's own number, or nothing is known of the ground.
+   */
+  ground?: Ground;
   /** Golf: fairways (and their area) are in the quote, so the robot must cut fairway height. */
   fairwayM2: number;
   /** The layout: stripes, driving from the charger and between areas, against a plain square (coverage.ts). */
@@ -323,8 +330,8 @@ const WOODS_M2 = 5000;
  * are left out: their trees aren't over anything mowed and their slopes
  * don't matter.
  */
-function turfTerrain(grid: TerrainGrid, shapes: Shape[], dropWoods: boolean): { stats: TerrainStats | null; steep: Shape[] } {
-  if (!dropWoods) return { stats: terrainStats(grid, shapes), steep: steepAreas(grid, shapes) };
+function turfTerrain(grid: TerrainGrid, shapes: Shape[], dropWoods: boolean): { stats: TerrainStats | null; steep: Shape[]; grid: TerrainGrid } {
+  if (!dropWoods) return { stats: terrainStats(grid, shapes), steep: steepAreas(grid, shapes), grid };
   const inside = polygonMask(grid, shapes);
   const trees = new Uint8Array(inside.length);
   for (let i = 0; i < inside.length; i++) trees[i] = inside[i] && grid.cover[i] === COVER.tree ? 1 : 0;
@@ -333,7 +340,13 @@ function turfTerrain(grid: TerrainGrid, shapes: Shape[], dropWoods: boolean): { 
   for (const cells of labelRegions(trees, grid.width, grid.height).regions) {
     if (cells.length >= minCells) for (const i of cells) slope[i] = NO_SLOPE;
   }
-  return { stats: terrainStats({ ...grid, slope }, shapes), steep: steepAreas({ ...grid, slope }, shapes) };
+  const open = { ...grid, slope };
+  return { stats: terrainStats(open, shapes), steep: steepAreas(open, shapes), grid: open };
+}
+
+/** A course's or a farm's ground, where the LiDAR covers it (and the area is ours, not the client's). */
+function fieldGround(shapes: Shape[], grid: TerrainGrid, stats: TerrainStats | null, areaM2: number): Ground | undefined {
+  return stats && stats.coverage >= 0.5 ? groundOf(fieldGroundShares(shapes, grid, stats.over84), areaM2) : undefined;
 }
 
 /** The area to mow steeper than 20° (m², from the LiDAR's share), or null where the LiDAR can't tell. */
@@ -466,6 +479,7 @@ export function golfSite(
   quotedAcres: number,
   terrain: TerrainGrid | null,
   charger: [number, number] | null = null,
+  measured = true,
 ): Site {
   const byCategory = (cats: string[]) =>
     m.geojson.features
@@ -476,7 +490,9 @@ export function golfSite(
   const turf = byCategory(included);
   const roughEverywhere = q.include.rough && (m.roughEstimated || m.boundaryOnly);
   const shapes = roughEverywhere || !turf.length ? outline : turf;
-  const { stats, steep } = terrain && shapes.length ? turfTerrain(terrain, shapes, shapes === outline) : { stats: null, steep: [] };
+  const read = terrain && shapes.length ? turfTerrain(terrain, shapes, shapes === outline) : null;
+  const stats = read?.stats ?? null;
+  const steep = read?.steep ?? [];
   const layout = fieldLayout(shapes, charger, 5, stats?.trees ?? 0);
   return {
     kind: "golf",
@@ -485,6 +501,7 @@ export function golfSite(
     shape: null,
     terrain: stats,
     steep,
+    ground: read && measured ? fieldGround(shapes, read.grid, stats, quotedAcres * ACRE_M2) : undefined,
     fairwayM2: q.include.fairway && !m.boundaryOnly ? m.fairway.acres * ACRE_M2 : 0,
     ...layout,
     chargerEstimated: !charger,
@@ -492,7 +509,7 @@ export function golfSite(
 }
 
 /** A sod farm: the quoted acres, the included fields, the terrain on them, and the layout. */
-export function sodSite(sod: SodMeasurement, quotedAcres: number, terrain: TerrainGrid | null, charger: [number, number] | null = null): Site {
+export function sodSite(sod: SodMeasurement, quotedAcres: number, terrain: TerrainGrid | null, charger: [number, number] | null = null, measured = true): Site {
   const fields = sod.fields.filter((f) => f.included).map((f) => f.geometry);
   const stats = terrain && fields.length ? terrainStats(terrain, fields) : null;
   return {
@@ -502,6 +519,7 @@ export function sodSite(sod: SodMeasurement, quotedAcres: number, terrain: Terra
     shape: null,
     terrain: stats,
     steep: terrain && fields.length ? steepAreas(terrain, fields) : [],
+    ground: terrain && fields.length && measured ? fieldGround(fields, terrain, stats, quotedAcres * ACRE_M2) : undefined,
     fairwayM2: 0,
     ...fieldLayout(fields, charger, 5, stats?.trees ?? 0),
     chargerEstimated: !charger,
