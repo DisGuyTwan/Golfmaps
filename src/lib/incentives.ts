@@ -19,6 +19,8 @@ export type Profile =
   | "institution"
   | "developer"
   | "homeowner";
+/** Who owns a golf course: a business, its members (a non-profit club) or a city. */
+export type GolfOwner = "commercial" | "club" | "municipal";
 export type FarmType = "orchard" | "vineyard" | "berries" | "vegetables" | "nursery" | "field";
 export type Mapaq = "yes" | "no" | "unsure";
 export type Structure = "corp" | "soleprop" | "exempt";
@@ -44,6 +46,7 @@ export const PROFILES: Profile[] = [
   "homeowner",
 ];
 export const BUSINESS_PROFILES: Profile[] = ["landscaper", "golf", "farm", "developer"];
+export const GOLF_OWNERS: GolfOwner[] = ["commercial", "club", "municipal"];
 export const FARM_TYPES: FarmType[] = ["orchard", "vineyard", "berries", "vegetables", "nursery", "field"];
 /** Farm types where robotic under-row mowing fits Prime-Vert as herbicide reduction. */
 const PRIME_VERT_FARMS: FarmType[] = ["orchard", "vineyard", "berries", "nursery"];
@@ -55,6 +58,8 @@ export const DEFAULT_TAX_RATE: Record<"corp" | "soleprop", number> = { corp: 12.
 export interface IncentiveInputs {
   prov: Province;
   who: Profile;
+  /** Golf only. Optional so profiles saved before it read as a business. */
+  golf?: GolfOwner;
   farm: FarmType;
   mapaq: Mapaq;
   /** Young farmer (relève) or certified organic: +15 points on Prime-Vert. */
@@ -75,6 +80,7 @@ export interface IncentiveInputs {
 export const DEFAULT_INCENTIVE_INPUTS: IncentiveInputs = {
   prov: "QC",
   who: "golf",
+  golf: "commercial",
   farm: "orchard",
   mapaq: "yes",
   bonus: false,
@@ -149,6 +155,8 @@ const LINKS = {
   granby: "https://biblio.granby.ca/documents/44311/119646/depliant_subventiontondeuse_mars2024_web.pdf",
   stlaurent: "https://montreal.ca/programmes/subvention-pour-lachat-dequipements-dentretien-paysager-residentiel-sans-carburant-saint-laurent",
   terrebonne: "https://terrebonne.ca",
+  // Researched Nov 17, 2026: on-site mobile equipment is excluded unless fully converted to electricity.
+  ecoperf: "https://cdn-contenu.quebec.ca/cdn-contenu/environnement/transition-energetique/affaires-ecoperformance/cadre-normatif-ecoperformance.pdf",
   terrebonneNpo: "https://terrebonne.ca/wp-content/uploads/2023/08/Programme_aide_financiere_soutien_achat_entretien_equipement_ou_materiel_durable_2022_VF.pdf",
   repentigny: "https://www.repentigny.ca",
   stsauveur: "https://www.vss.ca/storage/app/media/Environnement/Subventions%20et%20programmes/demande-de-subvention-pour-lachat-dequipements-de-jardinage-ecologiques.pdf",
@@ -160,6 +168,7 @@ const fr = {
   lede: "Subventions, crédits d’impôt et radiations offerts la première année sur les tondeuses robots et les outils à batterie, avec le lien officiel de chaque programme.",
   s1: "Où êtes-vous?",
   s2: "Vous êtes",
+  s2golf: "Qui possède le terrain?",
   s2farm: "Type de ferme",
   s2mapaq: "Ferme enregistrée au MAPAQ?",
   bonus: "Relève agricole ou production certifiée biologique",
@@ -183,6 +192,9 @@ const fr = {
   who_institution: "École, OBNL ou cimetière",
   who_developer: "Promoteur ou gestion immobilière",
   who_homeowner: "Propriétaire résidentiel",
+  golf_commercial: "Propriété d’une entreprise",
+  golf_club: "Club appartenant à ses membres (OBNL)",
+  golf_municipal: "Propriété municipale",
   farm_orchard: "Verger",
   farm_vineyard: "Vignoble",
   farm_berries: "Petits fruits",
@@ -285,6 +297,9 @@ const fr = {
   p_onHome: "Aucune remise provinciale ou municipale pour tondeuses ou outils électriques n’a été trouvée en 2026.",
   c_otherCity: "Vérifiez votre ville",
   p_otherCity: "Plusieurs villes du Québec remboursent de 50 $ à 200 $ sur une tondeuse ou un outil électrique. Consultez le site de votre ville; les fonds s’épuisent vite.",
+  c_ecoperf: "ÉcoPerformance : électrification complète",
+  p_ecoperf: "Aide du Québec pour réduire les GES liés aux carburants, ouverte aux entreprises, OBNL et municipalités. Le remplacement d’équipements mobiles en est exclu, sauf une conversion complète à l’électricité : remplacer toute la flotte de tondeuses à essence pourrait se qualifier. À valider avec le Ministère avant d’acheter.",
+  linkRules: "Cadre normatif",
   c_mapaqReg: "Enregistrement au MAPAQ requis",
   p_mapaqReg: "Prime-Vert exige une exploitation agricole enregistrée au MAPAQ. Enregistrez la ferme avant de déposer une demande.",
   c_farmFit: "Prime-Vert : moins adapté à ce type de ferme",
@@ -306,6 +321,7 @@ const en: IncentiveStrings = {
   lede: "First-year grants, tax credits and write-offs on robotic mowers and battery tools, with the official link for each program.",
   s1: "Where are you?",
   s2: "You are",
+  s2golf: "Who owns the course?",
   s2farm: "Type of farm",
   s2mapaq: "Farm registered with MAPAQ?",
   bonus: "Young farmer (relève) or certified organic",
@@ -329,6 +345,9 @@ const en: IncentiveStrings = {
   who_institution: "School, non-profit or cemetery",
   who_developer: "Property developer or manager",
   who_homeowner: "Homeowner",
+  golf_commercial: "Business-owned",
+  golf_club: "Member-owned club (non-profit)",
+  golf_municipal: "City-owned",
   farm_orchard: "Orchard",
   farm_vineyard: "Vineyard",
   farm_berries: "Berries",
@@ -431,6 +450,9 @@ const en: IncentiveStrings = {
   p_onHome: "No provincial or municipal rebate for electric mowers or yard tools was found in Ontario for 2026.",
   c_otherCity: "Check your city",
   p_otherCity: "Many Quebec cities rebate $50 to $200 on an electric mower or tool. Check your city’s website; funds run out fast.",
+  c_ecoperf: "ÉcoPerformance: full electrification",
+  p_ecoperf: "Quebec help to cut GHGs from fuel, open to businesses, non-profits and municipalities. Replacing mobile equipment is excluded unless it’s a full conversion to electricity: replacing the whole gas mower fleet could qualify. Confirm with the Ministry before you buy.",
+  linkRules: "Program rules",
   c_mapaqReg: "MAPAQ registration required",
   p_mapaqReg: "Prime-Vert requires a farm registered with MAPAQ. Register the farm before you apply.",
   c_farmFit: "Prime-Vert: weaker fit for this farm type",
@@ -467,9 +489,20 @@ export function rangeText(low: number, high: number, lang: Lang): string {
     : `${formatMoney(low, lang)} – ${formatMoney(high, lang)}`;
 }
 
+/** A golf course's owner; profiles saved before the question read as a business. */
+function golfOwner(s: IncentiveInputs): GolfOwner | null {
+  return s.who === "golf" ? (s.golf ?? "commercial") : null;
+}
+
+/** A business that picks its tax structure (a club or city-owned course doesn't). */
+export function picksStructure(s: Pick<IncentiveInputs, "who" | "golf">): boolean {
+  if (s.who === "golf") return (s.golf ?? "commercial") === "commercial";
+  return BUSINESS_PROFILES.includes(s.who);
+}
+
 /** Tax structure that actually applies: only business profiles pick one. */
 function effectiveStructure(s: IncentiveInputs): Structure | "personal" {
-  if (BUSINESS_PROFILES.includes(s.who)) return s.struct;
+  if (picksStructure(s)) return s.struct;
   return s.who === "homeowner" ? "personal" : "exempt";
 }
 
@@ -487,6 +520,9 @@ export function computeIncentives(s: IncentiveInputs, lang: Lang): IncentiveResu
   const taxable = struct === "corp" || struct === "soleprop";
   const items: IncentiveItem[] = [];
   const cards: ProgramCard[] = [];
+  const golf = golfOwner(s);
+  // A city-owned course is the municipality's: its programs, not a business's.
+  const municipal = s.who === "municipality" || golf === "municipal";
   const add = (item: Omit<IncentiveItem, "kind">, kind: ItemKind = "kept") => items.push({ ...item, kind });
   const card = (c: ProgramCard) => cards.push(c);
 
@@ -505,17 +541,20 @@ export function computeIncentives(s: IncentiveInputs, lang: Lang): IncentiveResu
     }
     card({ t: L.c_pvTrial, p: L.p_pvTrial, tag: "apply", links: [[L.linkOfficial, LINKS.primevert]] });
   }
-  if (s.who === "municipality" && P > 0) {
+  if (municipal && P > 0) {
     add({ t: L.i_gmfPilot, d: L.d_gmfPilot, tag: "apply", low: 0, high: Math.min(0.5 * P, 500000), links: [[L.linkOfficial, LINKS.gmfPilot]] });
   }
-  if (s.who === "municipality" || s.who === "institution") {
+  if (municipal || s.who === "institution") {
     card({ t: L.c_gmfCap, p: L.p_gmfCap, tag: "apply", links: [[L.linkOfficial, LINKS.gmfCap]] });
-    if (s.who === "municipality") {
+    if (municipal) {
       card({ t: L.c_gmfStudy, p: L.p_gmfStudy, tag: "apply", links: [[L.linkOfficial, LINKS.gmfStudy]] });
     }
   }
   if (s.who === "institution" && qc && s.city === "terrebonne" && P > 0) {
     add({ t: L.i_tbNpo, d: L.d_tbNpo, tag: "apply", low: 0, high: Math.min(0.3 * P, 5000), links: [[L.linkPdf, LINKS.terrebonneNpo]] });
+  }
+  if (golf && qc && R > 0) {
+    card({ t: L.c_ecoperf, p: L.p_ecoperf, tag: "warn", links: [[L.linkRules, LINKS.ecoperf]] });
   }
   if (s.who === "homeowner") {
     if (!qc) {
@@ -581,7 +620,7 @@ export function computeIncentives(s: IncentiveInputs, lang: Lang): IncentiveResu
     card({ t: L.c_noItc, p: L.p_noItc, tag: "info", info: true, links: [[L.linkOfficial, LINKS.itc]] });
   }
   if (struct === "exempt" && s.who !== "homeowner") card({ t: L.c_exempt, p: L.p_exempt, tag: "info", info: true });
-  if (s.who !== "homeowner" && s.who !== "municipality") {
+  if (s.who !== "homeowner" && !municipal) {
     if (qc) card({ t: L.c_mfor, p: L.p_mfor, tag: "apply", links: [[L.linkOfficial, LINKS.mfor]] });
     else card({ t: L.c_ojg, p: L.p_ojg, tag: "apply", links: [[L.linkOfficial, LINKS.ojg]] });
   }
@@ -612,8 +651,10 @@ export function isZeroItem(i: IncentiveItem): boolean {
 export function describeInputs(s: IncentiveInputs, r: IncentiveResult, lang: Lang): { profile: string; purchase: string } {
   const L = STRINGS[lang];
   const bits = [L[`who_${s.who}`], L[`prov_${s.prov}`]];
+  const golf = golfOwner(s);
+  if (golf) bits.push(L[`golf_${golf}`]);
   if (s.who === "farm") bits.push(L[`farm_${s.farm}`]);
-  if (BUSINESS_PROFILES.includes(s.who)) bits.push(L[`struct_${s.struct}`]);
+  if (picksStructure(s)) bits.push(L[`struct_${s.struct}`]);
   if (s.prov === "QC" && (s.who === "homeowner" || s.who === "institution")) bits.push(L[`city_${s.city}`]);
 
   const buy: string[] = [];

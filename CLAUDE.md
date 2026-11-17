@@ -610,6 +610,12 @@ scripts/osm-archive/  build.sh + build.py: Geofabrik's QC and ON extracts →
   write-off rules re-checked Oct 14, 2026 (the Productivity Mega Deduction is
   proposed, not law, so it only raises the high end); the "as of" date
   appears in the copy (`eyebrow`, `sumFoot`). Update both when the data changes.
+  A golf course says who owns it (`golf`, link `i_golf`): a business picks
+  its tax structure as before, a member-owned club is tax-exempt, a
+  city-owned course gets the municipality's programs (Green Municipal Fund).
+  Quebec courses buying robots also see ÉcoPerformance (to confirm: its rules
+  exclude mobile equipment unless fully converted to electricity, researched
+  Nov 17, 2026); no golf-specific program was found in Ontario.
   Customer-facing copy uses Quebec French and no em dashes. Keep the
   "not tax advice" disclaimer; only "ok" (in force) items count toward the low
   end of the range.

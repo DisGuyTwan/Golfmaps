@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   STRINGS,
   computeIncentives,
+  describeInputs,
   summaryText,
   type IncentiveInputs,
 } from "./incentives";
@@ -112,6 +113,48 @@ describe("computeIncentives: profiles", () => {
   });
 });
 
+describe("computeIncentives: golf courses by owner", () => {
+  const golf = (owner: "commercial" | "club" | "municipal", prov: "QC" | "ON" = "QC") =>
+    run({ who: "golf", golf: owner, prov, struct: "corp" });
+  const has = (r: ReturnType<typeof run>, title: string) => r.cards.some((c) => c.t === title);
+
+  it("a business-owned course gets the tax lines, as before", () => {
+    const r = golf("commercial");
+    expect(r.items.map((i) => i.t)).toEqual([STRINGS.en.i_itc, STRINGS.en.i_ccaR]);
+    // Saved profiles without the question read as a business.
+    const legacy = run({ who: "golf", golf: undefined });
+    expect(legacy.high).toBeCloseTo(r.high, 6);
+  });
+
+  it("a member-owned club is tax-exempt whatever structure was picked", () => {
+    const r = golf("club");
+    expect(r.items).toHaveLength(0);
+    expect(has(r, STRINGS.en.c_exempt)).toBe(true);
+    expect(has(r, STRINGS.en.c_mfor)).toBe(true);
+    expect(has(r, STRINGS.en.c_csbfp)).toBe(false);
+  });
+
+  it("a city-owned course gets the municipal programs", () => {
+    const r = golf("municipal");
+    expect(r.items.map((i) => i.t)).toEqual([STRINGS.en.i_gmfPilot]);
+    expect(has(r, STRINGS.en.c_gmfCap)).toBe(true);
+    expect(has(r, STRINGS.en.c_mfor)).toBe(false);
+  });
+
+  it("Quebec courses buying robots see ÉcoPerformance, to confirm; Ontario's don't", () => {
+    for (const owner of ["commercial", "club", "municipal"] as const) {
+      expect(golf(owner).cards.find((c) => c.t === STRINGS.en.c_ecoperf)?.tag).toBe("warn");
+    }
+    expect(has(golf("commercial", "ON"), STRINGS.en.c_ecoperf)).toBe(false);
+    expect(has(run({ who: "golf", buyRobot: false }), STRINGS.en.c_ecoperf)).toBe(false);
+  });
+
+  it("names the owner in the profile line", () => {
+    const s = { ...base, who: "golf" as const, golf: "club" as const };
+    expect(describeInputs(s, computeIncentives(s, "en"), "en").profile).toBe("Golf course, Quebec, Member-owned club (non-profit)");
+  });
+});
+
 describe("money kept vs tax timing", () => {
   it("splits the totals: the ITC is kept, write-offs are timing", () => {
     const r = run();
@@ -135,7 +178,7 @@ describe("summaryText", () => {
   it("lists profile, purchase, range and links in the chosen language", () => {
     const s = { ...base };
     const fr = summaryText(s, computeIncentives(s, "fr"), "fr").replace(/[\u00a0\u202f]/g, " ");
-    expect(fr).toContain("Terrain de golf, Québec, Société par actions (inc.)");
+    expect(fr).toContain("Terrain de golf, Québec, Propriété d’une entreprise, Société par actions (inc.)");
     expect(fr).toContain("[À confirmer · Argent conservé]");
     expect(fr).toContain("Argent conservé (subventions et crédit d’impôt) : 0 $ – 7 200 $");
     expect(fr).toContain("Impôt reporté (radiations accélérées) : 878 $ – 2 050 $");

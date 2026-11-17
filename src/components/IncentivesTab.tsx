@@ -8,10 +8,10 @@ import { buildShareUrl, prefixed, readParams } from "@/lib/share";
 import { Icon, type IconName } from "./icons";
 import { Pop, SectionTitle, TabHeader, delay, ui } from "./ui";
 import {
-  BUSINESS_PROFILES,
   CITIES,
   DEFAULT_TAX_RATE,
   FARM_TYPES,
+  GOLF_OWNERS,
   PROFILES,
   STRINGS,
   STRUCTURES,
@@ -20,10 +20,12 @@ import {
   formatMoney,
   formatPct,
   isZeroItem,
+  picksStructure,
   rangeText,
   summaryText,
   type City,
   type FarmType,
+  type GolfOwner,
   type IncentiveInputs,
   type Link,
   type Mapaq,
@@ -44,6 +46,7 @@ const TAG_STYLES: Record<Tag, string> = {
 interface FormState {
   prov: Province;
   who: Profile;
+  golf: GolfOwner;
   farm: FarmType;
   mapaq: Mapaq;
   bonus: boolean;
@@ -62,6 +65,7 @@ interface FormState {
 const DEFAULT_FORM: FormState = {
   prov: "QC",
   who: "golf",
+  golf: "commercial",
   farm: "orchard",
   mapaq: "yes",
   bonus: false,
@@ -90,6 +94,7 @@ function initialForm(): FormState {
     value !== undefined && Number.isFinite(Number(value)) ? value : fallback;
   f.prov = pick(link.prov, ["QC", "ON"] as const, f.prov);
   f.who = pick(link.who, PROFILES, f.who);
+  f.golf = pick(link.golf, GOLF_OWNERS, f.golf);
   f.farm = pick(link.farm, FARM_TYPES, f.farm);
   f.mapaq = pick(link.mapaq, ["yes", "no", "unsure"] as const, f.mapaq);
   f.struct = pick(link.struct, STRUCTURES, f.struct);
@@ -113,6 +118,7 @@ function toInputs(f: FormState): IncentiveInputs {
   return {
     prov: f.prov,
     who: f.who,
+    golf: f.golf,
     farm: f.farm,
     mapaq: f.mapaq,
     bonus: f.bonus,
@@ -244,7 +250,7 @@ export default function IncentivesTab() {
     }));
   };
 
-  const isBusiness = BUSINESS_PROFILES.includes(form.who);
+  const isBusiness = picksStructure(form);
   const showMapaq = form.who === "farm" && form.prov === "QC";
   const showTax = isBusiness && form.struct !== "exempt";
   const showCity = form.prov === "QC" && (form.who === "homeowner" || form.who === "institution");
@@ -308,6 +314,19 @@ export default function IncentivesTab() {
               onChange={(v) => set("who", v)}
               options={PROFILES.map((p) => ({ value: p, label: L[`who_${p}`] }))}
             />
+
+            {form.who === "golf" && (
+              <div className="space-y-4 rounded-xl bg-accent-soft p-4">
+                <Sub title={L.s2golf}>
+                  <Chips
+                    name="golf"
+                    value={form.golf}
+                    onChange={(v) => set("golf", v)}
+                    options={GOLF_OWNERS.map((g) => ({ value: g, label: L[`golf_${g}`] }))}
+                  />
+                </Sub>
+              </div>
+            )}
 
             {form.who === "farm" && (
               <div className="space-y-4 rounded-xl bg-accent-soft p-4">
